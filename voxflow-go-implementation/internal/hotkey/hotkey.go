@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.design/x/hotkey"
 	"golang.design/x/hotkey/mainthread"
@@ -31,23 +32,43 @@ func (s State) String() string {
 	}
 }
 
-// Callback is called when hotkey is pressed
+// TriggerType represents what triggered the recording
+type TriggerType int
+
+const (
+	TriggerNone TriggerType = iota
+	TriggerHandsFree
+	TriggerPushToTalk
+)
+
+// Callback is called when state changes
 type Callback func(state State)
+
+// reconfigRequest holds new hotkey configuration
+type reconfigRequest struct {
+	handsFreeStr string
+	pttStr       string
+	result       chan error
+}
 
 // Manager handles global hotkey registration and state
 type Manager struct {
-	state    State
-	hk       *hotkey.Hotkey
-	callback Callback
-	mu       sync.RWMutex
-	running  bool
+	state         State
+	handsFreeHK   *hotkey.Hotkey
+	pushToTalkHK  *hotkey.Hotkey
+	callback      Callback
+	mu            sync.RWMutex
+	running       bool
+	activeTrigger TriggerType
+	reconfigCh    chan reconfigRequest
 }
 
 // NewManager creates a new hotkey manager
 func NewManager(callback Callback) *Manager {
 	return &Manager{
-		state:    StateIdle,
-		callback: callback,
+		state:      StateIdle,
+		callback:   callback,
+		reconfigCh: make(chan reconfigRequest), // Unbuffered for synchronous update
 	}
 }
 
@@ -98,8 +119,8 @@ func parseKey(keyStr string) (hotkey.Key, error) {
 		"0": hotkey.Key0, "1": hotkey.Key1, "2": hotkey.Key2,
 		"3": hotkey.Key3, "4": hotkey.Key4, "5": hotkey.Key5,
 		"6": hotkey.Key6, "7": hotkey.Key7, "8": hotkey.Key8,
-		"9": hotkey.Key9,
-		"space": hotkey.KeySpace,
+		"9":      hotkey.Key9,
+		"space":  hotkey.KeySpace,
 		"return": hotkey.KeyReturn, "enter": hotkey.KeyReturn,
 		"escape": hotkey.KeyEscape, "esc": hotkey.KeyEscape,
 		"tab": hotkey.KeyTab,
@@ -111,63 +132,98 @@ func parseKey(keyStr string) (hotkey.Key, error) {
 	return 0, fmt.Errorf("unknown key: %s", keyStr)
 }
 
-// Register registers the global hotkey
-func (m *Manager) Register(hotkeyStr string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	mods, key, err := parseHotkey(hotkeyStr)
-	if err != nil {
-		return err
+// Update updates the registered hotkeys (called from app.go)
+// This sends a request to the main loop and waits for the result
+func (m *Manager) Update(handsFreeStr, pttStr string) error {
+	// Create request with result channel
+	req := reconfigRequest{
+		handsFreeStr: handsFreeStr,
+		pttStr:       pttStr,
+		result:       make(chan error, 1),
 	}
 
-	m.hk = hotkey.New(mods, key)
-	return nil
+	// Send request to the main loop (don't hold any locks here!)
+	select {
+	case m.reconfigCh <- req:
+		// Wait for result
+		return <-req.result
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("timeout waiting for hotkey update")
+	}
 }
 
-// Start begins listening for hotkey in a goroutine
-// Must be called from main goroutine via mainthread.Init
-func (m *Manager) Start() error {
+// Start begins listening using mainthread
+// This should only be called ONCE at app startup
+func (m *Manager) Start(handsFreeStr, pttStr string) error {
 	m.mu.Lock()
-	if m.hk == nil {
-		m.mu.Unlock()
-		return fmt.Errorf("hotkey not registered")
-	}
 	m.running = true
 	m.mu.Unlock()
 
 	go mainthread.Init(func() {
-		if err := m.hk.Register(); err != nil {
-			fmt.Printf("Failed to register hotkey: %v\n", err)
-			return
+		// Initial Registration
+		if handsFreeStr != "" {
+			mods, key, err := parseHotkey(handsFreeStr)
+			if err == nil {
+				m.handsFreeHK = hotkey.New(mods, key)
+				if err := m.handsFreeHK.Register(); err != nil {
+					fmt.Printf("Failed to register initial hands-free: %v\n", err)
+				}
+			}
 		}
-		defer m.hk.Unregister()
+		if pttStr != "" {
+			mods, key, err := parseHotkey(pttStr)
+			if err == nil {
+				m.pushToTalkHK = hotkey.New(mods, key)
+				if err := m.pushToTalkHK.Register(); err != nil {
+					fmt.Printf("Failed to register initial ptt: %v\n", err)
+				}
+			}
+		}
 
-		for range m.hk.Keydown() {
-			m.mu.Lock()
-			if !m.running {
-				m.mu.Unlock()
-				return
+		// Event Loop - runs FOREVER
+		for {
+			// Get current hotkey references (no lock needed for reading pointers in this context)
+			hf := m.handsFreeHK
+			ptt := m.pushToTalkHK
+
+			var hfDown <-chan hotkey.Event
+			var pttDown, pttUp <-chan hotkey.Event
+
+			if hf != nil {
+				hfDown = hf.Keydown()
+			}
+			if ptt != nil {
+				pttDown = ptt.Keydown()
+				pttUp = ptt.Keyup()
 			}
 
-			// Toggle state
-			switch m.state {
-			case StateIdle:
-				m.state = StateRecording
-			case StateRecording:
-				m.state = StateProcessing
-			case StateProcessing:
-				// Do nothing while processing
-				m.mu.Unlock()
+			select {
+			case req := <-m.reconfigCh:
+				// Reconfigure request received
+				err := m.handleReconfigure(req.handsFreeStr, req.pttStr)
+				req.result <- err
 				continue
-			}
 
-			currentState := m.state
-			callback := m.callback
-			m.mu.Unlock()
+			case _, ok := <-hfDown:
+				if !ok {
+					continue
+				}
+				m.handleHandsFree()
 
-			if callback != nil {
-				callback(currentState)
+			case _, ok := <-pttDown:
+				if !ok {
+					continue
+				}
+				m.handlePushToTalkDown()
+
+			case _, ok := <-pttUp:
+				if !ok {
+					continue
+				}
+				m.handlePushToTalkUp()
+
+			case <-time.After(100 * time.Millisecond):
+				// Heartbeat to allow reconfigure checks
 			}
 		}
 	})
@@ -175,11 +231,127 @@ func (m *Manager) Start() error {
 	return nil
 }
 
+// handleReconfigure performs the actual hotkey swap (called from main loop)
+func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
+	// Unregister old hotkeys
+	if m.handsFreeHK != nil {
+		m.handsFreeHK.Unregister()
+		m.handsFreeHK = nil
+	}
+	if m.pushToTalkHK != nil {
+		m.pushToTalkHK.Unregister()
+		m.pushToTalkHK = nil
+	}
+
+	// Parse and register new hands-free
+	if handsFreeStr != "" {
+		mods, key, err := parseHotkey(handsFreeStr)
+		if err != nil {
+			return fmt.Errorf("invalid hands-free hotkey: %w", err)
+		}
+		m.handsFreeHK = hotkey.New(mods, key)
+		if err := m.handsFreeHK.Register(); err != nil {
+			return fmt.Errorf("failed to register hands-free: %w", err)
+		}
+	}
+
+	// Parse and register new PTT
+	if pttStr != "" {
+		mods, key, err := parseHotkey(pttStr)
+		if err != nil {
+			// Cleanup partial registration
+			if m.handsFreeHK != nil {
+				m.handsFreeHK.Unregister()
+				m.handsFreeHK = nil
+			}
+			return fmt.Errorf("invalid ptt hotkey: %w", err)
+		}
+		m.pushToTalkHK = hotkey.New(mods, key)
+		if err := m.pushToTalkHK.Register(); err != nil {
+			// Cleanup partial registration
+			if m.handsFreeHK != nil {
+				m.handsFreeHK.Unregister()
+				m.handsFreeHK = nil
+			}
+			return fmt.Errorf("failed to register ptt: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) handleHandsFree() {
+	fmt.Println("[Hotkey] HandsFree triggered!")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.running {
+		fmt.Println("[Hotkey] HandsFree ignored - not running")
+		return
+	}
+
+	fmt.Printf("[Hotkey] HandsFree current state: %s\n", m.state)
+	switch m.state {
+	case StateIdle:
+		m.state = StateRecording
+		m.activeTrigger = TriggerHandsFree
+		if m.callback != nil {
+			m.callback(m.state)
+		}
+	case StateRecording:
+		if m.activeTrigger == TriggerHandsFree || m.activeTrigger == TriggerNone {
+			m.state = StateProcessing
+			m.activeTrigger = TriggerNone
+			if m.callback != nil {
+				m.callback(m.state)
+			}
+		}
+	case StateProcessing:
+		// Do nothing
+	}
+}
+
+func (m *Manager) handlePushToTalkDown() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.running {
+		return
+	}
+
+	if m.state == StateIdle {
+		m.state = StateRecording
+		m.activeTrigger = TriggerPushToTalk
+		if m.callback != nil {
+			m.callback(m.state)
+		}
+	}
+}
+
+func (m *Manager) handlePushToTalkUp() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.running {
+		return
+	}
+
+	if m.state == StateRecording && m.activeTrigger == TriggerPushToTalk {
+		m.state = StateProcessing
+		m.activeTrigger = TriggerNone
+		if m.callback != nil {
+			m.callback(m.state)
+		}
+	}
+}
+
 // Stop stops listening for hotkey
 func (m *Manager) Stop() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.running = false
+	m.mu.Unlock()
+	// Note: We don't actually stop the mainthread.Init loop because
+	// doing so would terminate the app. We just set running=false.
 }
 
 // GetState returns the current state
@@ -194,4 +366,7 @@ func (m *Manager) SetState(state State) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.state = state
+	if state == StateIdle {
+		m.activeTrigger = TriggerNone
+	}
 }

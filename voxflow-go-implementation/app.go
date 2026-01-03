@@ -82,18 +82,12 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize hotkey manager with callback
 	a.hotkeyManager = hotkey.NewManager(a.onHotkeyPressed)
 
-	// Register the configured hotkey
-	hotkeyStr := a.config.GetHotkey()
-	if err := a.hotkeyManager.Register(hotkeyStr); err != nil {
-		fmt.Printf("Failed to register hotkey '%s': %v\n", hotkeyStr, err)
-		// Fall back to default
-		if err := a.hotkeyManager.Register("cmd+shift+v"); err != nil {
-			fmt.Printf("Failed to register default hotkey: %v\n", err)
-		}
-	}
+	// Register and Start listening for hotkeys
+	hfHotkey := a.config.GetHandsFreeHotkey()
+	pttHotkey := a.config.GetPushToTalkHotkey()
 
-	// Start listening for hotkey
-	if err := a.hotkeyManager.Start(); err != nil {
+	fmt.Printf("Starting hotkey manager with: HF=%s, PTT=%s\n", hfHotkey, pttHotkey)
+	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey); err != nil {
 		fmt.Printf("Failed to start hotkey listener: %v\n", err)
 	}
 }
@@ -360,25 +354,50 @@ func (a *App) SetAPIKey(key string) error {
 }
 
 // SetHotkey sets the global hotkey
-func (a *App) SetHotkey(hotkeyStr string) error {
-	// Stop current hotkey listener
+// reloadHotkeys re-initializes the hotkey manager with current config
+func (a *App) reloadHotkeys() error {
+	hf := a.config.GetHandsFreeHotkey()
+	ptt := a.config.GetPushToTalkHotkey()
+
 	if a.hotkeyManager != nil {
-		a.hotkeyManager.Stop()
+		fmt.Printf("Updating hotkeys: HF=%s, PTT=%s\n", hf, ptt)
+		return a.hotkeyManager.Update(hf, ptt)
 	}
+	return fmt.Errorf("hotkey manager not initialized")
+}
 
-	// Register new hotkey
-	a.hotkeyManager = hotkey.NewManager(a.onHotkeyPressed)
-	if err := a.hotkeyManager.Register(hotkeyStr); err != nil {
+// SetHotkey sets the global hotkey (Legacy: maps to HandsFree)
+func (a *App) SetHotkey(hotkeyStr string) error {
+	return a.SetHandsFreeHotkey(hotkeyStr)
+}
+
+// SetHandsFreeHotkey sets the hands-free hotkey
+func (a *App) SetHandsFreeHotkey(hotkeyStr string) error {
+	old := a.config.GetHandsFreeHotkey()
+	a.config.SetHandsFreeHotkey(hotkeyStr)
+
+	if err := a.reloadHotkeys(); err != nil {
+		fmt.Printf("Error reloading hotkeys (HF): %v\n", err)
+		a.config.SetHandsFreeHotkey(old) // Revert on error
+		a.reloadHotkeys()                // Restore state
 		return err
 	}
 
-	// Start listening
-	if err := a.hotkeyManager.Start(); err != nil {
+	return a.config.Save()
+}
+
+// SetPushToTalkHotkey sets the push-to-talk hotkey
+func (a *App) SetPushToTalkHotkey(hotkeyStr string) error {
+	old := a.config.GetPushToTalkHotkey()
+	a.config.SetPushToTalkHotkey(hotkeyStr)
+
+	if err := a.reloadHotkeys(); err != nil {
+		fmt.Printf("Error reloading hotkeys (PTT): %v\n", err)
+		a.config.SetPushToTalkHotkey(old) // Revert on error
+		a.reloadHotkeys()                 // Restore state
 		return err
 	}
 
-	// Save to config
-	a.config.SetHotkey(hotkeyStr)
 	return a.config.Save()
 }
 

@@ -86,12 +86,20 @@ export function SetAPIKey(arg1) {
   return window['go']['main']['App']['SetAPIKey'](arg1);
 }
 
+export function SetHandsFreeHotkey(arg1) {
+  return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
+}
+
 export function SetHotkey(arg1) {
   return window['go']['main']['App']['SetHotkey'](arg1);
 }
 
 export function SetMode(arg1) {
   return window['go']['main']['App']['SetMode'](arg1);
+}
+
+export function SetPushToTalkHotkey(arg1) {
+  return window['go']['main']['App']['SetPushToTalkHotkey'](arg1);
 }
 
 export function SetWhisperModel(arg1) {

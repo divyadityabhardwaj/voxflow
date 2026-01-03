@@ -9,11 +9,13 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	GeminiAPIKey string `json:"gemini_api_key"`
-	Hotkey       string `json:"hotkey"`        // e.g., "cmd+shift+v"
-	WhisperModel string `json:"whisper_model"` // tiny, base, small
-	Mode         string `json:"mode"`          // casual, formal
-	mu           sync.RWMutex
+	GeminiAPIKey     string `json:"gemini_api_key"`
+	HandsFreeHotkey  string `json:"hands_free_hotkey"`   // e.g., "cmd+shift+space"
+	PushToTalkHotkey string `json:"push_to_talk_hotkey"` // e.g., "cmd+shift+p"
+	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
+	WhisperModel     string `json:"whisper_model"`       // tiny, base, small
+	Mode             string `json:"mode"`                // casual, formal
+	mu               sync.RWMutex
 }
 
 var (
@@ -47,9 +49,10 @@ func GetConfigPath() (string, error) {
 func GetInstance() *Config {
 	once.Do(func() {
 		instance = &Config{
-			Hotkey:       "cmd+shift+v",
-			WhisperModel: "base",
-			Mode:         "casual",
+			HandsFreeHotkey:  "cmd+shift+space",
+			PushToTalkHotkey: "cmd+shift+p",
+			WhisperModel:     "base",
+			Mode:             "casual",
 		}
 		instance.Load()
 	})
@@ -74,7 +77,36 @@ func (c *Config) Load() error {
 		return err
 	}
 
-	return json.Unmarshal(data, c)
+	err = json.Unmarshal(data, c)
+	if err != nil {
+		return err
+	}
+
+	// Migration: If legacy Hotkey exists but HandsFreeHotkey is empty, use legacy
+	if c.Hotkey != "" && c.HandsFreeHotkey == "" {
+		c.HandsFreeHotkey = c.Hotkey
+	}
+
+	// Ensure defaults
+	if c.HandsFreeHotkey == "" {
+		c.HandsFreeHotkey = "cmd+shift+space"
+	}
+	if c.PushToTalkHotkey == "" {
+		c.PushToTalkHotkey = "cmd+shift+p"
+	}
+	if c.WhisperModel == "" {
+		c.WhisperModel = "base"
+	}
+	if c.Mode == "" {
+		c.Mode = "casual"
+	}
+
+	// Check environment variable first for API key
+	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+		c.GeminiAPIKey = apiKey
+	}
+
+	return nil
 }
 
 // Save writes the config to disk
@@ -114,18 +146,48 @@ func (c *Config) SetGeminiAPIKey(key string) {
 	c.GeminiAPIKey = key
 }
 
-// GetHotkey returns the configured hotkey
-func (c *Config) GetHotkey() string {
+// GetHandsFreeHotkey returns the hands-free hotkey
+func (c *Config) GetHandsFreeHotkey() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.Hotkey
+	if c.HandsFreeHotkey == "" {
+		return "cmd+shift+space"
+	}
+	return c.HandsFreeHotkey
 }
 
-// SetHotkey sets the hotkey
-func (c *Config) SetHotkey(hotkey string) {
+// SetHandsFreeHotkey sets the hands-free hotkey
+func (c *Config) SetHandsFreeHotkey(hotkey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.Hotkey = hotkey
+	c.HandsFreeHotkey = hotkey
+}
+
+// GetPushToTalkHotkey returns the push-to-talk hotkey
+func (c *Config) GetPushToTalkHotkey() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.PushToTalkHotkey == "" {
+		return "cmd+shift+p"
+	}
+	return c.PushToTalkHotkey
+}
+
+// SetPushToTalkHotkey sets the push-to-talk hotkey
+func (c *Config) SetPushToTalkHotkey(hotkey string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.PushToTalkHotkey = hotkey
+}
+
+// GetHotkey returns the configured hotkey (legacy)
+func (c *Config) GetHotkey() string {
+	return c.GetHandsFreeHotkey()
+}
+
+// SetHotkey sets the hotkey (legacy, maps to hands-free)
+func (c *Config) SetHotkey(hotkey string) {
+	c.SetHandsFreeHotkey(hotkey)
 }
 
 // GetWhisperModel returns the Whisper model size

@@ -45,9 +45,13 @@ export function SearchHistory(arg1:string,arg2:number):Promise<Array<history.Tra
 
 export function SetAPIKey(arg1:string):Promise<void>;
 
+export function SetHandsFreeHotkey(arg1:string):Promise<void>;
+
 export function SetHotkey(arg1:string):Promise<void>;
 
 export function SetMode(arg1:string):Promise<void>;
+
+export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 
 export function SetWhisperModel(arg1:string):Promise<void>;
 

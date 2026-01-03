@@ -3,6 +3,8 @@ import {
   GetConfig,
   SetAPIKey,
   SetHotkey,
+  SetHandsFreeHotkey,
+  SetPushToTalkHotkey,
   SetWhisperModel,
   SetMode,
   GetAllModels,
@@ -11,10 +13,15 @@ import {
   IsWhisperCLIReady,
   CancelDownload,
 } from "../../wailsjs/go/main/App";
+
 import { EventsOn } from "../../wailsjs/runtime/runtime";
+import HotkeyRecorderModal from "./HotkeyRecorderModal";
+import HotkeyInput from "./HotkeyInput"; // Keep if needed or remove if fully replaced
 
 interface Config {
-  hotkey: string;
+  hands_free_hotkey: string;
+  push_to_talk_hotkey: string;
+  hotkey: string; // Keep for legacy
   whisper_model: string;
   mode: string;
   api_key_set: boolean;
@@ -27,14 +34,6 @@ interface ModelInfo {
   downloaded: boolean;
   file_path: string;
 }
-
-const HOTKEY_OPTIONS = [
-  { value: "cmd+shift+v", label: "⌘ + ⇧ + V" },
-  { value: "cmd+shift+d", label: "⌘ + ⇧ + D" },
-  { value: "ctrl+shift+v", label: "⌃ + ⇧ + V" },
-  { value: "cmd+shift+space", label: "⌘ + ⇧ + Space" },
-  { value: "ctrl+shift+space", label: "⌃ + ⇧ + Space" },
-];
 
 export default function SettingsView() {
   const [config, setConfig] = useState<Config | null>(null);
@@ -121,14 +120,31 @@ export default function SettingsView() {
     }
   };
 
-  const handleHotkeyChange = async (value: string) => {
-    setSaving("hotkey");
+  const handleHandsFreeChange = async (value: string) => {
+    setSaving("handsFree");
     try {
-      await SetHotkey(value);
-      setConfig((prev) => (prev ? { ...prev, hotkey: value } : null));
-      showSuccess("hotkey");
+      await SetHandsFreeHotkey(value);
+      setConfig((prev) =>
+        prev ? { ...prev, hands_free_hotkey: value } : null
+      );
+      showSuccess("handsFree");
     } catch (err) {
-      console.error("Failed to save hotkey:", err);
+      console.error("Failed to save hands-free hotkey:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handlePushToTalkChange = async (value: string) => {
+    setSaving("ptt");
+    try {
+      await SetPushToTalkHotkey(value);
+      setConfig((prev) =>
+        prev ? { ...prev, push_to_talk_hotkey: value } : null
+      );
+      showSuccess("ptt");
+    } catch (err) {
+      console.error("Failed to save push-to-talk hotkey:", err);
     } finally {
       setSaving(null);
     }
@@ -168,6 +184,47 @@ export default function SettingsView() {
     } catch (err) {
       console.error("Failed to cancel download:", err);
     }
+  };
+
+  const [hotkeyModalOpen, setHotkeyModalOpen] = useState(false);
+  const [activeHotkeyField, setActiveHotkeyField] = useState<
+    "ptt" | "handsFree" | null
+  >(null);
+  const [activeHotkeyValue, setActiveHotkeyValue] = useState("");
+
+  const openHotkeyModal = (
+    field: "ptt" | "handsFree",
+    currentValue: string
+  ) => {
+    setActiveHotkeyField(field);
+    setActiveHotkeyValue(currentValue);
+    setHotkeyModalOpen(true);
+  };
+
+  const handleHotkeySave = async (newHotkey: string) => {
+    if (activeHotkeyField === "ptt") {
+      await handlePushToTalkChange(newHotkey);
+    } else if (activeHotkeyField === "handsFree") {
+      await handleHandsFreeChange(newHotkey);
+    }
+    setHotkeyModalOpen(false);
+  };
+
+  const formatHotkey = (hotkey: string) => {
+    // Optional: Prettify the string for display (e.g., cmd -> ⌘)
+    // For now, just capitalization is a good start
+    return hotkey
+      .split("+")
+      .map((p) =>
+        p === "cmd"
+          ? "⌘"
+          : p === "shift"
+          ? "⇧"
+          : p === "opt" || p === "alt"
+          ? "⌥"
+          : p.toUpperCase()
+      )
+      .join(" + ");
   };
 
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
@@ -286,34 +343,80 @@ export default function SettingsView() {
           </div>
         </section>
 
-        {/* Hotkey */}
-        <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
-          <h3 className="text-lg font-medium text-dark-200 mb-4">
-            Global Hotkey
-          </h3>
-          <p className="text-sm text-dark-500 mb-4">
-            Press this keyboard shortcut to start/stop recording from any
-            application.
-          </p>
-          <div className="flex gap-3">
-            <select
-              value={config.hotkey}
-              onChange={(e) => handleHotkeyChange(e.target.value)}
-              disabled={saving === "hotkey"}
-              className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                       text-dark-200 focus:outline-none focus:ring-2 focus:ring-accent-600"
-            >
-              {HOTKEY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {success === "hotkey" && (
-              <span className="flex items-center text-sm text-idle">
-                ✓ Saved
-              </span>
-            )}
+        {/* Hotkeys */}
+        <section className="space-y-6">
+          <div className="p-6 bg-dark-900 rounded-xl border border-dark-800">
+            <h3 className="text-lg font-medium text-dark-200 mb-4">
+              Push-to-Talk Hotkey
+            </h3>
+            <p className="text-sm text-dark-500 mb-4">
+              Hold this shortcut to record. Release to process.
+            </p>
+            <div className="flex gap-3">
+              <div
+                onClick={() =>
+                  openHotkeyModal("ptt", config.push_to_talk_hotkey)
+                }
+                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
+                         flex items-center justify-between group"
+              >
+                <span className="font-mono">
+                  {formatHotkey(config.push_to_talk_hotkey || "None")}
+                </span>
+                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
+                  Click to edit
+                </span>
+              </div>
+
+              {saving === "ptt" && (
+                <span className="flex items-center text-sm text-dark-500">
+                  Saving...
+                </span>
+              )}
+              {success === "ptt" && (
+                <span className="flex items-center text-sm text-idle">
+                  ✓ Saved
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6 bg-dark-900 rounded-xl border border-dark-800">
+            <h3 className="text-lg font-medium text-dark-200 mb-4">
+              Hands-Free Hotkey
+            </h3>
+            <p className="text-sm text-dark-500 mb-4">
+              Press once to start recording. Press again to stop.
+            </p>
+            <div className="flex gap-3">
+              <div
+                onClick={() =>
+                  openHotkeyModal("handsFree", config.hands_free_hotkey)
+                }
+                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
+                         flex items-center justify-between group"
+              >
+                <span className="font-mono">
+                  {formatHotkey(config.hands_free_hotkey || "None")}
+                </span>
+                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
+                  Click to edit
+                </span>
+              </div>
+
+              {saving === "handsFree" && (
+                <span className="flex items-center text-sm text-dark-500">
+                  Saving...
+                </span>
+              )}
+              {success === "handsFree" && (
+                <span className="flex items-center text-sm text-idle">
+                  ✓ Saved
+                </span>
+              )}
+            </div>
           </div>
         </section>
 
@@ -529,6 +632,13 @@ export default function SettingsView() {
           </div>
         </div>
       )}
+
+      <HotkeyRecorderModal
+        isOpen={hotkeyModalOpen}
+        onClose={() => setHotkeyModalOpen(false)}
+        onSave={handleHotkeySave}
+        initialValue={activeHotkeyValue}
+      />
     </div>
   );
 }
