@@ -29,6 +29,7 @@ type App struct {
 	historyService   *history.Service
 	injectionService *injection.Service
 	modelReady       bool
+	isMiniMode       bool               // Tracks if app is in mini indicator mode
 	downloadCancel   context.CancelFunc // Cancel function for active download
 	downloadMu       sync.Mutex         // Mutex for download operations
 }
@@ -39,6 +40,7 @@ func NewApp() *App {
 	app := &App{
 		config:         cfg,
 		state:          hotkey.StateIdle,
+		isMiniMode:     true, // Start in mini mode (floating indicator)
 		audioRecorder:  audio.NewRecorder(),
 		whisperService: whisper.NewService(),
 		geminiClient:   gemini.NewClient(cfg.GetGeminiAPIKey()),
@@ -49,6 +51,9 @@ func NewApp() *App {
 // startup is called when the app starts
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Make the floating indicator visible on all spaces and over fullscreen apps
+	MakeWindowFloatEverywhere()
 
 	// Initialize audio
 	if err := a.audioRecorder.Initialize(); err != nil {
@@ -194,10 +199,56 @@ func (a *App) onHotkeyPressed(state hotkey.State) {
 
 	switch state {
 	case hotkey.StateRecording:
+		a.ShowMiniMode()
 		a.StartRecording()
 	case hotkey.StateProcessing:
 		a.StopRecording()
+		// Note: HideMiniMode is called after processing completes in processRecording()
+	case hotkey.StateIdle:
+		a.HideMiniMode()
 	}
+}
+
+// ShowMiniMode switches the window to a small floating indicator
+func (a *App) ShowMiniMode() {
+	if a.isMiniMode {
+		return
+	}
+	a.isMiniMode = true
+
+	// Re-apply floating behavior (in case coming from full app mode)
+	MakeWindowFloatEverywhere()
+
+	// Resize to small indicator (no WindowShow/WindowUnminimise to avoid focus stealing)
+	runtime.WindowSetSize(a.ctx, 80, 80)
+	runtime.WindowSetAlwaysOnTop(a.ctx, true)
+	runtime.EventsEmit(a.ctx, "mini-mode", true)
+
+	fmt.Println("[App] Switched to mini mode")
+}
+
+// HideMiniMode restores the window to normal size
+func (a *App) HideMiniMode() {
+	if !a.isMiniMode {
+		return
+	}
+	a.isMiniMode = false
+
+	// Reset window behavior to normal (not floating over fullscreen)
+	ResetWindowBehavior()
+
+	// Restore normal window size
+	runtime.WindowSetSize(a.ctx, 900, 600)
+	runtime.WindowSetAlwaysOnTop(a.ctx, false)
+	runtime.WindowCenter(a.ctx)
+	runtime.EventsEmit(a.ctx, "mini-mode", false)
+
+	fmt.Println("[App] Restored normal mode")
+}
+
+// IsMiniMode returns whether the app is in mini indicator mode
+func (a *App) IsMiniMode() bool {
+	return a.isMiniMode
 }
 
 // GetStatus returns the current application status
@@ -295,9 +346,10 @@ func (a *App) processRecording() {
 	elapsed := time.Since(startTime)
 	fmt.Printf("Processing complete in %v\n", elapsed)
 
-	// Reset state
+	// Reset state and hide mini mode
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
+	a.HideMiniMode()
 	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 	runtime.EventsEmit(a.ctx, "processing-complete", map[string]interface{}{
 		"raw":      rawText,
@@ -317,6 +369,7 @@ func (a *App) handleError(message string, err error) {
 
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
+	a.HideMiniMode()
 	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 }
 

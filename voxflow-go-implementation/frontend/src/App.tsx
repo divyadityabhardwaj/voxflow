@@ -4,7 +4,9 @@ import MainView from "./components/MainView";
 import HistoryView from "./components/HistoryView";
 import SettingsView from "./components/SettingsView";
 import ModelDownloader from "./components/ModelDownloader";
-import { EventsOn } from "../wailsjs/runtime/runtime";
+import RecordingIndicator from "./components/RecordingIndicator";
+import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
+import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
 
 type View = "main" | "history" | "settings";
 
@@ -12,11 +14,20 @@ function App() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [modelReady, setModelReady] = useState<boolean>(false);
   const [modelDownloading, setModelDownloading] = useState<boolean>(false);
+  const [isMiniMode, setIsMiniMode] = useState<boolean>(true); // Default to mini mode
 
   useEffect(() => {
+    // Check initial mini-mode state
+    IsMiniMode().then(setIsMiniMode);
+
     // Listen for navigation events from Go backend
     EventsOn("open-history", () => setCurrentView("history"));
     EventsOn("open-settings", () => setCurrentView("settings"));
+
+    // Listen for mini-mode changes
+    EventsOn("mini-mode", (isMini: boolean) => {
+      setIsMiniMode(isMini);
+    });
 
     // Listen for model status
     EventsOn(
@@ -41,6 +52,11 @@ function App() {
     setModelReady(true);
     setModelDownloading(false);
   };
+
+  // If in mini mode, show only the recording indicator
+  if (isMiniMode) {
+    return <RecordingIndicator />;
+  }
 
   // Show model downloader if model is not ready
   if (!modelReady && !modelDownloading) {
@@ -91,6 +107,51 @@ function App() {
             }`}
           >
             Settings
+          </button>
+
+          {/* Separator */}
+          <div className="w-px h-4 bg-dark-700 mx-1" />
+
+          {/* Minimize to indicator */}
+          <button
+            onClick={() => ShowMiniMode()}
+            className="p-1.5 text-dark-400 hover:text-dark-200 hover:bg-dark-800 rounded-md transition-all"
+            title="Minimize to floating indicator"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 12H4"
+              />
+            </svg>
+          </button>
+
+          {/* Close */}
+          <button
+            onClick={() => Quit()}
+            className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-red-900/20 rounded-md transition-all"
+            title="Quit voxflow"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
       </nav>

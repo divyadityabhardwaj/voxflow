@@ -54,6 +54,14 @@ export function GetTranscript(arg1) {
   return window['go']['main']['App']['GetTranscript'](arg1);
 }
 
+export function HideMiniMode() {
+  return window['go']['main']['App']['HideMiniMode']();
+}
+
+export function IsMiniMode() {
+  return window['go']['main']['App']['IsMiniMode']();
+}
+
 export function IsModelDownloaded() {
   return window['go']['main']['App']['IsModelDownloaded']();
 }
@@ -108,6 +116,10 @@ export function SetPushToTalkHotkey(arg1) {
 
 export function SetWhisperModel(arg1) {
   return window['go']['main']['App']['SetWhisperModel'](arg1);
+}
+
+export function ShowMiniMode() {
+  return window['go']['main']['App']['ShowMiniMode']();
 }
 
 export function StartRecording() {

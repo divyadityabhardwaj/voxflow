@@ -29,6 +29,10 @@ export function GetStatus():Promise<string>;
 
 export function GetTranscript(arg1:number):Promise<history.Transcript>;
 
+export function HideMiniMode():Promise<void>;
+
+export function IsMiniMode():Promise<boolean>;
+
 export function IsModelDownloaded():Promise<boolean>;
 
 export function IsModelReady():Promise<boolean>;
@@ -56,6 +60,8 @@ export function SetMode(arg1:string):Promise<void>;
 export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 
 export function SetWhisperModel(arg1:string):Promise<void>;
+
+export function ShowMiniMode():Promise<void>;
 
 export function StartRecording():Promise<void>;
 

@@ -23,6 +23,9 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
+        <!-- Make this an accessory app (no Dock icon) to stay on all spaces and over fullscreen apps -->
+        <key>LSUIElement</key>
+        <true/>
         {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>

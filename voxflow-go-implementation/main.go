@@ -30,6 +30,9 @@ func main() {
 		app.ToggleRecording()
 	})
 	fileMenu.AddSeparator()
+	fileMenu.AddText("Open Full App", keys.CmdOrCtrl("o"), func(cd *menu.CallbackData) {
+		app.HideMiniMode()
+	})
 	fileMenu.AddText("View History", keys.CmdOrCtrl("h"), func(cd *menu.CallbackData) {
 		app.OpenHistoryWindow()
 	})
@@ -44,17 +47,24 @@ func main() {
 	// Edit menu
 	appMenu.Append(menu.EditMenu())
 
-	// Create application with options
+	// Create application with options - Start as floating indicator
 	err := wails.Run(&options.App{
-		Title:     "voxflow",
-		Width:     900,
-		Height:    600,
-		MinWidth:  700,
-		MinHeight: 500,
+		Title:             "voxflow",
+		Width:             70,
+		Height:            70,
+		MinWidth:          70,
+		MinHeight:         70,
+		MaxWidth:          70,
+		MaxHeight:         70,
+		DisableResize:     true,
+		Frameless:         true,
+		AlwaysOnTop:       true,
+		StartHidden:       false,
+		HideWindowOnClose: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 18, G: 18, B: 24, A: 1},
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0}, // Transparent
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
@@ -63,8 +73,8 @@ func main() {
 		Mac: &mac.Options{
 			TitleBar: &mac.TitleBar{
 				TitlebarAppearsTransparent: true,
-				HideTitle:                  false,
-				HideTitleBar:               false,
+				HideTitle:                  true,
+				HideTitleBar:               true,
 				FullSizeContent:            true,
 				UseToolbar:                 false,
 			},
@@ -72,7 +82,9 @@ func main() {
 				Title:   "voxflow",
 				Message: "AI-Powered Dictation App\n\nVersion 1.0.0",
 			},
-			Appearance: mac.NSAppearanceNameDarkAqua,
+			Appearance:           mac.NSAppearanceNameDarkAqua,
+			WebviewIsTransparent: true,
+			WindowIsTranslucent:  true,
 		},
 		Menu: appMenu,
 	})
