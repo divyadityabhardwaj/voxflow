@@ -6,6 +6,10 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function ClearAllHistory() {
+  return window['go']['main']['App']['ClearAllHistory']();
+}
+
 export function CopyToClipboard(arg1) {
   return window['go']['main']['App']['CopyToClipboard'](arg1);
 }

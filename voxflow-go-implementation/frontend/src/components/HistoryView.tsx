@@ -3,9 +3,11 @@ import {
   GetHistory,
   SearchHistory,
   DeleteTranscript,
+  ClearAllHistory,
   RetryWithGemini,
   CopyToClipboard,
 } from "../../wailsjs/go/main/App";
+import { useConfirmModal } from "./ConfirmModal";
 
 interface Transcript {
   id: number;
@@ -23,6 +25,8 @@ export default function HistoryView() {
   const [loading, setLoading] = useState(true);
   const [retryInstruction, setRetryInstruction] = useState("");
   const [retrying, setRetrying] = useState(false);
+
+  const { confirm, ConfirmModalComponent } = useConfirmModal();
 
   const loadTranscripts = async () => {
     setLoading(true);
@@ -52,13 +56,39 @@ export default function HistoryView() {
   const selectedTranscript = transcripts.find((t) => t.id === selectedId);
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this transcript?")) return;
+    const confirmed = await confirm({
+      title: "Delete Transcript",
+      message: "Are you sure you want to delete this transcript?",
+      confirmText: "Delete",
+      isDestructive: true,
+    });
+    if (!confirmed) return;
+
     try {
       await DeleteTranscript(id);
       setTranscripts(transcripts.filter((t) => t.id !== id));
       if (selectedId === id) setSelectedId(null);
     } catch (err) {
       console.error("Failed to delete:", err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    const confirmed = await confirm({
+      title: "Clear All History",
+      message:
+        "Are you sure you want to delete ALL transcripts? This cannot be undone.",
+      confirmText: "Delete All",
+      isDestructive: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      await ClearAllHistory();
+      setTranscripts([]);
+      setSelectedId(null);
+    } catch (err) {
+      console.error("Failed to clear history:", err);
     }
   };
 
@@ -133,6 +163,31 @@ export default function HistoryView() {
             </svg>
           </div>
         </div>
+
+        {/* Clear All button */}
+        {transcripts.length > 0 && (
+          <div className="p-2 border-b border-dark-800">
+            <button
+              onClick={handleClearAll}
+              className="w-full px-3 py-2 text-sm text-red-400 hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              Clear All History
+            </button>
+          </div>
+        )}
 
         {/* Transcript list */}
         <div className="flex-1 overflow-y-auto">
@@ -276,6 +331,9 @@ export default function HistoryView() {
           </div>
         )}
       </div>
+
+      {/* Confirm Modal */}
+      <ConfirmModalComponent />
     </div>
   );
 }

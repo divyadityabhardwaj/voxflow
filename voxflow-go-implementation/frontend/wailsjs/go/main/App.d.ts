@@ -5,6 +5,8 @@ import {history} from '../models';
 
 export function CancelDownload():Promise<void>;
 
+export function ClearAllHistory():Promise<void>;
+
 export function CopyToClipboard(arg1:string):Promise<void>;
 
 export function DeleteModelByName(arg1:string):Promise<void>;

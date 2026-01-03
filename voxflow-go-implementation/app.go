@@ -540,6 +540,14 @@ func (a *App) DeleteTranscript(id int64) error {
 	return a.historyService.Delete(id)
 }
 
+// ClearAllHistory deletes all transcripts
+func (a *App) ClearAllHistory() error {
+	if a.historyService == nil {
+		return fmt.Errorf("history service not available")
+	}
+	return a.historyService.DeleteAll()
+}
+
 // RetryWithGemini re-processes a transcript with a custom instruction
 func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
 	if a.historyService == nil {
