@@ -3,6 +3,8 @@
 import {whisper} from '../models';
 import {history} from '../models';
 
+export function CancelDownload():Promise<void>;
+
 export function CopyToClipboard(arg1:string):Promise<void>;
 
 export function DeleteModelByName(arg1:string):Promise<void>;

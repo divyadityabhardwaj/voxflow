@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 	"voxflow/internal/audio"
 	"voxflow/internal/config"
@@ -28,6 +29,8 @@ type App struct {
 	historyService   *history.Service
 	injectionService *injection.Service
 	modelReady       bool
+	downloadCancel   context.CancelFunc // Cancel function for active download
+	downloadMu       sync.Mutex         // Mutex for download operations
 }
 
 // NewApp creates a new App application struct
@@ -66,6 +69,11 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Printf("Warning: Failed to initialize injection: %v\n", err)
 	} else {
 		a.injectionService = injService
+	}
+
+	// Clean up any partial model downloads from previous interrupted sessions
+	if err := whisper.CleanupPartialDownloads(); err != nil {
+		fmt.Printf("Warning: Failed to cleanup partial downloads: %v\n", err)
 	}
 
 	// Check if model is downloaded
@@ -399,9 +407,21 @@ func (a *App) GetAllModels() ([]whisper.ModelInfo, error) {
 	return a.whisperService.GetAllModels()
 }
 
-// DownloadModelByName downloads a specific model by name
+// DownloadModelByName downloads a specific model by name (cancellable)
 func (a *App) DownloadModelByName(modelName string) error {
-	err := a.whisperService.DownloadModel(modelName, func(downloaded, total int64) {
+	a.downloadMu.Lock()
+
+	// Cancel any existing download
+	if a.downloadCancel != nil {
+		a.downloadCancel()
+	}
+
+	// Create new context with cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	a.downloadCancel = cancel
+	a.downloadMu.Unlock()
+
+	err := a.whisperService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
 		progress := float64(downloaded) / float64(total) * 100
 		runtime.EventsEmit(a.ctx, "model-download-progress", map[string]interface{}{
 			"model":      modelName,
@@ -410,6 +430,11 @@ func (a *App) DownloadModelByName(modelName string) error {
 			"progress":   progress,
 		})
 	})
+
+	// Clear the cancel function
+	a.downloadMu.Lock()
+	a.downloadCancel = nil
+	a.downloadMu.Unlock()
 
 	if err != nil {
 		runtime.EventsEmit(a.ctx, "model-download-error", map[string]interface{}{
@@ -423,13 +448,33 @@ func (a *App) DownloadModelByName(modelName string) error {
 	return nil
 }
 
+// CancelDownload cancels any active model download
+func (a *App) CancelDownload() {
+	a.downloadMu.Lock()
+	defer a.downloadMu.Unlock()
+
+	if a.downloadCancel != nil {
+		fmt.Println("[App] Cancelling download...")
+		a.downloadCancel()
+		a.downloadCancel = nil
+		runtime.EventsEmit(a.ctx, "model-download-cancelled", nil)
+	}
+}
+
 // DeleteModelByName deletes a specific model
 func (a *App) DeleteModelByName(modelName string) error {
 	// Don't delete the currently active model
-	if modelName == a.config.GetWhisperModel() {
+	activeModel := a.config.GetWhisperModel()
+	if modelName == activeModel {
 		return fmt.Errorf("cannot delete the currently active model")
 	}
-	return a.whisperService.DeleteModel(modelName)
+
+	err := a.whisperService.DeleteModel(modelName)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // IsWhisperCLIReady returns whether whisper-cli is available

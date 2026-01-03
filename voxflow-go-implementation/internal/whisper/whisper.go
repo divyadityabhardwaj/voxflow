@@ -2,6 +2,7 @@ package whisper
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -195,8 +196,138 @@ func (s *Service) IsModelDownloaded(modelSize string) (bool, error) {
 	return info.Size() > 10*1024*1024, nil
 }
 
-// DownloadModel downloads the specified model with progress callback
+// DownloadModelWithContext downloads the specified model with cancellation support
+func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string, progress ProgressCallback) error {
+	url, ok := modelURLs[modelSize]
+	if !ok {
+		return fmt.Errorf("unknown model size: %s", modelSize)
+	}
+
+	modelsDir, err := GetModelsDir()
+	if err != nil {
+		return err
+	}
+
+	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
+
+	// Check if already exists and has correct size
+	if info, err := os.Stat(modelPath); err == nil {
+		expectedSize := modelSizes[modelSize]
+		if info.Size() > int64(float64(expectedSize)*0.9) {
+			return nil // Already downloaded
+		}
+	}
+
+	// Create HTTP request with context for cancellation
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() == context.Canceled {
+			return fmt.Errorf("download cancelled")
+		}
+		return fmt.Errorf("failed to download model: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
+	}
+
+	// Create temporary file
+	tempPath := modelPath + ".tmp"
+	file, err := os.Create(tempPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	totalSize := resp.ContentLength
+	if totalSize <= 0 {
+		totalSize = modelSizes[modelSize]
+	}
+	var downloaded int64
+
+	// Create a cancellable reader
+	reader := &cancellableProgressReader{
+		ctx:    ctx,
+		reader: resp.Body,
+		onProgress: func(n int64) {
+			downloaded += n
+			if progress != nil {
+				progress(downloaded, totalSize)
+			}
+		},
+	}
+
+	// Copy with progress and cancellation support
+	bytesWritten, err := io.Copy(file, reader)
+	file.Close()
+
+	if err != nil {
+		os.Remove(tempPath)
+		if ctx.Err() == context.Canceled {
+			return fmt.Errorf("download cancelled")
+		}
+		return fmt.Errorf("failed to save model: %w", err)
+	}
+
+	// Check if cancelled during download
+	if ctx.Err() == context.Canceled {
+		os.Remove(tempPath)
+		return fmt.Errorf("download cancelled")
+	}
+
+	// Verify downloaded size
+	expectedSize := modelSizes[modelSize]
+	minSize := int64(float64(expectedSize) * 0.95)
+	if bytesWritten < minSize {
+		os.Remove(tempPath)
+		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
+	}
+
+	// Rename temp file to final name
+	if err := os.Rename(tempPath, modelPath); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to finalize model file: %w", err)
+	}
+
+	fmt.Printf("[Whisper] Model %s downloaded successfully (%d bytes)\n", modelSize, bytesWritten)
+	return nil
+}
+
+// cancellableProgressReader wraps an io.Reader with cancellation and progress
+type cancellableProgressReader struct {
+	ctx        context.Context
+	reader     io.Reader
+	onProgress func(n int64)
+}
+
+func (r *cancellableProgressReader) Read(p []byte) (int, error) {
+	// Check for cancellation before each read
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+	}
+
+	n, err := r.reader.Read(p)
+	if n > 0 && r.onProgress != nil {
+		r.onProgress(int64(n))
+	}
+	return n, err
+}
+
+// DownloadModel downloads the specified model with progress callback (non-cancellable, for backwards compat)
 func (s *Service) DownloadModel(modelSize string, progress ProgressCallback) error {
+	return s.DownloadModelWithContext(context.Background(), modelSize, progress)
+}
+
+// Helper function kept for compatibility
+func (s *Service) downloadModelLegacy(modelSize string, progress ProgressCallback) error {
 	url, ok := modelURLs[modelSize]
 	if !ok {
 		return fmt.Errorf("unknown model size: %s", modelSize)
@@ -257,20 +388,52 @@ func (s *Service) DownloadModel(modelSize string, progress ProgressCallback) err
 	}
 
 	// Copy with progress
-	_, err = io.Copy(file, reader)
+	bytesWritten, err := io.Copy(file, reader)
 	if err != nil {
+		file.Close()
 		os.Remove(tempPath)
 		return fmt.Errorf("failed to save model: %w", err)
 	}
 
 	file.Close()
 
-	// Rename temp file to final name
+	// Verify downloaded size matches expected size (within 5% tolerance)
+	expectedSize := modelSizes[modelSize]
+	minSize := int64(float64(expectedSize) * 0.95)
+	if bytesWritten < minSize {
+		os.Remove(tempPath)
+		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
+	}
+
+	// Rename temp file to final name (atomic operation)
 	if err := os.Rename(tempPath, modelPath); err != nil {
 		os.Remove(tempPath)
 		return fmt.Errorf("failed to finalize model file: %w", err)
 	}
 
+	fmt.Printf("[Whisper] Model %s downloaded successfully (%d bytes)\n", modelSize, bytesWritten)
+	return nil
+}
+
+// CleanupPartialDownloads removes any stale .tmp files from failed downloads
+func CleanupPartialDownloads() error {
+	modelsDir, err := GetModelsDir()
+	if err != nil {
+		return err
+	}
+
+	entries, err := os.ReadDir(modelsDir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".tmp") {
+			tmpPath := filepath.Join(modelsDir, entry.Name())
+			fmt.Printf("[Whisper] Cleaning up partial download: %s\n", entry.Name())
+			os.Remove(tmpPath)
+		}
+	}
 	return nil
 }
 
