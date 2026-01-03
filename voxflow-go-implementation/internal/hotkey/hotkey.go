@@ -283,65 +283,101 @@ func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
 func (m *Manager) handleHandsFree() {
 	fmt.Println("[Hotkey] HandsFree triggered!")
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if !m.running {
 		fmt.Println("[Hotkey] HandsFree ignored - not running")
+		m.mu.Unlock()
 		return
 	}
 
 	fmt.Printf("[Hotkey] HandsFree current state: %s\n", m.state)
+	var newState State
+	var shouldCallback bool
+
 	switch m.state {
 	case StateIdle:
 		m.state = StateRecording
 		m.activeTrigger = TriggerHandsFree
-		if m.callback != nil {
-			m.callback(m.state)
-		}
+		newState = m.state
+		shouldCallback = true
 	case StateRecording:
 		if m.activeTrigger == TriggerHandsFree || m.activeTrigger == TriggerNone {
 			m.state = StateProcessing
 			m.activeTrigger = TriggerNone
-			if m.callback != nil {
-				m.callback(m.state)
-			}
+			newState = m.state
+			shouldCallback = true
 		}
 	case StateProcessing:
 		// Do nothing
 	}
+
+	callback := m.callback
+	m.mu.Unlock()
+
+	// Call callback OUTSIDE of lock to avoid deadlock
+	if shouldCallback && callback != nil {
+		fmt.Printf("[Hotkey] HandsFree calling callback with state: %s\n", newState)
+		callback(newState)
+	}
 }
 
 func (m *Manager) handlePushToTalkDown() {
+	fmt.Println("[Hotkey] PushToTalk DOWN triggered!")
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if !m.running {
+		fmt.Println("[Hotkey] PushToTalk DOWN ignored - not running")
+		m.mu.Unlock()
 		return
 	}
+
+	fmt.Printf("[Hotkey] PushToTalk DOWN current state: %s\n", m.state)
+	var newState State
+	var shouldCallback bool
 
 	if m.state == StateIdle {
 		m.state = StateRecording
 		m.activeTrigger = TriggerPushToTalk
-		if m.callback != nil {
-			m.callback(m.state)
-		}
+		newState = m.state
+		shouldCallback = true
+	}
+
+	callback := m.callback
+	m.mu.Unlock()
+
+	if shouldCallback && callback != nil {
+		fmt.Printf("[Hotkey] PushToTalk DOWN calling callback with state: %s\n", newState)
+		callback(newState)
 	}
 }
 
 func (m *Manager) handlePushToTalkUp() {
+	fmt.Println("[Hotkey] PushToTalk UP triggered!")
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if !m.running {
+		fmt.Println("[Hotkey] PushToTalk UP ignored - not running")
+		m.mu.Unlock()
 		return
 	}
+
+	fmt.Printf("[Hotkey] PushToTalk UP current state: %s, trigger: %d\n", m.state, m.activeTrigger)
+	var newState State
+	var shouldCallback bool
 
 	if m.state == StateRecording && m.activeTrigger == TriggerPushToTalk {
 		m.state = StateProcessing
 		m.activeTrigger = TriggerNone
-		if m.callback != nil {
-			m.callback(m.state)
-		}
+		newState = m.state
+		shouldCallback = true
+	}
+
+	callback := m.callback
+	m.mu.Unlock()
+
+	if shouldCallback && callback != nil {
+		fmt.Printf("[Hotkey] PushToTalk UP calling callback with state: %s\n", newState)
+		callback(newState)
 	}
 }
 

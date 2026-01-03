@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 interface HotkeyRecorderModalProps {
   isOpen: boolean;
@@ -6,6 +6,13 @@ interface HotkeyRecorderModalProps {
   onSave: (hotkey: string) => void;
   initialValue?: string;
 }
+
+const MODIFIERS = new Set(["cmd", "ctrl", "alt", "shift", "win", "super"]);
+
+// Detect platform for display purposes
+const isMac =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toLowerCase().includes("mac");
 
 export default function HotkeyRecorderModal({
   isOpen,
@@ -20,6 +27,39 @@ export default function HotkeyRecorderModal({
 
   // We keep track if the user has actively pressed a new combo to replace the initial one
   const [hasStartedRecording, setHasStartedRecording] = useState(false);
+
+  // Validation: must have at least one modifier AND exactly one non-modifier
+  const validation = useMemo(() => {
+    if (displayKeys.length === 0) {
+      return { isValid: true, message: "" }; // No input yet, no error
+    }
+
+    const modifierKeys = displayKeys.filter((k) => MODIFIERS.has(k));
+    const regularKeys = displayKeys.filter((k) => !MODIFIERS.has(k));
+
+    if (modifierKeys.length === 0) {
+      return {
+        isValid: false,
+        message: isMac
+          ? "Global shortcuts require a modifier (⌘ Cmd, ⌃ Ctrl, ⌥ Alt, or ⇧ Shift)"
+          : "Global shortcuts require a modifier (Ctrl, Alt, Shift, or Win)",
+      };
+    }
+    if (regularKeys.length === 0) {
+      return {
+        isValid: false,
+        message: "Add a regular key (like D, Space, etc.) after your modifier",
+      };
+    }
+    if (regularKeys.length > 1) {
+      return {
+        isValid: false,
+        message:
+          "Global shortcuts can only have ONE regular key (e.g., ⌘+D, not ⌘+D+E)",
+      };
+    }
+    return { isValid: true, message: "" };
+  }, [displayKeys]);
 
   // Initialize display keys from initialValue
   useEffect(() => {
@@ -76,11 +116,10 @@ export default function HotkeyRecorderModal({
 
       const key = mapKey(e.key, e.code);
 
-      // Save on Enter/Return
+      // Save on Enter/Return (only if valid)
       if (key === "enter" || key === "return") {
-        // Use displayKeys instead of keysRef.current because
-        // the user may have released modifier keys before pressing Enter
-        if (displayKeys.length > 0) {
+        // Use displayKeys and check validation
+        if (displayKeys.length > 0 && validation.isValid) {
           onSave(displayKeys.join("+"));
           onClose();
         }
@@ -114,7 +153,7 @@ export default function HotkeyRecorderModal({
       setDisplayKeys(sorted);
       setHasStartedRecording(true);
     },
-    [onSave, onClose, displayKeys]
+    [onSave, onClose, displayKeys, validation.isValid]
   );
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -151,18 +190,34 @@ export default function HotkeyRecorderModal({
             Record Shortcut
           </h3>
 
-          <div className="py-8 flex items-center justify-center min-h-[120px] bg-dark-800 rounded-lg border-2 border-dashed border-dark-600">
+          <div
+            className={`py-8 flex items-center justify-center min-h-[120px] bg-dark-800 rounded-lg border-2 border-dashed ${
+              !validation.isValid && displayKeys.length > 0
+                ? "border-red-500"
+                : "border-dark-600"
+            }`}
+          >
             {displayKeys.length > 0 ? (
               <div className="flex flex-wrap gap-2 justify-center">
                 {displayKeys.map((k, i) => (
                   <div key={i} className="flex items-center">
                     <kbd className="px-3 py-1.5 bg-dark-700 border-b-4 border-dark-600 rounded-lg text-lg font-mono text-accent-400 min-w-[3rem] text-center shadow-sm">
-                      {k === "cmd"
-                        ? "⌘"
+                      {k === "cmd" || k === "win" || k === "super"
+                        ? isMac
+                          ? "⌘"
+                          : "Win"
                         : k === "shift"
-                        ? "⇧"
+                        ? isMac
+                          ? "⇧"
+                          : "Shift"
+                        : k === "ctrl"
+                        ? isMac
+                          ? "⌃"
+                          : "Ctrl"
                         : k === "opt" || k === "alt"
-                        ? "⌥"
+                        ? isMac
+                          ? "⌥"
+                          : "Alt"
                         : k.toUpperCase()}
                     </kbd>
                     {i < displayKeys.length - 1 && (
@@ -177,6 +232,13 @@ export default function HotkeyRecorderModal({
               <p className="text-dark-500 italic">Press keys...</p>
             )}
           </div>
+
+          {/* Validation warning */}
+          {!validation.isValid && displayKeys.length > 0 && (
+            <div className="p-3 bg-red-900/20 border border-red-700 rounded-lg">
+              <p className="text-sm text-red-400">{validation.message}</p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-sm text-dark-300">

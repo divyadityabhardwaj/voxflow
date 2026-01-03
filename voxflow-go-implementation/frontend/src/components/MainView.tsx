@@ -132,21 +132,6 @@ export default function MainView() {
             {status === "Processing" && "Transcribing and refining..."}
           </p>
         </div>
-
-        {/* Hotkey hint */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-dark-900 rounded-lg border border-dark-800">
-          <kbd className="px-2 py-1 text-xs bg-dark-800 rounded border border-dark-700">
-            ⌘
-          </kbd>
-          <span className="text-dark-500">+</span>
-          <kbd className="px-2 py-1 text-xs bg-dark-800 rounded border border-dark-700">
-            ⇧
-          </kbd>
-          <span className="text-dark-500">+</span>
-          <kbd className="px-2 py-1 text-xs bg-dark-800 rounded border border-dark-700">
-            V
-          </kbd>
-        </div>
       </div>
 
       {/* Error display */}

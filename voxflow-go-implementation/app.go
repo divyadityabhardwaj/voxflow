@@ -339,10 +339,12 @@ func (a *App) ToggleRecording() string {
 // GetConfig returns the current configuration
 func (a *App) GetConfig() map[string]interface{} {
 	return map[string]interface{}{
-		"hotkey":        a.config.GetHotkey(),
-		"whisper_model": a.config.GetWhisperModel(),
-		"mode":          a.config.GetMode(),
-		"api_key_set":   a.config.GetGeminiAPIKey() != "",
+		"hotkey":              a.config.GetHotkey(),
+		"hands_free_hotkey":   a.config.GetHandsFreeHotkey(),
+		"push_to_talk_hotkey": a.config.GetPushToTalkHotkey(),
+		"whisper_model":       a.config.GetWhisperModel(),
+		"mode":                a.config.GetMode(),
+		"api_key_set":         a.config.GetGeminiAPIKey() != "",
 	}
 }
 
