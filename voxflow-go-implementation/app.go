@@ -394,6 +394,54 @@ func (a *App) SetMode(mode string) error {
 	return a.config.Save()
 }
 
+// GetAllModels returns all available models with their download status
+func (a *App) GetAllModels() ([]whisper.ModelInfo, error) {
+	return a.whisperService.GetAllModels()
+}
+
+// DownloadModelByName downloads a specific model by name
+func (a *App) DownloadModelByName(modelName string) error {
+	err := a.whisperService.DownloadModel(modelName, func(downloaded, total int64) {
+		progress := float64(downloaded) / float64(total) * 100
+		runtime.EventsEmit(a.ctx, "model-download-progress", map[string]interface{}{
+			"model":      modelName,
+			"downloaded": downloaded,
+			"total":      total,
+			"progress":   progress,
+		})
+	})
+
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "model-download-error", map[string]interface{}{
+			"model": modelName,
+			"error": err.Error(),
+		})
+		return err
+	}
+
+	runtime.EventsEmit(a.ctx, "model-download-complete", modelName)
+	return nil
+}
+
+// DeleteModelByName deletes a specific model
+func (a *App) DeleteModelByName(modelName string) error {
+	// Don't delete the currently active model
+	if modelName == a.config.GetWhisperModel() {
+		return fmt.Errorf("cannot delete the currently active model")
+	}
+	return a.whisperService.DeleteModel(modelName)
+}
+
+// IsWhisperCLIReady returns whether whisper-cli is available
+func (a *App) IsWhisperCLIReady() bool {
+	return a.whisperService.IsWhisperCLIInstalled()
+}
+
+// EnsureWhisperCLI ensures whisper-cli is installed
+func (a *App) EnsureWhisperCLI() error {
+	return a.whisperService.EnsureWhisperCLI(nil)
+}
+
 // GetHistory returns transcript history
 func (a *App) GetHistory(limit int) ([]*history.Transcript, error) {
 	if a.historyService == nil {

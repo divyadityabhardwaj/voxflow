@@ -96,7 +96,12 @@ func (c *Config) Save() error {
 }
 
 // GetGeminiAPIKey returns the Gemini API key
+// Checks environment variable first, then config file
 func (c *Config) GetGeminiAPIKey() string {
+	// Check environment variable first
+	if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
+		return envKey
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.GeminiAPIKey

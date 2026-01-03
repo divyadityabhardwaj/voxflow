@@ -5,13 +5,26 @@ import {
   SetHotkey,
   SetWhisperModel,
   SetMode,
+  GetAllModels,
+  DownloadModelByName,
+  DeleteModelByName,
+  IsWhisperCLIReady,
 } from "../../wailsjs/go/main/App";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 
 interface Config {
   hotkey: string;
   whisper_model: string;
   mode: string;
   api_key_set: boolean;
+}
+
+interface ModelInfo {
+  name: string;
+  description: string;
+  size: number;
+  downloaded: boolean;
+  file_path: string;
 }
 
 const HOTKEY_OPTIONS = [
@@ -22,37 +35,34 @@ const HOTKEY_OPTIONS = [
   { value: "ctrl+shift+space", label: "⌃ + ⇧ + Space" },
 ];
 
-const MODEL_OPTIONS = [
-  {
-    value: "tiny",
-    label: "Tiny (~75 MB)",
-    description: "Fastest, least accurate",
-  },
-  {
-    value: "base",
-    label: "Base (~142 MB)",
-    description: "Good balance of speed and accuracy",
-  },
-  {
-    value: "small",
-    label: "Small (~466 MB)",
-    description: "Better accuracy, slower",
-  },
-  {
-    value: "medium",
-    label: "Medium (~1.5 GB)",
-    description: "Best accuracy, slowest",
-  },
-];
-
 export default function SettingsView() {
   const [config, setConfig] = useState<Config | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [whisperReady, setWhisperReady] = useState(false);
 
   useEffect(() => {
     loadConfig();
+    loadModels();
+    checkWhisperCLI();
+
+    // Listen for download progress
+    EventsOn(
+      "model-download-progress",
+      (data: { model: string; progress: number }) => {
+        setDownloadProgress(Math.round(data.progress));
+      }
+    );
+
+    EventsOn("model-download-complete", () => {
+      setDownloading(null);
+      setDownloadProgress(0);
+      loadModels();
+    });
   }, []);
 
   const loadConfig = async () => {
@@ -61,6 +71,24 @@ export default function SettingsView() {
       setConfig(cfg as Config);
     } catch (err) {
       console.error("Failed to load config:", err);
+    }
+  };
+
+  const loadModels = async () => {
+    try {
+      const modelList = await GetAllModels();
+      setModels(modelList);
+    } catch (err) {
+      console.error("Failed to load models:", err);
+    }
+  };
+
+  const checkWhisperCLI = async () => {
+    try {
+      const ready = await IsWhisperCLIReady();
+      setWhisperReady(ready);
+    } catch (err) {
+      console.error("Failed to check whisper CLI:", err);
     }
   };
 
@@ -97,16 +125,40 @@ export default function SettingsView() {
     }
   };
 
-  const handleModelChange = async (value: string) => {
+  const handleModelSelect = async (modelName: string) => {
     setSaving("model");
     try {
-      await SetWhisperModel(value);
-      setConfig((prev) => (prev ? { ...prev, whisper_model: value } : null));
+      await SetWhisperModel(modelName);
+      setConfig((prev) =>
+        prev ? { ...prev, whisper_model: modelName } : null
+      );
       showSuccess("model");
     } catch (err) {
       console.error("Failed to save model:", err);
     } finally {
       setSaving(null);
+    }
+  };
+
+  const handleDownloadModel = async (modelName: string) => {
+    setDownloading(modelName);
+    setDownloadProgress(0);
+    try {
+      await DownloadModelByName(modelName);
+    } catch (err) {
+      console.error("Failed to download model:", err);
+      setDownloading(null);
+    }
+  };
+
+  const handleDeleteModel = async (modelName: string) => {
+    if (!confirm(`Delete the ${modelName} model?`)) return;
+    try {
+      await DeleteModelByName(modelName);
+      loadModels();
+    } catch (err) {
+      console.error("Failed to delete model:", err);
+      alert(String(err));
     }
   };
 
@@ -123,6 +175,13 @@ export default function SettingsView() {
     }
   };
 
+  const formatSize = (bytes: number) => {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+    }
+    return `${Math.round(bytes / (1024 * 1024))} MB`;
+  };
+
   if (!config) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-3rem)]">
@@ -132,10 +191,22 @@ export default function SettingsView() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-8">
+    <div className="max-w-2xl mx-auto p-8 overflow-y-auto h-[calc(100vh-3rem)]">
       <h2 className="text-2xl font-semibold text-dark-200 mb-8">Settings</h2>
 
       <div className="space-y-8">
+        {/* Whisper CLI Status */}
+        {!whisperReady && (
+          <section className="p-4 bg-yellow-900/20 border border-yellow-700 rounded-xl">
+            <p className="text-sm text-yellow-400">
+              ⚠️ Whisper CLI not found. Please install via:{" "}
+              <code className="bg-dark-800 px-2 py-0.5 rounded">
+                brew install whisper-cpp
+              </code>
+            </p>
+          </section>
+        )}
+
         {/* API Key */}
         <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
           <h3 className="text-lg font-medium text-dark-200 mb-4">
@@ -217,39 +288,100 @@ export default function SettingsView() {
           </div>
         </section>
 
-        {/* Whisper Model */}
+        {/* Whisper Models */}
         <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
           <h3 className="text-lg font-medium text-dark-200 mb-4">
-            Whisper Model
+            Speech Recognition Models
           </h3>
           <p className="text-sm text-dark-500 mb-4">
-            Larger models are more accurate but slower. The model will be
-            downloaded if not present.
+            Download and manage Whisper models. Larger models are more accurate
+            but slower.
           </p>
-          <div className="space-y-2">
-            {MODEL_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                className={`flex items-center gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${
-                  config.whisper_model === opt.value
+          <div className="space-y-3">
+            {models.map((model) => (
+              <div
+                key={model.name}
+                className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                  config.whisper_model === model.name
                     ? "bg-accent-600/10 border-accent-600"
-                    : "border-dark-800 hover:bg-dark-800"
+                    : "border-dark-800 hover:bg-dark-800/50"
                 }`}
               >
-                <input
-                  type="radio"
-                  name="whisper_model"
-                  value={opt.value}
-                  checked={config.whisper_model === opt.value}
-                  onChange={(e) => handleModelChange(e.target.value)}
-                  disabled={saving === "model"}
-                  className="w-4 h-4 text-accent-600 focus:ring-accent-600"
-                />
-                <div>
-                  <p className="text-dark-200">{opt.label}</p>
-                  <p className="text-sm text-dark-500">{opt.description}</p>
+                <div className="flex items-center gap-4">
+                  {/* Select radio */}
+                  <input
+                    type="radio"
+                    name="active_model"
+                    checked={config.whisper_model === model.name}
+                    onChange={() =>
+                      model.downloaded && handleModelSelect(model.name)
+                    }
+                    disabled={!model.downloaded || saving === "model"}
+                    className="w-4 h-4 text-accent-600 focus:ring-accent-600"
+                  />
+                  <div>
+                    <p className="text-dark-200 capitalize font-medium">
+                      {model.name}
+                      {config.whisper_model === model.name && (
+                        <span className="ml-2 text-xs text-accent-400">
+                          (Active)
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-dark-500">
+                      {model.description} • {formatSize(model.size)}
+                    </p>
+                  </div>
                 </div>
-              </label>
+
+                <div className="flex items-center gap-2">
+                  {model.downloaded ? (
+                    <>
+                      <span className="text-xs text-idle">✓ Downloaded</span>
+                      {config.whisper_model !== model.name && (
+                        <button
+                          onClick={() => handleDeleteModel(model.name)}
+                          className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                          title="Delete model"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </>
+                  ) : downloading === model.name ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 h-2 bg-dark-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-accent-500 transition-all duration-300"
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-dark-400">
+                        {downloadProgress}%
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleDownloadModel(model.name)}
+                      className="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+                    >
+                      Download
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         </section>

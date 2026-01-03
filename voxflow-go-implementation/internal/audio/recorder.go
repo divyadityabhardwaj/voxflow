@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gordonklaus/portaudio"
@@ -20,11 +21,13 @@ const (
 
 // Recorder handles audio capture from the microphone
 type Recorder struct {
-	stream     *portaudio.Stream
-	buffer     []int16
-	mu         sync.Mutex
-	recording  bool
-	sampleRate float64
+	stream      *portaudio.Stream
+	buffer      []int16
+	mu          sync.Mutex
+	recording   atomic.Bool
+	stopChan    chan struct{}
+	stoppedChan chan struct{}
+	sampleRate  float64
 }
 
 // NewRecorder creates a new audio recorder
@@ -50,7 +53,7 @@ func (r *Recorder) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.recording {
+	if r.recording.Load() {
 		return fmt.Errorf("already recording")
 	}
 
@@ -73,13 +76,16 @@ func (r *Recorder) Start() error {
 	}
 
 	r.stream = stream
-	r.recording = true
+	r.stopChan = make(chan struct{})
+	r.stoppedChan = make(chan struct{})
 
 	// Start the stream
 	if err := stream.Start(); err != nil {
-		r.recording = false
+		stream.Close()
 		return fmt.Errorf("failed to start audio stream: %w", err)
 	}
+
+	r.recording.Store(true)
 
 	// Start goroutine to read audio data
 	go r.readLoop(inputBuffer)
@@ -89,12 +95,21 @@ func (r *Recorder) Start() error {
 
 // readLoop continuously reads audio data from the stream
 func (r *Recorder) readLoop(inputBuffer []int16) {
+	defer close(r.stoppedChan)
+
 	for {
-		r.mu.Lock()
-		if !r.recording {
-			r.mu.Unlock()
+		// Check if we should stop
+		select {
+		case <-r.stopChan:
+			return
+		default:
+		}
+
+		if !r.recording.Load() {
 			return
 		}
+
+		r.mu.Lock()
 		stream := r.stream
 		r.mu.Unlock()
 
@@ -102,30 +117,49 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 			return
 		}
 
-		// Read from the stream
+		// Read from the stream - this is the blocking call
 		err := stream.Read()
 		if err != nil {
+			// Check if we were asked to stop
+			if !r.recording.Load() {
+				return
+			}
 			fmt.Printf("Error reading audio: %v\n", err)
 			continue
 		}
 
 		// Append to buffer
 		r.mu.Lock()
-		r.buffer = append(r.buffer, inputBuffer...)
+		if r.recording.Load() {
+			// Make a copy to avoid data race
+			samples := make([]int16, len(inputBuffer))
+			copy(samples, inputBuffer)
+			r.buffer = append(r.buffer, samples...)
+		}
 		r.mu.Unlock()
 	}
 }
 
 // Stop stops recording and returns the path to the WAV file
 func (r *Recorder) Stop() (string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if !r.recording {
+	if !r.recording.Load() {
 		return "", fmt.Errorf("not recording")
 	}
 
-	r.recording = false
+	// Signal the read loop to stop
+	r.recording.Store(false)
+	close(r.stopChan)
+
+	// Wait for read loop to finish (with timeout)
+	select {
+	case <-r.stoppedChan:
+		// Read loop finished
+	case <-time.After(2 * time.Second):
+		fmt.Println("Warning: read loop did not stop in time")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Stop and close the stream
 	if r.stream != nil {
@@ -215,7 +249,5 @@ func (r *Recorder) GetDuration() time.Duration {
 
 // IsRecording returns whether the recorder is currently recording
 func (r *Recorder) IsRecording() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.recording
+	return r.recording.Load()
 }

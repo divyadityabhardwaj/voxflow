@@ -29,6 +29,19 @@ var modelSizes = map[string]int64{
 	"medium": 1500 * 1024 * 1024, // ~1.5 GB
 }
 
+// Model descriptions for UI
+var ModelDescriptions = map[string]string{
+	"tiny":   "Fastest, least accurate (~75 MB)",
+	"base":   "Good balance of speed and accuracy (~142 MB)",
+	"small":  "Better accuracy, slower (~466 MB)",
+	"medium": "Best accuracy, slowest (~1.5 GB)",
+}
+
+// Whisper CLI binary download URL (pre-compiled for macOS)
+// Using ggerganov's official releases
+const whisperCLIDownloadURL = "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.2/whisper-blas-bin-x64.zip"
+const whisperCLIMacARM = "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.2/whisper-bin-arm64-apple-darwin.zip"
+
 // ProgressCallback is called during model download
 type ProgressCallback func(downloaded, total int64)
 
@@ -70,6 +83,101 @@ func GetBinDir() (string, error) {
 		return "", err
 	}
 	return binDir, nil
+}
+
+// IsWhisperCLIInstalled checks if whisper-cli is available
+func (s *Service) IsWhisperCLIInstalled() bool {
+	return s.findWhisperBinary() != ""
+}
+
+// EnsureWhisperCLI ensures whisper-cli is installed, downloading if needed
+func (s *Service) EnsureWhisperCLI(progress ProgressCallback) error {
+	// First check if already installed
+	if s.findWhisperBinary() != "" {
+		return nil
+	}
+
+	// Download and install whisper-cli
+	return s.downloadWhisperCLI(progress)
+}
+
+// downloadWhisperCLI downloads the whisper-cli binary
+func (s *Service) downloadWhisperCLI(progress ProgressCallback) error {
+	binDir, err := GetBinDir()
+	if err != nil {
+		return err
+	}
+
+	// For now, we'll create a script that tells users to install via Homebrew
+	// A production app would download pre-compiled binaries
+	whisperPath := filepath.Join(binDir, "whisper-cli")
+
+	// Check if homebrew version exists and symlink it
+	homebrewPaths := []string{
+		"/opt/homebrew/bin/whisper-cli",
+		"/opt/homebrew/Cellar/whisper-cpp/1.8.2/bin/whisper-cli",
+		"/usr/local/bin/whisper-cli",
+	}
+
+	for _, p := range homebrewPaths {
+		if _, err := os.Stat(p); err == nil {
+			// Create symlink
+			os.Remove(whisperPath) // Remove if exists
+			if err := os.Symlink(p, whisperPath); err != nil {
+				return fmt.Errorf("failed to create symlink: %w", err)
+			}
+			return nil
+		}
+	}
+
+	// If no homebrew version, return helpful error
+	return fmt.Errorf("whisper-cli not found. Please install via: brew install whisper-cpp")
+}
+
+// ModelInfo contains information about a model for the UI
+type ModelInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Size        int64  `json:"size"`
+	Downloaded  bool   `json:"downloaded"`
+	FilePath    string `json:"file_path"`
+}
+
+// GetAllModels returns info about all available models
+func (s *Service) GetAllModels() ([]ModelInfo, error) {
+	modelsDir, err := GetModelsDir()
+	if err != nil {
+		return nil, err
+	}
+
+	models := []ModelInfo{}
+	for _, name := range []string{"tiny", "base", "small", "medium"} {
+		modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", name))
+		downloaded := false
+		if info, err := os.Stat(modelPath); err == nil && info.Size() > 10*1024*1024 {
+			downloaded = true
+		}
+
+		models = append(models, ModelInfo{
+			Name:        name,
+			Description: ModelDescriptions[name],
+			Size:        modelSizes[name],
+			Downloaded:  downloaded,
+			FilePath:    modelPath,
+		})
+	}
+
+	return models, nil
+}
+
+// DeleteModel deletes a downloaded model
+func (s *Service) DeleteModel(modelSize string) error {
+	modelsDir, err := GetModelsDir()
+	if err != nil {
+		return err
+	}
+	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
+	return os.Remove(modelPath)
 }
 
 // IsModelDownloaded checks if a model is already downloaded
@@ -228,9 +336,13 @@ func (s *Service) findWhisperBinary() string {
 
 	// Check common locations on macOS
 	commonPaths := []string{
+		"/opt/homebrew/bin/whisper-cli",
+		"/opt/homebrew/Cellar/whisper-cpp/1.8.2/bin/whisper-cli",
 		"/usr/local/bin/whisper",
+		"/usr/local/bin/whisper-cli",
 		"/opt/homebrew/bin/whisper",
 		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper"),
+		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper-cli"),
 	}
 	for _, p := range commonPaths {
 		if _, err := os.Stat(p); err == nil {

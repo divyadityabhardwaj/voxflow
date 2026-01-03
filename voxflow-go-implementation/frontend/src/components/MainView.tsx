@@ -163,7 +163,9 @@ export default function MainView() {
             <h3 className="text-xs font-medium text-dark-500 uppercase tracking-wider mb-2">
               Polished Result
             </h3>
-            <p className="text-dark-200">{lastTranscription.polished}</p>
+            <p className="text-dark-200 whitespace-pre-wrap">
+              {lastTranscription.polished}
+            </p>
           </div>
 
           <details className="group">
@@ -171,7 +173,9 @@ export default function MainView() {
               Show raw transcription
             </summary>
             <div className="mt-2 p-4 bg-dark-900/50 rounded-lg border border-dark-800">
-              <p className="text-sm text-dark-400">{lastTranscription.raw}</p>
+              <p className="text-sm text-dark-400 whitespace-pre-wrap">
+                {lastTranscription.raw}
+              </p>
             </div>
           </details>
         </div>

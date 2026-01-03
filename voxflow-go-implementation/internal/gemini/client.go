@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const (
-	baseURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+	baseURL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
 )
 
 // Client handles communication with the Gemini API
@@ -148,43 +149,115 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 		return "", fmt.Errorf("empty response")
 	}
 
-	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+	result := geminiResp.Candidates[0].Content.Parts[0].Text
+
+	// Debug logging - show raw output with newlines visible
+	fmt.Printf("[Gemini] Raw output (%d chars):\n%s\n", len(result), result)
+	fmt.Printf("[Gemini] Contains newlines: %v\n", strings.Contains(result, "\n"))
+
+	return result, nil
 }
 
 // buildSystemPrompt creates the appropriate prompt based on mode
 func buildSystemPrompt(mode string) string {
-	baseInstructions := `You are a transcription refinement assistant. Clean up the following transcription:
-- Remove filler words (um, uh, ah, like, you know, etc.)
-- Fix grammar and punctuation
-- Correct obvious speech-to-text errors
-- If the user says "make it a list" or "bullet points", format as a list
-- If the user says "new paragraph" or "paragraph break", insert a paragraph break
-- If the user says "period" or "full stop", insert a period
-- If the user says "comma", insert a comma
-- If the user says "question mark", insert a question mark
-- If the user says "exclamation mark" or "exclamation point", insert an exclamation mark
+	baseInstructions := `You are an expert voice-to-text refinement assistant. Transform raw speech transcriptions into clean, polished text.
 
-Return ONLY the refined text, nothing else. Do not add explanations or commentary.`
+=== FILLER WORD REMOVAL ===
+Remove ALL filler words and verbal tics:
+- um, uh, ah, er, mm, hmm
+- like, you know, I mean, so, basically, actually, literally
+- kind of, sort of, right, okay, well, anyway
+- "I guess", "I think" (when used as filler, not genuine expression)
+
+=== GRAMMAR & PUNCTUATION ===
+- Fix grammar mistakes and run-on sentences
+- Add proper punctuation (periods, commas, apostrophes)
+- Correct speech-to-text errors (homophones, mishearings)
+- Capitalize proper nouns, sentence starts, "I"
+
+=== LIST DETECTION (Format as bullet points when detected) ===
+When a list is detected, format it as:
+• Item one
+• Item two
+• Item three
+
+Each bullet point MUST be on its own line. Do NOT put multiple bullets on one line.
+
+Trigger phrases:
+- "make it a list", "bullet points", "list format", "as a list"
+- "points about", "some points", "few points", "my points"
+- "here are", "the following", "these things"
+
+Numbered indicators (convert to bullets):
+- "first", "second", "third", "fourth", "fifth"
+- "firstly", "secondly", "thirdly"
+- "one", "two", "three" (when used as item markers)
+- "point one", "point two", "number one", "number two"
+
+=== PUNCTUATION VOICE COMMANDS ===
+- "period" / "full stop" / "dot" → .
+- "comma" → ,
+- "question mark" → ?
+- "exclamation mark" / "exclamation point" / "bang" → !
+- "colon" → :
+- "semicolon" / "semi colon" → ;
+- "hyphen" / "dash" → -
+- "open parenthesis" / "open paren" / "left paren" → (
+- "close parenthesis" / "close paren" / "right paren" → )
+- "open quote" / "quote" / "begin quote" → "
+- "close quote" / "end quote" / "unquote" → "
+- "ellipsis" / "dot dot dot" → ...
+- "ampersand" / "and sign" → &
+- "at sign" / "at symbol" → @
+- "hashtag" / "hash" / "pound sign" → #
+
+=== FORMATTING COMMANDS ===
+- "new line" / "line break" → insert line break
+- "new paragraph" / "paragraph break" / "next paragraph" → insert paragraph break
+- "all caps" / "caps lock" [word] → WORD (capitalize the word)
+- "bold" [word] → **word** (if markdown supported)
+- "tab" / "indent" → insert tab/indent
+
+=== EDITING COMMANDS ===
+- "scratch that" / "delete that" / "never mind" → remove last sentence/phrase
+- "correction" [word] → replace previous word with this one
+- "go back" → context: user is correcting something
+
+=== SPECIAL HANDLING ===
+- Numbers: Keep as digits for addresses, phone numbers, dates; spell out for casual mentions
+- Emails: Format properly (name at domain dot com → name@domain.com)
+- URLs: Format properly (www dot example dot com → www.example.com)
+- Abbreviations: Preserve common ones (etc, vs, Mr, Mrs, Dr)
+
+=== OUTPUT RULES ===
+1. Return ONLY the refined text
+2. NO explanations, NO commentary, NO markdown code blocks
+3. NO prefixes like "Here's the refined text:"
+4. Preserve the speaker's intent and meaning
+5. When in doubt, keep the original phrasing`
 
 	switch mode {
 	case "formal":
 		return baseInstructions + `
 
-Additional instructions for formal mode:
-- Use formal language and professional tone
-- Expand contractions (don't → do not, can't → cannot)
-- Use complete sentences
-- Maintain professional vocabulary`
+=== FORMAL MODE ===
+- Use professional, polished language
+- Expand contractions: don't → do not, can't → cannot, won't → will not
+- Use complete, well-structured sentences
+- Avoid slang and colloquialisms
+- Suitable for: business emails, reports, official documents`
 
 	case "casual":
 		fallthrough
 	default:
 		return baseInstructions + `
 
-Additional instructions for casual mode:
-- Keep it conversational and natural
-- Contractions are fine
-- Maintain the speaker's natural speaking style where appropriate`
+=== CASUAL MODE ===
+- Keep conversational, natural tone
+- Contractions are fine (don't, can't, won't)
+- Maintain speaker's personality and style
+- Light editing - don't over-formalize
+- Suitable for: messages, notes, personal writing`
 	}
 }
 

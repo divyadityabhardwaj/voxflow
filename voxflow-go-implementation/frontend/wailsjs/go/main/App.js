@@ -6,12 +6,28 @@ export function CopyToClipboard(arg1) {
   return window['go']['main']['App']['CopyToClipboard'](arg1);
 }
 
+export function DeleteModelByName(arg1) {
+  return window['go']['main']['App']['DeleteModelByName'](arg1);
+}
+
 export function DeleteTranscript(arg1) {
   return window['go']['main']['App']['DeleteTranscript'](arg1);
 }
 
 export function DownloadModel() {
   return window['go']['main']['App']['DownloadModel']();
+}
+
+export function DownloadModelByName(arg1) {
+  return window['go']['main']['App']['DownloadModelByName'](arg1);
+}
+
+export function EnsureWhisperCLI() {
+  return window['go']['main']['App']['EnsureWhisperCLI']();
+}
+
+export function GetAllModels() {
+  return window['go']['main']['App']['GetAllModels']();
 }
 
 export function GetConfig() {
@@ -36,6 +52,10 @@ export function IsModelDownloaded() {
 
 export function IsModelReady() {
   return window['go']['main']['App']['IsModelReady']();
+}
+
+export function IsWhisperCLIReady() {
+  return window['go']['main']['App']['IsWhisperCLIReady']();
 }
 
 export function OpenHistoryWindow() {

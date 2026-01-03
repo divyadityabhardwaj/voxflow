@@ -44,3 +44,28 @@ export namespace history {
 
 }
 
+export namespace whisper {
+	
+	export class ModelInfo {
+	    name: string;
+	    description: string;
+	    size: number;
+	    downloaded: boolean;
+	    file_path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModelInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.size = source["size"];
+	        this.downloaded = source["downloaded"];
+	        this.file_path = source["file_path"];
+	    }
+	}
+
+}
+
