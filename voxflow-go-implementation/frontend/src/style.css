@@ -98,6 +98,14 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* ===== Transparent Mode (Mini Mode) ===== */
+.transparent-mode,
+.transparent-mode body {
+  background-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 /* ===== Typography ===== */
 .font-serif {
   font-family: var(--font-serif);

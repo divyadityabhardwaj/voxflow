@@ -131,15 +131,22 @@ function AppContent() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    IsMiniMode().then(setIsMiniMode);
+    IsMiniMode().then((isMini) => {
+      setIsMiniMode(isMini);
+      if (isMini) document.documentElement.classList.add("transparent-mode");
+    });
 
     EventsOn("open-history", () => setCurrentView("history"));
     EventsOn("open-settings", () => setCurrentView("settings"));
 
     EventsOn("mini-mode", (isMini: boolean) => {
       setIsMiniMode(isMini);
+      if (isMini) {
+        document.documentElement.classList.add("transparent-mode");
+      } else {
+        document.documentElement.classList.remove("transparent-mode");
+      }
     });
-
     // Listen for toast events from backend
     EventsOn(
       "toast",

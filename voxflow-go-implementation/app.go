@@ -226,7 +226,9 @@ func (a *App) ShowMiniMode() {
 	// Re-apply floating behavior (in case coming from full app mode)
 	MakeWindowFloatEverywhere()
 
-	// Resize to small indicator (no WindowShow/WindowUnminimise to avoid focus stealing)
+	// Resize to small indicator and lock size
+	runtime.WindowSetMinSize(a.ctx, 200, 60)
+	runtime.WindowSetMaxSize(a.ctx, 200, 60)
 	runtime.WindowSetSize(a.ctx, 200, 60)
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.EventsEmit(a.ctx, "mini-mode", true)
@@ -245,7 +247,9 @@ func (a *App) HideMiniMode() {
 	// Reset window behavior to normal (not floating over fullscreen)
 	ResetWindowBehavior()
 
-	// Restore normal window size
+	// Restore normal window size limits and dimensions
+	runtime.WindowSetMinSize(a.ctx, 800, 600)
+	runtime.WindowSetMaxSize(a.ctx, 0, 0)
 	runtime.WindowSetSize(a.ctx, 900, 600)
 	runtime.WindowSetAlwaysOnTop(a.ctx, false)
 	runtime.WindowCenter(a.ctx)

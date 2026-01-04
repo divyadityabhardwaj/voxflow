@@ -54,7 +54,7 @@ func main() {
 		Height:            60,
 		MinWidth:          200,
 		MinHeight:         60,
-		DisableResize:     false,
+		DisableResize:     true,
 		Frameless:         true,
 		AlwaysOnTop:       true,
 		StartHidden:       false,
