@@ -45,16 +45,17 @@ export default function RecordingIndicator() {
   const isDark = theme === "dark";
 
   // Premium Glass Settings
+  // Premium Glass Settings
   const glassStyle = {
-    background: isDark ? "rgba(20, 20, 25, 0.7)" : "rgba(255, 255, 255, 0.7)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
+    background: isDark ? "rgba(28, 28, 31, 0.95)" : "rgba(255, 255, 255, 0.95)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
     border: isDark
       ? "1px solid rgba(255, 255, 255, 0.1)"
-      : "1px solid rgba(255, 255, 255, 0.4)",
+      : "1px solid rgba(0, 0, 0, 0.1)",
     boxShadow: isDark
-      ? "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)"
-      : "0 8px 32px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.5)",
+      ? "0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3)"
+      : "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.05)",
   };
 
   // Waveform Component

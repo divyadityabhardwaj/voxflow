@@ -82,7 +82,7 @@ func main() {
 			},
 			Appearance:           mac.NSAppearanceNameDarkAqua,
 			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
+			WindowIsTranslucent:  false,
 		},
 		Menu: appMenu,
 	})

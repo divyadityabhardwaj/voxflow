@@ -10,6 +10,7 @@ import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
+import { Logger } from "./utils/logger";
 
 type View = "main" | "history" | "settings";
 
@@ -127,26 +128,21 @@ function AppContent() {
   const [modelReady, setModelReady] = useState<boolean>(false);
   const [modelDownloading, setModelDownloading] = useState<boolean>(false);
   const [isMiniMode, setIsMiniMode] = useState<boolean>(true);
+
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
 
   useEffect(() => {
     IsMiniMode().then((isMini) => {
       setIsMiniMode(isMini);
-      if (isMini) document.documentElement.classList.add("transparent-mode");
     });
 
     EventsOn("open-history", () => setCurrentView("history"));
     EventsOn("open-settings", () => setCurrentView("settings"));
-
     EventsOn("mini-mode", (isMini: boolean) => {
       setIsMiniMode(isMini);
-      if (isMini) {
-        document.documentElement.classList.add("transparent-mode");
-      } else {
-        document.documentElement.classList.remove("transparent-mode");
-      }
     });
+
     // Listen for toast events from backend
     EventsOn(
       "toast",
@@ -171,6 +167,47 @@ function AppContent() {
       }
     );
   }, [showToast]);
+
+  // Transparency Watchdog - Force transparency every 100ms in mini-mode
+  useEffect(() => {
+    const watchdog = setInterval(() => {
+      if (isMiniMode) {
+        let fixed = false;
+        // Aggressively force transparent background
+        if (document.documentElement.style.backgroundColor !== "transparent") {
+          document.documentElement.style.backgroundColor = "transparent";
+          fixed = true;
+        }
+        if (document.body.style.backgroundColor !== "transparent") {
+          document.body.style.backgroundColor = "transparent";
+          fixed = true;
+        }
+        const root = document.getElementById("root");
+        if (root && root.style.backgroundColor !== "transparent") {
+          root.style.backgroundColor = "transparent";
+          fixed = true;
+        }
+
+        if (fixed) {
+          Logger.debug("Watchdog: Forced transparency on elements");
+        }
+      } else {
+        // Reset to allow CSS to take over in full mode
+        if (document.documentElement.style.backgroundColor === "transparent") {
+          document.documentElement.style.backgroundColor = "";
+        }
+        if (document.body.style.backgroundColor === "transparent") {
+          document.body.style.backgroundColor = "";
+        }
+        const root = document.getElementById("root");
+        if (root && root.style.backgroundColor === "transparent") {
+          root.style.backgroundColor = "";
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(watchdog);
+  }, [isMiniMode]);
 
   const handleDownloadStart = () => {
     setModelDownloading(true);
