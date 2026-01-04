@@ -33,6 +33,7 @@ type App struct {
 	userExplicitlyMaximized bool               // Tracks if user manually opened full app (don't auto-minimize)
 	downloadCancel          context.CancelFunc // Cancel function for active download
 	downloadMu              sync.Mutex         // Mutex for download operations
+	positionWatchCancel     context.CancelFunc // Cancel function for position polling
 }
 
 // NewApp creates a new App application struct
@@ -55,6 +56,22 @@ func (a *App) startup(ctx context.Context) {
 
 	// Make the floating indicator visible on all spaces and over fullscreen apps
 	MakeWindowFloatEverywhere()
+
+	// If starting in mini mode, ensure position is restored and watcher is started
+	if a.isMiniMode {
+		// Restore saved position if available
+		x, y := a.config.GetMiniModePosition()
+		if x != 0 || y != 0 {
+			runtime.WindowSetPosition(a.ctx, x, y)
+			// Ensure size is correct too, just in case
+			runtime.WindowSetMinSize(a.ctx, 200, 60)
+			runtime.WindowSetMaxSize(a.ctx, 200, 60)
+			runtime.WindowSetSize(a.ctx, 200, 60)
+		}
+
+		// Start watching position
+		a.startPositionWatch()
+	}
 
 	// Initialize audio
 	if err := a.audioRecorder.Initialize(); err != nil {
@@ -111,6 +128,10 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.historyService != nil {
 		a.historyService.Close()
+	}
+	// Stop position watcher
+	if a.positionWatchCancel != nil {
+		a.positionWatchCancel()
 	}
 
 	// Save window position if we are shutting down in mini mode
@@ -246,7 +267,46 @@ func (a *App) ShowMiniMode() {
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.EventsEmit(a.ctx, "mini-mode", true)
 
+	// Start watching position for changes
+	a.startPositionWatch()
+
 	fmt.Println("[App] Switched to mini mode")
+}
+
+// startPositionWatch starts a goroutine to poll and save window position
+func (a *App) startPositionWatch() {
+	// Stop existing watcher if any
+	if a.positionWatchCancel != nil {
+		a.positionWatchCancel()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.positionWatchCancel = cancel
+
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Get current position
+				rx, ry := runtime.WindowGetPosition(a.ctx)
+				// Get saved position
+				cx, cy := a.config.GetMiniModePosition()
+
+				// If changed, save
+				if rx != cx || ry != cy {
+					a.config.SetMiniModePosition(rx, ry)
+					a.config.Save() // Save to disk to persist across crashes
+					// Avoid spamming logs, but useful for debug
+					// fmt.Printf("[App] Auto-saved position: %d, %d\n", rx, ry)
+				}
+			}
+		}
+	}()
 }
 
 // saveCurrentMiniModePosition saves the current window position to config if in mini mode
@@ -265,7 +325,13 @@ func (a *App) HideMiniMode() {
 		return
 	}
 
-	// Save current position before switching back
+	// Stop position watching
+	if a.positionWatchCancel != nil {
+		a.positionWatchCancel()
+		a.positionWatchCancel = nil
+	}
+
+	// Save current position one last time
 	a.saveCurrentMiniModePosition()
 
 	a.isMiniMode = false
