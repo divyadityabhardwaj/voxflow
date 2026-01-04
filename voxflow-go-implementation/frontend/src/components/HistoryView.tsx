@@ -133,23 +133,25 @@ export default function HistoryView() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-3rem)]">
-      {/* Sidebar */}
-      <div className="w-72 border-r border-dark-800 flex flex-col bg-dark-900/50">
-        {/* Search */}
-        <div className="p-3 border-b border-dark-800">
+    <div className="flex h-screen animate-fade-in">
+      {/* Sidebar list */}
+      <div className="w-80 border-r border-[var(--border)] flex flex-col bg-secondary">
+        {/* Header */}
+        <div className="p-4 border-b border-[var(--border)]">
+          <h2 className="font-serif text-xl font-medium text-primary mb-3">
+            History
+          </h2>
+          {/* Search */}
           <div className="relative">
             <input
               type="text"
               placeholder="Search transcripts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 pl-9 text-sm bg-dark-800 border border-dark-700 rounded-lg
-                       text-dark-200 placeholder-dark-500
-                       focus:outline-none focus:ring-2 focus:ring-accent-600 focus:border-transparent"
+              className="input w-full pl-9 text-sm"
             />
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -166,10 +168,10 @@ export default function HistoryView() {
 
         {/* Clear All button */}
         {transcripts.length > 0 && (
-          <div className="p-2 border-b border-dark-800">
+          <div className="px-4 py-2 border-b border-[var(--border)]">
             <button
               onClick={handleClearAll}
-              className="w-full px-3 py-2 text-sm text-red-400 hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               <svg
                 className="w-4 h-4"
@@ -184,7 +186,7 @@ export default function HistoryView() {
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                 />
               </svg>
-              Clear All History
+              Clear All
             </button>
           </div>
         )}
@@ -192,27 +194,42 @@ export default function HistoryView() {
         {/* Transcript list */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-dark-500">Loading...</div>
+            <div className="p-4 text-center text-tertiary">Loading...</div>
           ) : transcripts.length === 0 ? (
-            <div className="p-4 text-center text-dark-500">
-              {searchQuery ? "No results found" : "No transcripts yet"}
+            <div className="p-8 text-center text-tertiary">
+              <svg
+                className="w-12 h-12 mx-auto mb-3 opacity-50"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={1}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+              <p className="text-sm">
+                {searchQuery ? "No results found" : "No transcripts yet"}
+              </p>
             </div>
           ) : (
-            <div className="divide-y divide-dark-800">
+            <div>
               {transcripts.map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setSelectedId(t.id)}
-                  className={`w-full p-3 text-left transition-colors ${
+                  className={`w-full p-4 text-left transition-all border-b border-[var(--border)] ${
                     selectedId === t.id
-                      ? "bg-accent-600/20 border-l-2 border-accent-500"
-                      : "hover:bg-dark-800 border-l-2 border-transparent"
+                      ? "bg-[var(--accent)]/5 border-l-2 border-l-[var(--accent)]"
+                      : "hover:bg-tertiary border-l-2 border-l-transparent"
                   }`}
                 >
-                  <p className="text-xs text-dark-500">
+                  <p className="text-xs text-tertiary mb-1">
                     {formatDate(t.timestamp)}
                   </p>
-                  <p className="text-sm text-dark-200 mt-1 line-clamp-2">
+                  <p className="text-sm text-primary line-clamp-2">
                     {truncate(t.polished_text || t.raw_text, 80)}
                   </p>
                 </button>
@@ -223,22 +240,25 @@ export default function HistoryView() {
       </div>
 
       {/* Detail pane */}
-      <div className="flex-1 flex flex-col bg-dark-950">
+      <div className="flex-1 flex flex-col bg-primary">
         {selectedTranscript ? (
           <>
             {/* Header */}
-            <div className="p-4 border-b border-dark-800 flex items-center justify-between">
+            <div className="p-6 border-b border-[var(--border)] flex items-center justify-between">
               <div>
-                <p className="text-xs text-dark-500">
+                <p className="text-xs text-tertiary">
                   {formatDate(selectedTranscript.timestamp)}
                 </p>
-                <p className="text-sm text-dark-400 mt-0.5">
-                  Mode: {selectedTranscript.mode || "casual"}
+                <p className="text-sm text-secondary mt-1">
+                  Mode:{" "}
+                  <span className="capitalize">
+                    {selectedTranscript.mode || "casual"}
+                  </span>
                 </p>
               </div>
               <button
                 onClick={() => handleDelete(selectedTranscript.id)}
-                className="p-2 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"
+                className="p-2 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-colors"
               >
                 <svg
                   className="w-5 h-5"
@@ -257,22 +277,22 @@ export default function HistoryView() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Raw text */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-medium text-dark-500 uppercase tracking-wider">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
                     Raw Transcription
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.raw_text)}
-                    className="text-xs text-dark-500 hover:text-accent-400"
+                    className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
                   >
                     Copy
                   </button>
                 </div>
-                <div className="p-4 bg-dark-900 rounded-lg border border-dark-800">
-                  <p className="text-sm text-dark-300 whitespace-pre-wrap">
+                <div className="card p-4">
+                  <p className="text-sm text-secondary whitespace-pre-wrap leading-relaxed">
                     {selectedTranscript.raw_text}
                   </p>
                 </div>
@@ -280,19 +300,19 @@ export default function HistoryView() {
 
               {/* Polished text */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-medium text-dark-500 uppercase tracking-wider">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
                     Polished Result
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.polished_text)}
-                    className="text-xs text-dark-500 hover:text-accent-400"
+                    className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
                   >
                     Copy
                   </button>
                 </div>
-                <div className="p-4 bg-dark-900 rounded-lg border border-dark-800">
-                  <p className="text-dark-200 whitespace-pre-wrap">
+                <div className="card p-4">
+                  <p className="text-primary whitespace-pre-wrap leading-relaxed">
                     {selectedTranscript.polished_text}
                   </p>
                 </div>
@@ -300,24 +320,21 @@ export default function HistoryView() {
 
               {/* Retry with Gemini */}
               <div>
-                <h3 className="text-xs font-medium text-dark-500 uppercase tracking-wider mb-2">
+                <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider mb-3">
                   Retry with Gemini
                 </h3>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <input
                     type="text"
                     placeholder="Enter instruction (e.g., 'make it more formal')"
                     value={retryInstruction}
                     onChange={(e) => setRetryInstruction(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm bg-dark-900 border border-dark-800 rounded-lg
-                             text-dark-200 placeholder-dark-500
-                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                    className="input flex-1 text-sm"
                   />
                   <button
                     onClick={() => handleRetry(selectedTranscript.id)}
                     disabled={retrying}
-                    className="px-4 py-2 bg-accent-600 hover:bg-accent-500 disabled:opacity-50 
-                             text-white text-sm rounded-lg transition-colors"
+                    className="btn-primary disabled:opacity-50"
                   >
                     {retrying ? "Retrying..." : "Retry"}
                   </button>
@@ -326,8 +343,23 @@ export default function HistoryView() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-dark-500">
-            Select a transcript to view details
+          <div className="flex-1 flex items-center justify-center text-tertiary">
+            <div className="text-center">
+              <svg
+                className="w-16 h-16 mx-auto mb-4 opacity-30"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={1}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              <p>Select a transcript to view details</p>
+            </div>
           </div>
         )}
       </div>

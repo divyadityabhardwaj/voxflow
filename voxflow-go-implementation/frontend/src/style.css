@@ -2,14 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== Theme Variables ===== */
 :root {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Light Theme (Default - Vintage Cream) */
+  --bg-primary: #faf9f7;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f5f4f2;
+  --bg-elevated: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #9b9b9b;
+  --accent: #1a1a1a;
+  --accent-hover: #333333;
+  --border: #e8e6e3;
+  --border-hover: #d4d2cf;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  /* Status Colors */
+  --recording: #dc2626;
+  --recording-bg: rgba(220, 38, 38, 0.1);
+  --processing: #7c3aed;
+  --processing-bg: rgba(124, 58, 237, 0.1);
+  --idle: #059669;
+  --idle-bg: rgba(5, 150, 105, 0.1);
+
+  /* Typography */
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+
+  /* Spacing */
+  --sidebar-width: 64px;
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark Theme (Elegant Charcoal) */
+  --bg-primary: #141416;
+  --bg-secondary: #1c1c1f;
+  --bg-tertiary: #242428;
+  --bg-elevated: #2a2a2f;
+  --text-primary: #fafafa;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #6b6b6b;
+  --accent: #fafafa;
+  --accent-hover: #e0e0e0;
+  --border: #2d2d32;
+  --border-hover: #3a3a40;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Status Colors (slightly adjusted for dark) */
+  --recording: #ef4444;
+  --recording-bg: rgba(239, 68, 68, 0.15);
+  --processing: #8b5cf6;
+  --processing-bg: rgba(139, 92, 246, 0.15);
+  --idle: #10b981;
+  --idle-bg: rgba(16, 185, 129, 0.15);
+
   color-scheme: dark;
-  color: #ececf1;
-  background-color: #0d0d0f;
+}
+
+/* ===== Base Styles ===== */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,58 +86,309 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Custom scrollbar */
+/* ===== Typography ===== */
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+.text-heading {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* ===== Custom Scrollbar ===== */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #202123;
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #555568;
-  border-radius: 4px;
+  background: var(--border);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #6e6e80;
+  background: var(--border-hover);
 }
 
-/* Draggable titlebar region */
+/* ===== Draggable Title Bar ===== */
 .titlebar {
   -webkit-app-region: drag;
 }
 
 .titlebar button,
-.titlebar a {
+.titlebar a,
+.no-drag {
   -webkit-app-region: no-drag;
 }
 
-/* Glass effect */
+/* ===== Glass Effect ===== */
 .glass {
-  background: rgba(32, 33, 35, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
-/* Recording pulse animation */
-@keyframes recording-pulse {
+.dark .glass {
+  background: rgba(28, 28, 31, 0.85);
+}
+
+/* ===== Card Styles ===== */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+}
+
+/* ===== Button Base ===== */
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
+}
+
+/* ===== Input Styles ===== */
+.input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+}
+
+.dark .input:focus {
+  box-shadow: 0 0 0 3px rgba(250, 250, 250, 0.1);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 8px;
+}
+
+.sidebar-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.sidebar-btn.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+/* ===== Animations ===== */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
   0%,
   100% {
     opacity: 1;
     transform: scale(1);
   }
   50% {
-    opacity: 0.7;
-    transform: scale(1.05);
+    opacity: 0.85;
+    transform: scale(1.02);
   }
 }
 
-.recording-pulse {
-  animation: recording-pulse 1.5s ease-in-out infinite;
+@keyframes recording-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animate-recording-ring {
+  animation: recording-ring 1.5s ease-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 2s linear infinite;
+}
+
+/* ===== View Transitions ===== */
+.view-enter {
+  animation: fade-in 0.25s ease-out;
+}
+
+/* ===== Mic Button ===== */
+.mic-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.mic-button:hover {
+  transform: scale(1.05);
+}
+
+.mic-button:active {
+  transform: scale(0.98);
+}
+
+.mic-button.recording {
+  background: var(--recording);
+  color: white;
+}
+
+.mic-button.processing {
+  background: var(--processing);
+  color: white;
+}
+
+/* ===== Utilities ===== */
+.text-primary {
+  color: var(--text-primary);
+}
+.text-secondary {
+  color: var(--text-secondary);
+}
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+.bg-primary {
+  background-color: var(--bg-primary);
+}
+.bg-secondary {
+  background-color: var(--bg-secondary);
+}
+.bg-tertiary {
+  background-color: var(--bg-tertiary);
+}
+.border-default {
+  border-color: var(--border);
 }

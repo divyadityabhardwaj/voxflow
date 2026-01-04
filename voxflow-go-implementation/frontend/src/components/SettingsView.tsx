@@ -270,23 +270,25 @@ export default function SettingsView() {
 
   if (!config) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-3rem)]">
-        <p className="text-dark-500">Loading settings...</p>
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-tertiary">Loading settings...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-8 overflow-y-auto h-[calc(100vh-3rem)]">
-      <h2 className="text-2xl font-semibold text-dark-200 mb-8">Settings</h2>
+    <div className="max-w-2xl mx-auto p-8 overflow-y-auto h-screen animate-fade-in">
+      <h2 className="font-serif text-2xl font-medium text-primary mb-8">
+        Settings
+      </h2>
 
       <div className="space-y-8">
         {/* Whisper CLI Status */}
         {!whisperReady && (
-          <section className="p-4 bg-yellow-900/20 border border-yellow-700 rounded-xl">
-            <p className="text-sm text-yellow-400">
+          <section className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+            <p className="text-sm text-amber-600 dark:text-amber-400">
               ⚠️ Whisper CLI not found. Please install via:{" "}
-              <code className="bg-dark-800 px-2 py-0.5 rounded">
+              <code className="bg-tertiary px-2 py-0.5 rounded font-mono text-xs">
                 brew install whisper-cpp
               </code>
             </p>
@@ -294,8 +296,8 @@ export default function SettingsView() {
         )}
 
         {/* API Key */}
-        <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
-          <h3 className="text-lg font-medium text-dark-200 mb-4">
+        <section className="card p-6">
+          <h3 className="font-serif text-lg font-medium text-primary mb-4">
             Gemini API Key
           </h3>
           <p className="text-sm text-dark-500 mb-4">
@@ -345,11 +347,11 @@ export default function SettingsView() {
 
         {/* Hotkeys */}
         <section className="space-y-6">
-          <div className="p-6 bg-dark-900 rounded-xl border border-dark-800">
-            <h3 className="text-lg font-medium text-dark-200 mb-4">
+          <div className="card p-6">
+            <h3 className="font-serif text-lg font-medium text-primary mb-4">
               Push-to-Talk Hotkey
             </h3>
-            <p className="text-sm text-dark-500 mb-4">
+            <p className="text-sm text-secondary mb-4">
               Hold this shortcut to record. Release to process.
             </p>
             <div className="flex gap-3">
@@ -382,11 +384,11 @@ export default function SettingsView() {
             </div>
           </div>
 
-          <div className="p-6 bg-dark-900 rounded-xl border border-dark-800">
-            <h3 className="text-lg font-medium text-dark-200 mb-4">
+          <div className="card p-6">
+            <h3 className="font-serif text-lg font-medium text-primary mb-4">
               Hands-Free Hotkey
             </h3>
-            <p className="text-sm text-dark-500 mb-4">
+            <p className="text-sm text-secondary mb-4">
               Press once to start recording. Press again to stop.
             </p>
             <div className="flex gap-3">
