@@ -15,6 +15,8 @@ type Config struct {
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
 	WhisperModel     string `json:"whisper_model"`       // tiny, base, small
 	Mode             string `json:"mode"`                // casual, formal
+	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
+	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
 	mu               sync.RWMutex
 }
 
@@ -216,4 +218,19 @@ func (c *Config) SetMode(mode string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Mode = mode
+}
+
+// GetMiniModePosition returns the saved mini mode position
+func (c *Config) GetMiniModePosition() (int, int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.MiniModeX, c.MiniModeY
+}
+
+// SetMiniModePosition sets the saved mini mode position
+func (c *Config) SetMiniModePosition(x, y int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.MiniModeX = x
+	c.MiniModeY = y
 }

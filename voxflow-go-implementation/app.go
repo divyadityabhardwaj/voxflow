@@ -112,6 +112,12 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.historyService != nil {
 		a.historyService.Close()
 	}
+
+	// Save window position if we are shutting down in mini mode
+	if a.isMiniMode {
+		a.saveCurrentMiniModePosition()
+	}
+
 	a.config.Save()
 }
 
@@ -230,10 +236,27 @@ func (a *App) ShowMiniMode() {
 	runtime.WindowSetMinSize(a.ctx, 200, 60)
 	runtime.WindowSetMaxSize(a.ctx, 200, 60)
 	runtime.WindowSetSize(a.ctx, 200, 60)
+
+	// Restore saved position if available
+	x, y := a.config.GetMiniModePosition()
+	if x != 0 || y != 0 {
+		runtime.WindowSetPosition(a.ctx, x, y)
+	}
+
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.EventsEmit(a.ctx, "mini-mode", true)
 
 	fmt.Println("[App] Switched to mini mode")
+}
+
+// saveCurrentMiniModePosition saves the current window position to config if in mini mode
+func (a *App) saveCurrentMiniModePosition() {
+	if a.isMiniMode {
+		x, y := runtime.WindowGetPosition(a.ctx)
+		a.config.SetMiniModePosition(x, y)
+		a.config.Save()
+		fmt.Printf("[App] Saved mini mode position: %d, %d\n", x, y)
+	}
 }
 
 // HideMiniMode restores the window to normal size
@@ -241,6 +264,10 @@ func (a *App) HideMiniMode() {
 	if !a.isMiniMode {
 		return
 	}
+
+	// Save current position before switching back
+	a.saveCurrentMiniModePosition()
+
 	a.isMiniMode = false
 	a.userExplicitlyMaximized = true // User explicitly opened full app
 
