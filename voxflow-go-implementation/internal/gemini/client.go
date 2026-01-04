@@ -75,6 +75,12 @@ type APIError struct {
 	Status  string `json:"status"`
 }
 
+// RefineResponse represents the structured output from refinement
+type RefineResponse struct {
+	Text    string `json:"text"`
+	Refused bool   `json:"refused"`
+}
+
 // RefineText sends raw transcription to Gemini for refinement
 func (c *Client) RefineText(rawText string, mode string) (string, error) {
 	fmt.Printf("[Gemini] Refining text: %s\n", rawText)
@@ -151,9 +157,21 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 
 	result := geminiResp.Candidates[0].Content.Parts[0].Text
 
-	// Debug logging - show raw output with newlines visible
+	// Debug logging
 	fmt.Printf("[Gemini] Raw output (%d chars):\n%s\n", len(result), result)
 
+	// Try to parse as JSON response
+	var refineResp RefineResponse
+	if err := json.Unmarshal([]byte(result), &refineResp); err == nil {
+		// Successfully parsed JSON
+		if refineResp.Refused {
+			fmt.Printf("[Gemini] Content was refused, using raw text instead\n")
+			return rawText, nil
+		}
+		return refineResp.Text, nil
+	}
+
+	// If not valid JSON, return as-is (for backwards compatibility)
 	return result, nil
 }
 
@@ -228,12 +246,20 @@ Numbered indicators (convert to bullets):
 - URLs: Format properly (www dot example dot com → www.example.com)
 - Abbreviations: Preserve common ones (etc, vs, Mr, Mrs, Dr)
 
-=== OUTPUT RULES ===
-1. Return ONLY the refined text
-2. NO explanations, NO commentary, NO markdown code blocks
-3. NO prefixes like "Here's the refined text:"
-4. Preserve the speaker's intent and meaning
-5. When in doubt, keep the original phrasing`
+=== OUTPUT FORMAT (CRITICAL) ===
+You MUST respond with valid JSON in this exact format:
+{"text": "your refined text here", "refused": false}
+
+If the content contains something you cannot process due to ethical guidelines:
+{"text": "", "refused": true}
+
+Rules:
+1. ALWAYS output valid JSON, nothing else
+2. The "text" field contains the refined transcription
+3. Set "refused" to true ONLY if you cannot process the content
+4. NO markdown, NO code blocks, NO explanations
+5. Preserve the speaker's intent and meaning
+6. When in doubt, keep the original phrasing`
 
 	switch mode {
 	case "formal":
