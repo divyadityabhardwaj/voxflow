@@ -337,6 +337,13 @@ func (a *App) processRecording() {
 		return
 	}
 
+	// Check for Whisper's blank audio markers
+	if rawText == "[BLANK_AUDIO]" || rawText == "(blank audio)" || rawText == "[NO SPEECH]" {
+		a.emitToast("No speech detected. Please try speaking into your microphone.", "warning")
+		a.resetToIdle()
+		return
+	}
+
 	// Refine with Gemini - DO NOT fall back to raw text on error
 	mode := a.config.GetMode()
 	polishedText, err := a.geminiClient.RefineText(rawText, mode)
@@ -354,22 +361,23 @@ func (a *App) processRecording() {
 		}
 	}
 
-	// Inject text
+	// Always copy to clipboard first
 	if a.injectionService != nil {
+		a.injectionService.CopyToClipboard(polishedText)
+		fmt.Printf("Text copied to clipboard\n")
+
+		// Also try to inject at cursor if possible
 		if err := a.injectionService.Inject(polishedText); err != nil {
-			fmt.Printf("Failed to inject text: %v\n", err)
-			// Fall back to just copying to clipboard
-			a.injectionService.CopyToClipboard(polishedText)
+			fmt.Printf("Could not inject text (no active cursor?): %v\n", err)
 		}
 	}
 
 	elapsed := time.Since(startTime)
 	fmt.Printf("Processing complete in %v\n", elapsed)
 
-	// Reset state and hide mini mode
+	// Reset state (but DON'T hide mini mode - let user stay in mini mode if they started there)
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
-	a.HideMiniMode()
 	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 	runtime.EventsEmit(a.ctx, "processing-complete", map[string]interface{}{
 		"polished": polishedText,
@@ -385,11 +393,10 @@ func (a *App) emitToast(message string, toastType string) {
 	})
 }
 
-// resetToIdle resets the app state to idle and hides mini mode
+// resetToIdle resets the app state to idle (stays in current window mode)
 func (a *App) resetToIdle() {
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
-	a.HideMiniMode()
 	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 }
 

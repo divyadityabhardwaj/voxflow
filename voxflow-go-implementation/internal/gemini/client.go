@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -160,19 +161,33 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 	// Debug logging
 	fmt.Printf("[Gemini] Raw output (%d chars):\n%s\n", len(result), result)
 
+	// Clean up result - remove markdown code blocks if present
+	cleanResult := result
+	if strings.HasPrefix(cleanResult, "```json") {
+		cleanResult = strings.TrimPrefix(cleanResult, "```json")
+		cleanResult = strings.TrimSuffix(strings.TrimSpace(cleanResult), "```")
+		cleanResult = strings.TrimSpace(cleanResult)
+	} else if strings.HasPrefix(cleanResult, "```") {
+		cleanResult = strings.TrimPrefix(cleanResult, "```")
+		cleanResult = strings.TrimSuffix(strings.TrimSpace(cleanResult), "```")
+		cleanResult = strings.TrimSpace(cleanResult)
+	}
+
 	// Try to parse as JSON response
 	var refineResp RefineResponse
-	if err := json.Unmarshal([]byte(result), &refineResp); err == nil {
+	if err := json.Unmarshal([]byte(cleanResult), &refineResp); err == nil {
 		// Successfully parsed JSON
 		if refineResp.Refused {
 			fmt.Printf("[Gemini] Content was refused, using raw text instead\n")
 			return rawText, nil
 		}
+		// Return the text (even if empty - that's what Gemini gave us)
 		return refineResp.Text, nil
 	}
 
-	// If not valid JSON, return as-is (for backwards compatibility)
-	return result, nil
+	// If JSON parsing failed, Gemini returned plain text (old behavior)
+	fmt.Printf("[Gemini] Warning: Response was not valid JSON, using as plain text\n")
+	return cleanResult, nil
 }
 
 // buildSystemPrompt creates the appropriate prompt based on mode
