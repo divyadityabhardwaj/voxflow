@@ -6,10 +6,9 @@ type Status = "Idle" | "Recording" | "Processing";
 
 export default function MainView() {
   const [status, setStatus] = useState<Status>("Idle");
-  const [lastTranscription, setLastTranscription] = useState<{
-    raw: string;
-    polished: string;
-  } | null>(null);
+  const [lastTranscription, setLastTranscription] = useState<string | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,8 +24,8 @@ export default function MainView() {
 
     EventsOn(
       "processing-complete",
-      (result: { raw: string; polished: string; elapsed: number }) => {
-        setLastTranscription({ raw: result.raw, polished: result.polished });
+      (result: { polished: string; elapsed: number }) => {
+        setLastTranscription(result.polished);
       }
     );
 
@@ -154,41 +153,17 @@ export default function MainView() {
         </div>
       )}
 
-      {/* Last transcription */}
+      {/* Last transcription - Only polished result */}
       {lastTranscription && (
-        <div className="w-full max-w-xl space-y-4 animate-fade-in">
+        <div className="w-full max-w-xl animate-fade-in">
           <div className="card p-6">
             <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider mb-3">
               Result
             </h3>
             <p className="text-primary whitespace-pre-wrap leading-relaxed">
-              {lastTranscription.polished}
+              {lastTranscription}
             </p>
           </div>
-
-          <details className="group">
-            <summary className="text-xs text-tertiary cursor-pointer hover:text-secondary transition-colors flex items-center gap-1">
-              <svg
-                className="w-3 h-3 transition-transform group-open:rotate-90"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-              Show raw transcription
-            </summary>
-            <div className="mt-3 p-4 bg-tertiary rounded-xl">
-              <p className="text-sm text-secondary whitespace-pre-wrap">
-                {lastTranscription.raw}
-              </p>
-            </div>
-          </details>
         </div>
       )}
 

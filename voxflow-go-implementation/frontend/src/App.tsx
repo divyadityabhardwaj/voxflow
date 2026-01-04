@@ -5,7 +5,9 @@ import HistoryView from "./components/HistoryView";
 import SettingsView from "./components/SettingsView";
 import ModelDownloader from "./components/ModelDownloader";
 import RecordingIndicator from "./components/RecordingIndicator";
+import RecordingPill from "./components/RecordingPill";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
+import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
 
@@ -126,6 +128,7 @@ function AppContent() {
   const [modelDownloading, setModelDownloading] = useState<boolean>(false);
   const [isMiniMode, setIsMiniMode] = useState<boolean>(true);
   const { theme, toggleTheme } = useTheme();
+  const { showToast } = useToast();
 
   useEffect(() => {
     IsMiniMode().then(setIsMiniMode);
@@ -136,6 +139,17 @@ function AppContent() {
     EventsOn("mini-mode", (isMini: boolean) => {
       setIsMiniMode(isMini);
     });
+
+    // Listen for toast events from backend
+    EventsOn(
+      "toast",
+      (data: {
+        message: string;
+        type: "error" | "warning" | "success" | "info";
+      }) => {
+        showToast(data.message, data.type);
+      }
+    );
 
     EventsOn(
       "model-status",
@@ -149,7 +163,7 @@ function AppContent() {
         }
       }
     );
-  }, []);
+  }, [showToast]);
 
   const handleDownloadStart = () => {
     setModelDownloading(true);
@@ -177,6 +191,9 @@ function AppContent() {
 
   return (
     <div className="min-h-screen flex bg-primary">
+      {/* Recording pill - shows at top when recording in full app mode */}
+      <RecordingPill />
+
       {/* Sidebar */}
       <aside className="sidebar titlebar">
         {/* Top section - Traffic lights space + main nav */}
@@ -262,7 +279,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </ThemeProvider>
   );
 }

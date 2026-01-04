@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -78,6 +77,7 @@ type APIError struct {
 
 // RefineText sends raw transcription to Gemini for refinement
 func (c *Client) RefineText(rawText string, mode string) (string, error) {
+	fmt.Printf("[Gemini] Refining text: %s\n", rawText)
 	if c.apiKey == "" {
 		return "", fmt.Errorf("API key not set")
 	}
@@ -153,7 +153,6 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 
 	// Debug logging - show raw output with newlines visible
 	fmt.Printf("[Gemini] Raw output (%d chars):\n%s\n", len(result), result)
-	fmt.Printf("[Gemini] Contains newlines: %v\n", strings.Contains(result, "\n"))
 
 	return result, nil
 }

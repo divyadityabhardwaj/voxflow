@@ -19,19 +19,20 @@ import (
 
 // App struct holds the application state
 type App struct {
-	ctx              context.Context
-	config           *config.Config
-	hotkeyManager    *hotkey.Manager
-	state            hotkey.State
-	audioRecorder    *audio.Recorder
-	whisperService   *whisper.Service
-	geminiClient     *gemini.Client
-	historyService   *history.Service
-	injectionService *injection.Service
-	modelReady       bool
-	isMiniMode       bool               // Tracks if app is in mini indicator mode
-	downloadCancel   context.CancelFunc // Cancel function for active download
-	downloadMu       sync.Mutex         // Mutex for download operations
+	ctx                     context.Context
+	config                  *config.Config
+	hotkeyManager           *hotkey.Manager
+	state                   hotkey.State
+	audioRecorder           *audio.Recorder
+	whisperService          *whisper.Service
+	geminiClient            *gemini.Client
+	historyService          *history.Service
+	injectionService        *injection.Service
+	modelReady              bool
+	isMiniMode              bool               // Tracks if app is in mini indicator mode
+	userExplicitlyMaximized bool               // Tracks if user manually opened full app (don't auto-minimize)
+	downloadCancel          context.CancelFunc // Cancel function for active download
+	downloadMu              sync.Mutex         // Mutex for download operations
 }
 
 // NewApp creates a new App application struct
@@ -199,13 +200,18 @@ func (a *App) onHotkeyPressed(state hotkey.State) {
 
 	switch state {
 	case hotkey.StateRecording:
-		a.ShowMiniMode()
+		// Only switch to mini mode if user hasn't explicitly maximized the app
+		if !a.userExplicitlyMaximized {
+			a.ShowMiniMode()
+		}
 		a.StartRecording()
 	case hotkey.StateProcessing:
 		a.StopRecording()
 		// Note: HideMiniMode is called after processing completes in processRecording()
 	case hotkey.StateIdle:
-		a.HideMiniMode()
+		if !a.userExplicitlyMaximized {
+			a.HideMiniMode()
+		}
 	}
 }
 
@@ -215,6 +221,7 @@ func (a *App) ShowMiniMode() {
 		return
 	}
 	a.isMiniMode = true
+	a.userExplicitlyMaximized = false // User explicitly minimized
 
 	// Re-apply floating behavior (in case coming from full app mode)
 	MakeWindowFloatEverywhere()
@@ -233,6 +240,7 @@ func (a *App) HideMiniMode() {
 		return
 	}
 	a.isMiniMode = false
+	a.userExplicitlyMaximized = true // User explicitly opened full app
 
 	// Reset window behavior to normal (not floating over fullscreen)
 	ResetWindowBehavior()
@@ -296,37 +304,49 @@ func (a *App) processRecording() {
 	// Stop recording and get WAV file
 	wavPath, err := a.audioRecorder.Stop()
 	if err != nil {
-		a.handleError("Failed to stop recording", err)
+		a.emitToast("Failed to stop recording: "+err.Error(), "error")
+		a.resetToIdle()
 		return
 	}
 	defer os.Remove(wavPath) // Clean up temp file
 
-	// Transcribe with Whisper
-	rawText, err := a.whisperService.Transcribe(wavPath)
-	if err != nil {
-		a.handleError("Transcription failed", err)
-		return
+	// Transcribe with Whisper - retry up to 3 times if no audio detected
+	var rawText string
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		rawText, err = a.whisperService.Transcribe(wavPath)
+		if err != nil {
+			a.emitToast("Transcription failed: "+err.Error(), "error")
+			a.resetToIdle()
+			return
+		}
+
+		if rawText != "" {
+			break // Successfully got transcription
+		}
+
+		if attempt < maxRetries {
+			fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 
 	if rawText == "" {
-		a.handleError("No speech detected", nil)
+		a.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
+		a.resetToIdle()
 		return
 	}
 
-	runtime.EventsEmit(a.ctx, "transcription-complete", rawText)
-
-	// Refine with Gemini
+	// Refine with Gemini - DO NOT fall back to raw text on error
 	mode := a.config.GetMode()
 	polishedText, err := a.geminiClient.RefineText(rawText, mode)
 	if err != nil {
-		// If Gemini fails, use raw text
-		fmt.Printf("Gemini refinement failed: %v, using raw text\n", err)
-		polishedText = rawText
+		a.emitToast("Gemini error: "+err.Error(), "error")
+		a.resetToIdle()
+		return
 	}
 
-	runtime.EventsEmit(a.ctx, "refinement-complete", polishedText)
-
-	// Save to history
+	// Save to history (only polished text is shown, but we still save raw for potential future use)
 	if a.historyService != nil {
 		_, err := a.historyService.Save("", rawText, polishedText, mode)
 		if err != nil {
@@ -352,10 +372,25 @@ func (a *App) processRecording() {
 	a.HideMiniMode()
 	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 	runtime.EventsEmit(a.ctx, "processing-complete", map[string]interface{}{
-		"raw":      rawText,
 		"polished": polishedText,
 		"elapsed":  elapsed.Milliseconds(),
 	})
+}
+
+// emitToast sends a toast notification to the frontend
+func (a *App) emitToast(message string, toastType string) {
+	runtime.EventsEmit(a.ctx, "toast", map[string]interface{}{
+		"message": message,
+		"type":    toastType,
+	})
+}
+
+// resetToIdle resets the app state to idle and hides mini mode
+func (a *App) resetToIdle() {
+	a.state = hotkey.StateIdle
+	a.hotkeyManager.SetState(hotkey.StateIdle)
+	a.HideMiniMode()
+	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 }
 
 // handleError handles errors during processing

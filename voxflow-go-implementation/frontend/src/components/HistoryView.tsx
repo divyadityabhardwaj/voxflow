@@ -4,7 +4,6 @@ import {
   SearchHistory,
   DeleteTranscript,
   ClearAllHistory,
-  RetryWithGemini,
   CopyToClipboard,
 } from "../../wailsjs/go/main/App";
 import { useConfirmModal } from "./ConfirmModal";
@@ -23,8 +22,6 @@ export default function HistoryView() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [retryInstruction, setRetryInstruction] = useState("");
-  const [retrying, setRetrying] = useState(false);
 
   const { confirm, ConfirmModalComponent } = useConfirmModal();
 
@@ -97,23 +94,6 @@ export default function HistoryView() {
       await CopyToClipboard(text);
     } catch (err) {
       console.error("Failed to copy:", err);
-    }
-  };
-
-  const handleRetry = async (id: number) => {
-    setRetrying(true);
-    try {
-      const newPolished = await RetryWithGemini(id, retryInstruction);
-      setTranscripts(
-        transcripts.map((t) =>
-          t.id === id ? { ...t, polished_text: newPolished } : t
-        )
-      );
-      setRetryInstruction("");
-    } catch (err) {
-      console.error("Failed to retry:", err);
-    } finally {
-      setRetrying(false);
     }
   };
 
@@ -277,32 +257,12 @@ export default function HistoryView() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Raw text */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Result */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
-                    Raw Transcription
-                  </h3>
-                  <button
-                    onClick={() => handleCopy(selectedTranscript.raw_text)}
-                    className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
-                  >
-                    Copy
-                  </button>
-                </div>
-                <div className="card p-4">
-                  <p className="text-sm text-secondary whitespace-pre-wrap leading-relaxed">
-                    {selectedTranscript.raw_text}
-                  </p>
-                </div>
-              </div>
-
-              {/* Polished text */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
-                    Polished Result
+                    Result
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.polished_text)}
@@ -315,29 +275,6 @@ export default function HistoryView() {
                   <p className="text-primary whitespace-pre-wrap leading-relaxed">
                     {selectedTranscript.polished_text}
                   </p>
-                </div>
-              </div>
-
-              {/* Retry with Gemini */}
-              <div>
-                <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider mb-3">
-                  Retry with Gemini
-                </h3>
-                <div className="flex gap-3">
-                  <input
-                    type="text"
-                    placeholder="Enter instruction (e.g., 'make it more formal')"
-                    value={retryInstruction}
-                    onChange={(e) => setRetryInstruction(e.target.value)}
-                    className="input flex-1 text-sm"
-                  />
-                  <button
-                    onClick={() => handleRetry(selectedTranscript.id)}
-                    disabled={retrying}
-                    className="btn-primary disabled:opacity-50"
-                  >
-                    {retrying ? "Retrying..." : "Retry"}
-                  </button>
                 </div>
               </div>
             </div>

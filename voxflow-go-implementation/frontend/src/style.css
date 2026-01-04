@@ -315,6 +315,15 @@ h3 {
   }
 }
 
+@keyframes wave {
+  0%, 100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
@@ -329,6 +338,10 @@ h3 {
 
 .animate-spin-slow {
   animation: spin-slow 2s linear infinite;
+}
+
+.animate-wave {
+  animation: wave 0.8s ease-in-out infinite;
 }
 
 /* ===== View Transitions ===== */
