@@ -265,13 +265,58 @@ function AppContent() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden relative">
         <div className="view-enter h-full">
           {currentView === "main" && <MainView />}
           {currentView === "history" && <HistoryView />}
           {currentView === "settings" && <SettingsView />}
         </div>
       </main>
+
+      {/* Manual Resize Grip (Bottom Right) */}
+      {!isMiniMode && (
+        <div
+          className="absolute bottom-0 right-0 w-6 h-6 z-50 cursor-se-resize flex items-end justify-end p-1 no-drag group"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.screenX;
+            const startY = e.screenY;
+
+            // Get current size
+            import("../wailsjs/runtime/runtime").then(
+              ({ WindowGetSize, WindowSetSize }) => {
+                WindowGetSize().then((size) => {
+                  const startW = size.w;
+                  const startH = size.h;
+
+                  const onMouseMove = (ev: MouseEvent) => {
+                    const newW = Math.max(400, startW + (ev.screenX - startX)); // Min width 400
+                    const newH = Math.max(300, startH + (ev.screenY - startY)); // Min height 300
+                    WindowSetSize(newW, newH);
+                  };
+
+                  const onMouseUp = () => {
+                    window.removeEventListener("mousemove", onMouseMove);
+                    window.removeEventListener("mouseup", onMouseUp);
+                  };
+
+                  window.addEventListener("mousemove", onMouseMove);
+                  window.addEventListener("mouseup", onMouseUp);
+                });
+              }
+            );
+          }}
+        >
+          {/* Visual Grip Lines */}
+          <svg
+            className="w-4 h-4 text-secondary opacity-50 group-hover:opacity-100 transition-opacity"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path d="M22 22H20V20H22V22ZM22 18H18V20H22V18ZM18 22H16V20H18V22ZM14 22H12V20H14V22ZM22 14H20V16H22V14Z" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }

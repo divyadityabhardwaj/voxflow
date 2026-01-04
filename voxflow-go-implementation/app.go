@@ -227,7 +227,7 @@ func (a *App) ShowMiniMode() {
 	MakeWindowFloatEverywhere()
 
 	// Resize to small indicator (no WindowShow/WindowUnminimise to avoid focus stealing)
-	runtime.WindowSetSize(a.ctx, 80, 80)
+	runtime.WindowSetSize(a.ctx, 200, 60)
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.EventsEmit(a.ctx, "mini-mode", true)
 
