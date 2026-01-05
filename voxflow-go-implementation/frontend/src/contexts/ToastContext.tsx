@@ -37,15 +37,30 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const showToast = useCallback(
     (message: string, type: Toast["type"] = "error") => {
-      const id = nextId++;
-      setToasts((prev) => [...prev, { id, message, type }]);
+      // Deduplicate: Don't show if same message already exists
+      setToasts((prev) => {
+        if (prev.some((t) => t.message === message)) {
+          return prev;
+        }
 
-      // Auto-dismiss
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 3000); // Faster dismiss
+        // Mini-mode text shortening
+        let finalMessage = message;
+        if (isMiniMode && message.includes("No speech detected")) {
+          finalMessage = "No Speech Detected";
+        }
+
+        const id = nextId++;
+        const newToasts = [...prev, { id, message: finalMessage, type }];
+
+        // Auto-dismiss
+        setTimeout(() => {
+          setToasts((current) => current.filter((t) => t.id !== id));
+        }, 3000);
+
+        return newToasts;
+      });
     },
-    []
+    [isMiniMode]
   );
 
   const dismissToast = useCallback((id: number) => {
@@ -63,7 +78,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toasts[toasts.length - 1].id} // Only show latest
               className={`
-                 pointer-events-auto rounded-full px-3 py-1 shadow-lg animate-fade-in
+                 pointer-events-none rounded-full px-3 py-1 shadow-lg animate-fade-in
                  flex items-center gap-2 max-w-full
                  ${
                    toasts[toasts.length - 1].type === "error"
