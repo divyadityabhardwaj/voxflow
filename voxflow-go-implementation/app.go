@@ -396,7 +396,10 @@ func (a *App) StopRecording() {
 
 // processRecording handles the transcription and refinement pipeline
 func (a *App) processRecording() {
-	startTime := time.Now()
+	processingStartTime := time.Now()
+
+	// Capture audio duration before stopping (buffer is still valid after Stop until next Start)
+	audioDuration := a.audioRecorder.GetDuration()
 
 	// Stop recording and get WAV file
 	wavPath, err := a.audioRecorder.Stop()
@@ -409,7 +412,10 @@ func (a *App) processRecording() {
 
 	// Transcribe with Whisper - retry up to 3 times if no audio detected
 	var rawText string
+	var whisperDuration time.Duration
 	maxRetries := 3
+
+	whisperStart := time.Now()
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		rawText, err = a.whisperService.Transcribe(wavPath)
 		if err != nil {
@@ -427,6 +433,7 @@ func (a *App) processRecording() {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+	whisperDuration = time.Since(whisperStart)
 
 	if rawText == "" {
 		a.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
@@ -443,7 +450,10 @@ func (a *App) processRecording() {
 
 	// Refine with Gemini - DO NOT fall back to raw text on error
 	mode := a.config.GetMode()
+	geminiStart := time.Now()
 	polishedText, err := a.geminiClient.RefineText(rawText, mode)
+	geminiDuration := time.Since(geminiStart)
+
 	if err != nil {
 		a.emitToast("Gemini error: "+err.Error(), "error")
 		a.resetToIdle()
@@ -460,17 +470,33 @@ func (a *App) processRecording() {
 
 	// Always copy to clipboard first
 	if a.injectionService != nil {
-		a.injectionService.CopyToClipboard(polishedText)
-		fmt.Printf("Text copied to clipboard\n")
+		// Run in goroutine to not block timing log if clipboard is slow (unlikely but safe)
+		go func() {
+			a.injectionService.CopyToClipboard(polishedText)
+			fmt.Printf("Text copied to clipboard\n")
 
-		// Also try to inject at cursor if possible
-		if err := a.injectionService.Inject(polishedText); err != nil {
-			fmt.Printf("Could not inject text (no active cursor?): %v\n", err)
-		}
+			// Also try to inject at cursor if possible
+			if err := a.injectionService.Inject(polishedText); err != nil {
+				fmt.Printf("Could not inject text (no active cursor?): %v\n", err)
+			}
+		}()
 	}
 
-	elapsed := time.Since(startTime)
-	fmt.Printf("Processing complete in %v\n", elapsed)
+	totalProcessingTime := time.Since(processingStartTime)
+
+	// Create formatted output string
+	output := fmt.Sprintf(
+		"\nProcessing Complete:\n"+
+			"Audio captured:        %.2fs\n"+
+			"Whisper transcription: %.2fs\n"+
+			"Gemini refinement:     %.2fs\n"+
+			"Total processing:      %.2fs\n",
+		audioDuration.Seconds(),
+		whisperDuration.Seconds(),
+		geminiDuration.Seconds(),
+		totalProcessingTime.Seconds(),
+	)
+	fmt.Println(output)
 
 	// Reset state (but DON'T hide mini mode - let user stay in mini mode if they started there)
 	a.state = hotkey.StateIdle
@@ -478,7 +504,12 @@ func (a *App) processRecording() {
 	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
 	runtime.EventsEmit(a.ctx, "processing-complete", map[string]interface{}{
 		"polished": polishedText,
-		"elapsed":  elapsed.Milliseconds(),
+		"elapsed":  totalProcessingTime.Milliseconds(),
+		"details": map[string]float64{
+			"audio":   audioDuration.Seconds(),
+			"whisper": whisperDuration.Seconds(),
+			"gemini":  geminiDuration.Seconds(),
+		},
 	})
 }
 
