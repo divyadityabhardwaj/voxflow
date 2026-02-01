@@ -13,6 +13,7 @@
   --text-secondary: #6b6b6b;
   --text-tertiary: #9b9b9b;
   --accent: #1a1a1a;
+  --accent-rgb: 26, 26, 26;
   --accent-hover: #333333;
   --border: #e8e6e3;
   --border-hover: #d4d2cf;
@@ -48,6 +49,7 @@
   --text-primary: #fafafa;
   --text-secondary: #a0a0a0;
   --text-tertiary: #6b6b6b;
+  --accent-rgb: 250, 250, 250;
   --accent: #fafafa;
   --accent-hover: #e0e0e0;
   --border: #2d2d32;

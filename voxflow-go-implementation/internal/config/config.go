@@ -17,6 +17,10 @@ type Config struct {
 	Mode             string `json:"mode"`                // casual, formal
 	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
 	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
+	MaximizedX       int    `json:"maximized_x"`         // Saved X position of maximized window
+	MaximizedY       int    `json:"maximized_y"`         // Saved Y position of maximized window
+	MaximizedW       int    `json:"maximized_w"`         // Saved width of maximized window
+	MaximizedH       int    `json:"maximized_h"`         // Saved height of maximized window
 	mu               sync.RWMutex
 }
 
@@ -233,4 +237,34 @@ func (c *Config) SetMiniModePosition(x, y int) {
 	defer c.mu.Unlock()
 	c.MiniModeX = x
 	c.MiniModeY = y
+}
+
+// GetMaximizedWindowPosition returns the saved maximized window position
+func (c *Config) GetMaximizedWindowPosition() (int, int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.MaximizedX, c.MaximizedY
+}
+
+// SetMaximizedWindowPosition sets the saved maximized window position
+func (c *Config) SetMaximizedWindowPosition(x, y int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.MaximizedX = x
+	c.MaximizedY = y
+}
+
+// GetMaximizedWindowSize returns the saved maximized window size
+func (c *Config) GetMaximizedWindowSize() (int, int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.MaximizedW, c.MaximizedH
+}
+
+// SetMaximizedWindowSize sets the saved maximized window size
+func (c *Config) SetMaximizedWindowSize(w, h int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.MaximizedW = w
+	c.MaximizedH = h
 }

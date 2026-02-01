@@ -31,13 +31,21 @@ export function GetTranscript(arg1:number):Promise<history.Transcript>;
 
 export function HideMiniMode():Promise<void>;
 
+export function IsFullscreen():Promise<boolean>;
+
+export function IsMaximized():Promise<boolean>;
+
 export function IsMiniMode():Promise<boolean>;
+
+export function IsMinimized():Promise<boolean>;
 
 export function IsModelDownloaded():Promise<boolean>;
 
 export function IsModelReady():Promise<boolean>;
 
 export function IsWhisperCLIReady():Promise<boolean>;
+
+export function Minimize():Promise<void>;
 
 export function OpenHistoryWindow():Promise<void>;
 
@@ -66,5 +74,9 @@ export function ShowMiniMode():Promise<void>;
 export function StartRecording():Promise<void>;
 
 export function StopRecording():Promise<void>;
+
+export function ToggleFullscreen():Promise<void>;
+
+export function ToggleMaximize():Promise<void>;
 
 export function ToggleRecording():Promise<string>;

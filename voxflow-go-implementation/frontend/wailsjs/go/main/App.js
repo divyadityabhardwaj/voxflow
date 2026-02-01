@@ -58,8 +58,20 @@ export function HideMiniMode() {
   return window['go']['main']['App']['HideMiniMode']();
 }
 
+export function IsFullscreen() {
+  return window['go']['main']['App']['IsFullscreen']();
+}
+
+export function IsMaximized() {
+  return window['go']['main']['App']['IsMaximized']();
+}
+
 export function IsMiniMode() {
   return window['go']['main']['App']['IsMiniMode']();
+}
+
+export function IsMinimized() {
+  return window['go']['main']['App']['IsMinimized']();
 }
 
 export function IsModelDownloaded() {
@@ -72,6 +84,10 @@ export function IsModelReady() {
 
 export function IsWhisperCLIReady() {
   return window['go']['main']['App']['IsWhisperCLIReady']();
+}
+
+export function Minimize() {
+  return window['go']['main']['App']['Minimize']();
 }
 
 export function OpenHistoryWindow() {
@@ -128,6 +144,14 @@ export function StartRecording() {
 
 export function StopRecording() {
   return window['go']['main']['App']['StopRecording']();
+}
+
+export function ToggleFullscreen() {
+  return window['go']['main']['App']['ToggleFullscreen']();
+}
+
+export function ToggleMaximize() {
+  return window['go']['main']['App']['ToggleMaximize']();
 }
 
 export function ToggleRecording() {

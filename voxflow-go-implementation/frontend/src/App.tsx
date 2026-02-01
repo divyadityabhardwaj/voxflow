@@ -239,11 +239,61 @@ function AppContent() {
       <RecordingPill />
 
       {/* Sidebar */}
-      <aside className="sidebar titlebar">
+      <aside className="sidebar">
+        {/* Draggable Titlebar Area */}
+        <div
+          className="w-full h-10 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-bg-secondary hover:bg-bg-tertiary transition-colors border-b border-border"
+          title="Drag to move window"
+          onMouseDown={(e) => {
+            // Only allow dragging with left mouse button
+            if (e.button !== 0) return;
+            
+            e.preventDefault();
+            const startX = e.screenX;
+            const startY = e.screenY;
+
+            // Get current position
+            import("../wailsjs/runtime/runtime").then(
+              ({ WindowGetPosition, WindowSetPosition }) => {
+                WindowGetPosition().then((pos) => {
+                  const startWinX = pos.x;
+                  const startWinY = pos.y;
+
+                  const onMouseMove = (ev: MouseEvent) => {
+                    const newX = startWinX + (ev.screenX - startX);
+                    const newY = startWinY + (ev.screenY - startY);
+                    WindowSetPosition(newX, newY);
+                  };
+
+                  const onMouseUp = () => {
+                    window.removeEventListener("mousemove", onMouseMove);
+                    window.removeEventListener("mouseup", onMouseUp);
+                  };
+
+                  window.addEventListener("mousemove", onMouseMove);
+                  window.addEventListener("mouseup", onMouseUp);
+                });
+              }
+            );
+          }}
+        >
+          {/* Grip dots - macOS style */}
+          <div className="flex flex-col gap-[3px] opacity-40 group-hover:opacity-70 transition-opacity">
+            <div className="flex gap-[3px]">
+              <div className="w-[5px] h-[5px] rounded-full bg-current" />
+              <div className="w-[5px] h-[5px] rounded-full bg-current" />
+            </div>
+            <div className="flex gap-[3px]">
+              <div className="w-[5px] h-[5px] rounded-full bg-current" />
+              <div className="w-[5px] h-[5px] rounded-full bg-current" />
+            </div>
+          </div>
+        </div>
+
         {/* Top section - Traffic lights space + main nav */}
-        <div className="flex flex-col items-center gap-2 pt-8">
+        <div className="flex flex-col items-center gap-2 pt-4">
           {/* Spacer for macOS traffic lights */}
-          <div className="h-4" />
+          <div className="h-2" />
 
           {/* Main navigation */}
           <button
@@ -297,6 +347,8 @@ function AppContent() {
           >
             <MinimizeIcon />
           </button>
+
+          <div className="h-px w-8 bg-secondary/20 my-1" />
 
           <button
             onClick={() => Quit()}

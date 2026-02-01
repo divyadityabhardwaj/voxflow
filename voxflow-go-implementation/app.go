@@ -319,6 +319,44 @@ func (a *App) saveCurrentMiniModePosition() {
 	}
 }
 
+// startMaximizedPositionWatch starts a goroutine to poll and save maximized window position and size
+func (a *App) startMaximizedPositionWatch() {
+	// Stop existing watcher if any
+	if a.positionWatchCancel != nil {
+		a.positionWatchCancel()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.positionWatchCancel = cancel
+
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Get current position
+				rx, ry := runtime.WindowGetPosition(a.ctx)
+				// Get current size - returns (width, height)
+				rw, rh := runtime.WindowGetSize(a.ctx)
+				// Get saved position and size
+				cx, cy := a.config.GetMaximizedWindowPosition()
+				cw, ch := a.config.GetMaximizedWindowSize()
+
+				// If changed, save
+				if rx != cx || ry != cy || rw != cw || rh != ch {
+					a.config.SetMaximizedWindowPosition(rx, ry)
+					a.config.SetMaximizedWindowSize(rw, rh)
+					a.config.Save() // Save to disk to persist across crashes
+				}
+			}
+		}
+	}()
+}
+
 // HideMiniMode restores the window to normal size
 func (a *App) HideMiniMode() {
 	if !a.isMiniMode {
@@ -340,13 +378,33 @@ func (a *App) HideMiniMode() {
 	// Reset window behavior to normal (not floating over fullscreen)
 	ResetWindowBehavior()
 
-	// Restore normal window size limits and dimensions
+	// Restore saved maximized position and size if available
+	savedX, savedY := a.config.GetMaximizedWindowPosition()
+	savedW, savedH := a.config.GetMaximizedWindowSize()
+
+	// Set normal window size limits
 	runtime.WindowSetMinSize(a.ctx, 800, 600)
 	runtime.WindowSetMaxSize(a.ctx, 0, 0)
-	runtime.WindowSetSize(a.ctx, 900, 600)
+
+	// Restore saved size or use default
+	if savedW > 0 && savedH > 0 {
+		runtime.WindowSetSize(a.ctx, savedW, savedH)
+	} else {
+		runtime.WindowSetSize(a.ctx, 900, 600)
+	}
+
+	// Restore saved position or center if not saved
+	if savedX != 0 || savedY != 0 {
+		runtime.WindowSetPosition(a.ctx, savedX, savedY)
+	} else {
+		runtime.WindowCenter(a.ctx)
+	}
+
 	runtime.WindowSetAlwaysOnTop(a.ctx, false)
-	runtime.WindowCenter(a.ctx)
 	runtime.EventsEmit(a.ctx, "mini-mode", false)
+
+	// Start watching maximized window position/size
+	a.startMaximizedPositionWatch()
 
 	fmt.Println("[App] Restored normal mode")
 }
@@ -823,4 +881,42 @@ func (a *App) OpenSettings() {
 // Quit closes the application
 func (a *App) Quit() {
 	runtime.Quit(a.ctx)
+}
+
+// ToggleFullscreen toggles fullscreen mode (true macOS fullscreen)
+func (a *App) ToggleFullscreen() {
+	if runtime.WindowIsFullscreen(a.ctx) {
+		runtime.WindowUnfullscreen(a.ctx)
+	} else {
+		runtime.WindowFullscreen(a.ctx)
+	}
+}
+
+// IsFullscreen returns whether the window is currently fullscreen
+func (a *App) IsFullscreen() bool {
+	return runtime.WindowIsFullscreen(a.ctx)
+}
+
+// ToggleMaximize toggles between normal and maximized window state
+func (a *App) ToggleMaximize() {
+	if runtime.WindowIsMaximised(a.ctx) {
+		runtime.WindowUnmaximise(a.ctx)
+	} else {
+		runtime.WindowMaximise(a.ctx)
+	}
+}
+
+// IsMaximized returns whether the window is currently maximized
+func (a *App) IsMaximized() bool {
+	return runtime.WindowIsMaximised(a.ctx)
+}
+
+// Minimize minimizes the window to the dock
+func (a *App) Minimize() {
+	runtime.WindowMinimise(a.ctx)
+}
+
+// IsMinimized returns whether the window is currently minimized
+func (a *App) IsMinimized() bool {
+	return runtime.WindowIsMinimised(a.ctx)
 }
