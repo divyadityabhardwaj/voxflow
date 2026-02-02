@@ -151,6 +151,7 @@ export default function HistoryView() {
           <div className="px-4 py-2 border-b border-[var(--border)]">
             <button
               onClick={handleClearAll}
+              title="Delete all transcription history permanently"
               className="w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               <svg
@@ -238,6 +239,7 @@ export default function HistoryView() {
               </div>
               <button
                 onClick={() => handleDelete(selectedTranscript.id)}
+                title="Delete this transcript permanently"
                 className="p-2 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-colors"
               >
                 <svg
@@ -266,6 +268,7 @@ export default function HistoryView() {
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.polished_text)}
+                    title="Copy polished text to clipboard"
                     className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
                   >
                     Copy

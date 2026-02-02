@@ -333,6 +333,7 @@ export default function SettingsView() {
             <button
               onClick={handleSaveApiKey}
               disabled={!apiKey.trim() || saving === "apiKey"}
+              title={apiKey.trim() ? "Save your Gemini API key" : "Enter an API key first"}
               className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
                        text-white rounded-lg transition-colors"
             >
@@ -550,6 +551,7 @@ export default function SettingsView() {
                     ) : (
                       <button
                         onClick={() => handleDownloadModel(model.name)}
+                        title={`Download ${model.name} model (${Math.round(model.size / 1024 / 1024)}MB)`}
                         className="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
                       >
                         Download
@@ -574,6 +576,7 @@ export default function SettingsView() {
             <button
               onClick={() => handleModeChange("casual")}
               disabled={saving === "mode"}
+              title="Use casual, conversational tone for transcriptions"
               className={`flex-1 p-4 rounded-lg border transition-colors ${
                 config.mode === "casual"
                   ? "bg-accent-600/10 border-accent-600"
@@ -588,6 +591,7 @@ export default function SettingsView() {
             <button
               onClick={() => handleModeChange("formal")}
               disabled={saving === "mode"}
+              title="Use professional, polished tone for transcriptions"
               className={`flex-1 p-4 rounded-lg border transition-colors ${
                 config.mode === "formal"
                   ? "bg-accent-600/10 border-accent-600"

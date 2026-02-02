@@ -83,6 +83,13 @@ export default function MainView() {
           <button
             onClick={handleToggle}
             disabled={status === "Processing"}
+            title={
+              status === "Idle"
+                ? "Start recording (use your hotkey)"
+                : status === "Recording"
+                ? "Stop recording"
+                : "Processing transcription..."
+            }
             className={`
               relative w-12 h-12 rounded-full transition-all duration-300
               flex items-center justify-center

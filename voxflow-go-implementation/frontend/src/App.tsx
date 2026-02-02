@@ -8,6 +8,7 @@ import RecordingIndicator from "./components/RecordingIndicator";
 import RecordingPill from "./components/RecordingPill";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
+import { Tooltip } from "./components/Tooltip";
 import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
 import { Logger } from "./utils/logger";
@@ -151,7 +152,7 @@ function AppContent() {
         type: "error" | "warning" | "success" | "info";
       }) => {
         showToast(data.message, data.type);
-      }
+      },
     );
 
     EventsOn(
@@ -164,7 +165,7 @@ function AppContent() {
           setModelReady(false);
           setModelDownloading(false);
         }
-      }
+      },
     );
   }, [showToast]);
 
@@ -241,54 +242,55 @@ function AppContent() {
       {/* Sidebar */}
       <aside className="sidebar">
         {/* Draggable Titlebar Area */}
-        <div
-          className="w-full h-10 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-bg-secondary hover:bg-bg-tertiary transition-colors border-b border-border"
-          title="Drag to move window"
-          onMouseDown={(e) => {
-            // Only allow dragging with left mouse button
-            if (e.button !== 0) return;
-            
-            e.preventDefault();
-            const startX = e.screenX;
-            const startY = e.screenY;
+        <Tooltip content="Move" position="bottom">
+          <div
+            className="w-full h-10 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-bg-secondary hover:bg-bg-tertiary transition-colors border-b border-border"
+            onMouseDown={(e) => {
+              // Only allow dragging with left mouse button
+              if (e.button !== 0) return;
 
-            // Get current position
-            import("../wailsjs/runtime/runtime").then(
-              ({ WindowGetPosition, WindowSetPosition }) => {
-                WindowGetPosition().then((pos) => {
-                  const startWinX = pos.x;
-                  const startWinY = pos.y;
+              e.preventDefault();
+              const startX = e.screenX;
+              const startY = e.screenY;
 
-                  const onMouseMove = (ev: MouseEvent) => {
-                    const newX = startWinX + (ev.screenX - startX);
-                    const newY = startWinY + (ev.screenY - startY);
-                    WindowSetPosition(newX, newY);
-                  };
+              // Get current position
+              import("../wailsjs/runtime/runtime").then(
+                ({ WindowGetPosition, WindowSetPosition }) => {
+                  WindowGetPosition().then((pos) => {
+                    const startWinX = pos.x;
+                    const startWinY = pos.y;
 
-                  const onMouseUp = () => {
-                    window.removeEventListener("mousemove", onMouseMove);
-                    window.removeEventListener("mouseup", onMouseUp);
-                  };
+                    const onMouseMove = (ev: MouseEvent) => {
+                      const newX = startWinX + (ev.screenX - startX);
+                      const newY = startWinY + (ev.screenY - startY);
+                      WindowSetPosition(newX, newY);
+                    };
 
-                  window.addEventListener("mousemove", onMouseMove);
-                  window.addEventListener("mouseup", onMouseUp);
-                });
-              }
-            );
-          }}
-        >
-          {/* Grip dots - macOS style */}
-          <div className="flex flex-col gap-[3px] opacity-40 group-hover:opacity-70 transition-opacity">
-            <div className="flex gap-[3px]">
-              <div className="w-[5px] h-[5px] rounded-full bg-current" />
-              <div className="w-[5px] h-[5px] rounded-full bg-current" />
-            </div>
-            <div className="flex gap-[3px]">
-              <div className="w-[5px] h-[5px] rounded-full bg-current" />
-              <div className="w-[5px] h-[5px] rounded-full bg-current" />
+                    const onMouseUp = () => {
+                      window.removeEventListener("mousemove", onMouseMove);
+                      window.removeEventListener("mouseup", onMouseUp);
+                    };
+
+                    window.addEventListener("mousemove", onMouseMove);
+                    window.addEventListener("mouseup", onMouseUp);
+                  });
+                },
+              );
+            }}
+          >
+            {/* Grip dots - macOS style */}
+            <div className="flex flex-col gap-[3px] opacity-40 group-hover:opacity-70 transition-opacity">
+              <div className="flex gap-[3px]">
+                <div className="w-[5px] h-[5px] rounded-full bg-current" />
+                <div className="w-[5px] h-[5px] rounded-full bg-current" />
+              </div>
+              <div className="flex gap-[3px]">
+                <div className="w-[5px] h-[5px] rounded-full bg-current" />
+                <div className="w-[5px] h-[5px] rounded-full bg-current" />
+              </div>
             </div>
           </div>
-        </div>
+        </Tooltip>
 
         {/* Top section - Traffic lights space + main nav */}
         <div className="flex flex-col items-center gap-2 pt-4">
@@ -296,35 +298,38 @@ function AppContent() {
           <div className="h-2" />
 
           {/* Main navigation */}
-          <button
-            onClick={() => setCurrentView("main")}
-            className={`sidebar-btn no-drag ${
-              currentView === "main" ? "active" : ""
-            }`}
-            title="Dictation"
-          >
-            <MicIcon />
-          </button>
+          <Tooltip content="Dictation" position="right">
+            <button
+              onClick={() => setCurrentView("main")}
+              className={`sidebar-btn no-drag ${
+                currentView === "main" ? "active" : ""
+              }`}
+            >
+              <MicIcon />
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={() => setCurrentView("history")}
-            className={`sidebar-btn no-drag ${
-              currentView === "history" ? "active" : ""
-            }`}
-            title="History"
-          >
-            <HistoryIcon />
-          </button>
+          <Tooltip content="History" position="right">
+            <button
+              onClick={() => setCurrentView("history")}
+              className={`sidebar-btn no-drag ${
+                currentView === "history" ? "active" : ""
+              }`}
+            >
+              <HistoryIcon />
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={() => setCurrentView("settings")}
-            className={`sidebar-btn no-drag ${
-              currentView === "settings" ? "active" : ""
-            }`}
-            title="Settings"
-          >
-            <SettingsIcon />
-          </button>
+          <Tooltip content="Settings" position="right">
+            <button
+              onClick={() => setCurrentView("settings")}
+              className={`sidebar-btn no-drag ${
+                currentView === "settings" ? "active" : ""
+              }`}
+            >
+              <SettingsIcon />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Spacer */}
@@ -332,31 +337,34 @@ function AppContent() {
 
         {/* Bottom section - Theme, minimize, close */}
         <div className="flex flex-col items-center gap-2 pb-4">
-          <button
-            onClick={toggleTheme}
-            className="sidebar-btn no-drag"
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          <Tooltip
+            content={theme === "dark" ? "Light mode" : "Dark mode"}
+            position="right"
           >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </button>
+            <button onClick={toggleTheme} className="sidebar-btn no-drag">
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={() => ShowMiniMode()}
-            className="sidebar-btn no-drag"
-            title="Minimize to floating indicator"
-          >
-            <MinimizeIcon />
-          </button>
+          <Tooltip content="Mini mode" position="right">
+            <button
+              onClick={() => ShowMiniMode()}
+              className="sidebar-btn no-drag"
+            >
+              <MinimizeIcon />
+            </button>
+          </Tooltip>
 
           <div className="h-px w-8 bg-secondary/20 my-1" />
 
-          <button
-            onClick={() => Quit()}
-            className="sidebar-btn no-drag hover:!bg-red-500/10 hover:!text-red-500"
-            title="Quit voxflow"
-          >
-            <CloseIcon />
-          </button>
+          <Tooltip content="Quit" position="right">
+            <button
+              onClick={() => Quit()}
+              className="sidebar-btn no-drag hover:!bg-red-500/10 hover:!text-red-500"
+            >
+              <CloseIcon />
+            </button>
+          </Tooltip>
         </div>
       </aside>
 
@@ -371,47 +379,55 @@ function AppContent() {
 
       {/* Manual Resize Grip (Bottom Right) */}
       {!isMiniMode && (
-        <div
-          className="absolute bottom-0 right-0 w-6 h-6 z-50 cursor-se-resize flex items-end justify-end p-1 no-drag group"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const startX = e.screenX;
-            const startY = e.screenY;
+        <Tooltip content="Resize" position="top">
+          <div
+            className="absolute bottom-0 right-0 w-6 h-6 z-50 cursor-se-resize flex items-end justify-end p-1 no-drag group"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.screenX;
+              const startY = e.screenY;
 
-            // Get current size
-            import("../wailsjs/runtime/runtime").then(
-              ({ WindowGetSize, WindowSetSize }) => {
-                WindowGetSize().then((size) => {
-                  const startW = size.w;
-                  const startH = size.h;
+              // Get current size
+              import("../wailsjs/runtime/runtime").then(
+                ({ WindowGetSize, WindowSetSize }) => {
+                  WindowGetSize().then((size) => {
+                    const startW = size.w;
+                    const startH = size.h;
 
-                  const onMouseMove = (ev: MouseEvent) => {
-                    const newW = Math.max(400, startW + (ev.screenX - startX)); // Min width 400
-                    const newH = Math.max(300, startH + (ev.screenY - startY)); // Min height 300
-                    WindowSetSize(newW, newH);
-                  };
+                    const onMouseMove = (ev: MouseEvent) => {
+                      const newW = Math.max(
+                        400,
+                        startW + (ev.screenX - startX),
+                      ); // Min width 400
+                      const newH = Math.max(
+                        300,
+                        startH + (ev.screenY - startY),
+                      ); // Min height 300
+                      WindowSetSize(newW, newH);
+                    };
 
-                  const onMouseUp = () => {
-                    window.removeEventListener("mousemove", onMouseMove);
-                    window.removeEventListener("mouseup", onMouseUp);
-                  };
+                    const onMouseUp = () => {
+                      window.removeEventListener("mousemove", onMouseMove);
+                      window.removeEventListener("mouseup", onMouseUp);
+                    };
 
-                  window.addEventListener("mousemove", onMouseMove);
-                  window.addEventListener("mouseup", onMouseUp);
-                });
-              }
-            );
-          }}
-        >
-          {/* Visual Grip Lines */}
-          <svg
-            className="w-4 h-4 text-secondary opacity-50 group-hover:opacity-100 transition-opacity"
-            viewBox="0 0 24 24"
-            fill="currentColor"
+                    window.addEventListener("mousemove", onMouseMove);
+                    window.addEventListener("mouseup", onMouseUp);
+                  });
+                },
+              );
+            }}
           >
-            <path d="M22 22H20V20H22V22ZM22 18H18V20H22V18ZM18 22H16V20H18V22ZM14 22H12V20H14V22ZM22 14H20V16H22V14Z" />
-          </svg>
-        </div>
+            {/* Visual Grip Lines */}
+            <svg
+              className="w-4 h-4 text-secondary opacity-50 group-hover:opacity-100 transition-opacity"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M22 22H20V20H22V22ZM22 18H18V20H22V18ZM18 22H16V20H18V22ZM14 22H12V20H14V22ZM22 14H20V16H22V14Z" />
+            </svg>
+          </div>
+        </Tooltip>
       )}
     </div>
   );
