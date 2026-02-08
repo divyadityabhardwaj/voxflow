@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         return newToasts;
       });
     },
-    [isMiniMode]
+    [isMiniMode],
   );
 
   const dismissToast = useCallback((id: number) => {
@@ -78,40 +78,52 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toasts[toasts.length - 1].id} // Only show latest
               className={`
-                 pointer-events-none rounded-full px-3 py-1 shadow-lg animate-fade-in
-                 flex items-center gap-2 max-w-full
+                 pointer-events-auto rounded-full px-4 py-1 shadow-2xl animate-scale-in
+                 flex items-center gap-2 max-w-[95%]
+                 border border-white/10 backdrop-blur-md
                  ${
                    toasts[toasts.length - 1].type === "error"
-                     ? "bg-red-500 text-white"
+                     ? "bg-red-500/20 text-red-100 border-red-500/30"
                      : ""
                  }
                  ${
                    toasts[toasts.length - 1].type === "warning"
-                     ? "bg-amber-500 text-white"
+                     ? "bg-amber-500/20 text-amber-100 border-amber-500/30"
                      : ""
                  }
                  ${
                    toasts[toasts.length - 1].type === "success"
-                     ? "bg-emerald-500 text-white"
+                     ? "bg-emerald-500/20 text-emerald-100 border-emerald-500/30"
                      : ""
                  }
                  ${
                    toasts[toasts.length - 1].type === "info"
-                     ? "bg-blue-500 text-white"
+                     ? "bg-blue-500/20 text-blue-100 border-blue-500/30"
                      : ""
                  }
                `}
+              style={{
+                background:
+                  toasts[toasts.length - 1].type === "error"
+                    ? "rgba(220, 38, 38, 0.25)"
+                    : toasts[toasts.length - 1].type === "warning"
+                      ? "rgba(245, 158, 11, 0.25)"
+                      : toasts[toasts.length - 1].type === "success"
+                        ? "rgba(16, 185, 129, 0.25)"
+                        : "rgba(59, 130, 246, 0.25)",
+                boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.3)",
+              }}
               onClick={() => dismissToast(toasts[toasts.length - 1].id)}
             >
-              {/* Tiny Icon */}
+              {/* Icon */}
               <div className="flex-shrink-0">
                 {toasts[toasts.length - 1].type === "warning" && (
                   <svg
-                    className="w-3 h-3"
+                    className="w-4 h-4"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
-                    strokeWidth={3}
+                    strokeWidth={2.5}
                   >
                     <path
                       strokeLinecap="round"
@@ -122,11 +134,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 )}
                 {toasts[toasts.length - 1].type === "error" && (
                   <svg
-                    className="w-3 h-3"
+                    className="w-4 h-4"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
-                    strokeWidth={3}
+                    strokeWidth={2.5}
                   >
                     <path
                       strokeLinecap="round"
@@ -135,19 +147,49 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                     />
                   </svg>
                 )}
+                {toasts[toasts.length - 1].type === "success" && (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                )}
+                {toasts[toasts.length - 1].type === "info" && (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                )}
               </div>
 
-              <p className="text-[10px] font-bold truncate max-w-[120px]">
+              <p className="text-[10px] font-bold leading-tight text-center drop-shadow-sm">
                 {toasts[toasts.length - 1].message}
               </p>
 
-              <button className="opacity-70 hover:opacity-100">
+              <button className="opacity-70 hover:opacity-100 transition-opacity">
                 <svg
-                  className="w-3 h-3"
+                  className="w-3.5 h-3.5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth={3}
+                  strokeWidth={2.5}
                 >
                   <path
                     strokeLinecap="round"
