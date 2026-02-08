@@ -45,6 +45,30 @@ wails build
 
 The `.app` bundle will be in `build/bin/`.
 
+### Creating a DMG (Optional)
+
+To create a distributable `.dmg` file locally (like the GitHub Release does), you need `create-dmg`:
+
+```bash
+brew install create-dmg
+```
+
+Then run:
+
+```bash
+create-dmg \
+  --volname "Voxflow Installer" \
+  --volicon "build/appicon.png" \
+  --window-pos 200 120 \
+  --window-size 800 400 \
+  --icon-size 100 \
+  --icon "voxflow.app" 200 190 \
+  --hide-extension "voxflow.app" \
+  --app-drop-link 600 185 \
+  "build/bin/voxflow.dmg" \
+  "build/bin/voxflow.app"
+```
+
 ## Configuration
 
 Settings are stored in `~/.voxflow/config.json`:
