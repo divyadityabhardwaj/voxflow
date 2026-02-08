@@ -23,6 +23,8 @@
         <string>true</string>
         <key>NSHumanReadableCopyright</key>
         <string>{{.Info.Copyright}}</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Voxflow needs access to your microphone to record your voice for transcription.</string>
         <!-- Make this an accessory app (no Dock icon) to stay on all spaces and over fullscreen apps -->
         <key>LSUIElement</key>
         <true/>
