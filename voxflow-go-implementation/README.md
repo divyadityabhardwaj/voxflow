@@ -69,6 +69,17 @@ create-dmg \
   "build/bin/voxflow.app"
 ```
 
+### Troubleshooting
+
+**"Voxflow is damaged and can't be opened"**
+This happens because the app is not signed with an Apple Developer Certificate (which costs $99/year). To fix it, run this command in your terminal:
+
+```bash
+xattr -cr /Applications/voxflow.app
+```
+
+(Or point to wherever you unknowingly dragged the app)
+
 ## Configuration
 
 Settings are stored in `~/.voxflow/config.json`:
