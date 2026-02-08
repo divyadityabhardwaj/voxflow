@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        platform: [darwin/universal]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          check-latest: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install Building Tools
+        run: brew install create-dmg
+
+      - name: Build Application
+        working-directory: ./voxflow-go-implementation
+        run: |
+          wails build -platform ${{ matrix.platform }} -clean
+
+      - name: Create DMG
+        working-directory: ./voxflow-go-implementation/build/bin
+        run: |
+          create-dmg \
+            --volname "Voxflow Installer" \
+            --volicon "../../../voxflow-go-implementation/build/appicon.png" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "voxflow.app" 200 190 \
+            --hide-extension "voxflow.app" \
+            --app-drop-link 600 185 \
+            "voxflow.dmg" \
+            "voxflow.app"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            voxflow-go-implementation/build/bin/voxflow.dmg
+            voxflow-go-implementation/build/bin/voxflow.app
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
