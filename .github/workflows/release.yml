@@ -9,10 +9,16 @@ on:
 jobs:
   build:
     name: Build & Release
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        platform: [darwin/universal]
+        include:
+          - platform: darwin/arm64
+            os: macos-latest
+            arch: arm64
+          - platform: darwin/amd64
+            os: macos-13
+            arch: amd64
 
     steps:
       - name: Checkout
@@ -52,14 +58,13 @@ jobs:
             --icon "voxflow.app" 200 190 \
             --hide-extension "voxflow.app" \
             --app-drop-link 600 185 \
-            "voxflow.dmg" \
+            "voxflow-${{ matrix.arch }}.dmg" \
             "voxflow.app"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            voxflow-go-implementation/build/bin/voxflow.dmg
-            voxflow-go-implementation/build/bin/voxflow.app
+            voxflow-go-implementation/build/bin/voxflow-${{ matrix.arch }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
