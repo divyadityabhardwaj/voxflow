@@ -98,7 +98,3 @@ Settings are stored in `~/.voxflow/config.json`:
 | STT       | whisper.cpp (local)           |
 | LLM       | Gemini 1.5 Flash              |
 | Database  | SQLite                        |
-
-## License
-
-MIT
