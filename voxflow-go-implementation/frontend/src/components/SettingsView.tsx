@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   GetConfig,
   SetAPIKey,
@@ -12,6 +12,9 @@ import {
   DeleteModelByName,
   IsWhisperCLIReady,
   CancelDownload,
+  GetGeminiModels,
+  SetGeminiModel,
+  CheckGeminiModel,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -23,6 +26,7 @@ interface Config {
   push_to_talk_hotkey: string;
   hotkey: string; // Keep for legacy
   whisper_model: string;
+  gemini_model: string;
   mode: string;
   api_key_set: boolean;
 }
@@ -47,6 +51,35 @@ export default function SettingsView() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [whisperReady, setWhisperReady] = useState(false);
 
+  // Gemini Model State
+  const [geminiModels, setGeminiModels] = useState<string[]>([]);
+  const [geminiModelsLoading, setGeminiModelsLoading] = useState(false);
+  const [geminiModelsError, setGeminiModelsError] = useState<string | null>(
+    null,
+  );
+  const [checkingModel, setCheckingModel] = useState<string | null>(null); // Model currently being checked
+  const [modelStatuses, setModelStatuses] = useState<
+    Record<string, "working" | "error" | null>
+  >({});
+
+  const [isGeminiDropdownOpen, setIsGeminiDropdownOpen] = useState(false);
+  const geminiDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        geminiDropdownRef.current &&
+        !geminiDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsGeminiDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   useEffect(() => {
     loadConfig();
     loadModels();
@@ -57,7 +90,7 @@ export default function SettingsView() {
       "model-download-progress",
       (data: { model: string; progress: number }) => {
         setDownloadProgress(Math.round(data.progress));
-      }
+      },
     );
 
     EventsOn("model-download-complete", () => {
@@ -67,12 +100,58 @@ export default function SettingsView() {
     });
   }, []);
 
+  // Load Gemini models when config (and thus API key) is loaded
+  useEffect(() => {
+    if (config?.api_key_set) {
+      loadGeminiModels();
+    }
+  }, [config?.api_key_set]);
+
   const loadConfig = async () => {
     try {
       const cfg = await GetConfig();
       setConfig(cfg as Config);
     } catch (err) {
       console.error("Failed to load config:", err);
+    }
+  };
+
+  const loadGeminiModels = async () => {
+    setGeminiModelsLoading(true);
+    setGeminiModelsError(null);
+    try {
+      const models = await GetGeminiModels();
+      console.log("Loaded Gemini models:", models);
+      setGeminiModels(models || []);
+    } catch (err) {
+      console.error("Failed to load Gemini models:", err);
+      setGeminiModelsError("Failed to fetch models. Check your API key.");
+    } finally {
+      setGeminiModelsLoading(false);
+    }
+  };
+
+  const checkGeminiModelStatus = async (model: string) => {
+    setCheckingModel(model);
+    console.log(`Checking status for model: ${model}...`);
+    try {
+      await CheckGeminiModel(model);
+      console.log(`Model ${model} is WORKING.`);
+      setModelStatuses((prev) => ({ ...prev, [model]: "working" }));
+    } catch (err) {
+      console.error(`Model ${model} check FAILED:`, err);
+      setModelStatuses((prev) => ({ ...prev, [model]: "error" }));
+    } finally {
+      setCheckingModel(null);
+    }
+  };
+
+  const checkAllGeminiModels = async () => {
+    if (geminiModels.length === 0) return;
+
+    // Check one by one to avoid rate limits or overwhelming UI
+    for (const model of geminiModels) {
+      await checkGeminiModelStatus(model);
     }
   };
 
@@ -125,7 +204,7 @@ export default function SettingsView() {
     try {
       await SetHandsFreeHotkey(value);
       setConfig((prev) =>
-        prev ? { ...prev, hands_free_hotkey: value } : null
+        prev ? { ...prev, hands_free_hotkey: value } : null,
       );
       showSuccess("handsFree");
     } catch (err) {
@@ -140,7 +219,7 @@ export default function SettingsView() {
     try {
       await SetPushToTalkHotkey(value);
       setConfig((prev) =>
-        prev ? { ...prev, push_to_talk_hotkey: value } : null
+        prev ? { ...prev, push_to_talk_hotkey: value } : null,
       );
       showSuccess("ptt");
     } catch (err) {
@@ -155,11 +234,24 @@ export default function SettingsView() {
     try {
       await SetWhisperModel(modelName);
       setConfig((prev) =>
-        prev ? { ...prev, whisper_model: modelName } : null
+        prev ? { ...prev, whisper_model: modelName } : null,
       );
       showSuccess("model");
     } catch (err) {
       console.error("Failed to save model:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleGeminiModelSelect = async (modelName: string) => {
+    setSaving("gemini_model");
+    try {
+      await SetGeminiModel(modelName);
+      setConfig((prev) => (prev ? { ...prev, gemini_model: modelName } : null));
+      showSuccess("gemini_model");
+    } catch (err) {
+      console.error("Failed to save Gemini model:", err);
     } finally {
       setSaving(null);
     }
@@ -194,7 +286,7 @@ export default function SettingsView() {
 
   const openHotkeyModal = (
     field: "ptt" | "handsFree",
-    currentValue: string
+    currentValue: string,
   ) => {
     setActiveHotkeyField(field);
     setActiveHotkeyValue(currentValue);
@@ -219,10 +311,10 @@ export default function SettingsView() {
         p === "cmd"
           ? "⌘"
           : p === "shift"
-          ? "⇧"
-          : p === "opt" || p === "alt"
-          ? "⌥"
-          : p.toUpperCase()
+            ? "⇧"
+            : p === "opt" || p === "alt"
+              ? "⌥"
+              : p.toUpperCase(),
       )
       .join(" + ");
   };
@@ -311,7 +403,7 @@ export default function SettingsView() {
               Google AI Studio
             </a>
           </p>
-          <div className="flex gap-3">
+          <div className="flex gap-3 mb-6">
             <div className="relative flex-1">
               <input
                 type="password"
@@ -333,17 +425,138 @@ export default function SettingsView() {
             <button
               onClick={handleSaveApiKey}
               disabled={!apiKey.trim() || saving === "apiKey"}
-              title={apiKey.trim() ? "Save your Gemini API key" : "Enter an API key first"}
+              title={
+                apiKey.trim()
+                  ? "Save your Gemini API key"
+                  : "Enter an API key first"
+              }
               className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
                        text-white rounded-lg transition-colors"
             >
               {saving === "apiKey"
                 ? "Saving..."
                 : success === "apiKey"
-                ? "Saved!"
-                : "Save"}
+                  ? "Saved!"
+                  : "Save"}
             </button>
           </div>
+
+          {/* Gemini Models */}
+          {config.api_key_set && (
+            <div className="pt-6 border-t border-dark-700">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-medium text-dark-200">Gemini Model</h4>
+                <button
+                  onClick={checkAllGeminiModels}
+                  disabled={checkingModel !== null || geminiModelsLoading}
+                  className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                >
+                  {checkingModel ? "Checking models..." : "Check Models"}
+                </button>
+              </div>
+
+              {geminiModelsLoading ? (
+                <p className="text-sm text-dark-500">Loading models...</p>
+              ) : geminiModelsError ? (
+                <div className="text-sm text-red-400">
+                  {geminiModelsError}
+                  <button
+                    onClick={loadGeminiModels}
+                    className="ml-2 underline hover:text-red-300"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative" ref={geminiDropdownRef}>
+                    <button
+                      onClick={() =>
+                        !saving &&
+                        setIsGeminiDropdownOpen(!isGeminiDropdownOpen)
+                      }
+                      disabled={saving === "gemini_model"}
+                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                               text-dark-200 flex items-center justify-between
+                               focus:outline-none focus:ring-2 focus:ring-accent-600
+                               disabled:opacity-50 text-left"
+                    >
+                      <span>
+                        {config.gemini_model}
+                        {modelStatuses[config.gemini_model] === "working" && (
+                          <span className="text-idle ml-2 text-xs">
+                            ✓ Working
+                          </span>
+                        )}
+                        {modelStatuses[config.gemini_model] === "error" && (
+                          <span className="text-red-400 ml-2 text-xs">
+                            ✗ Error
+                          </span>
+                        )}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-dark-500 transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+
+                    {isGeminiDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        {geminiModels.map((model) => (
+                          <div
+                            key={model}
+                            onClick={() => {
+                              handleGeminiModelSelect(model);
+                              setIsGeminiDropdownOpen(false);
+                            }}
+                            className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                              config.gemini_model === model
+                                ? "bg-accent-600/10 text-accent-400"
+                                : "text-txt-primary hover:bg-tertiary"
+                            }`}
+                          >
+                            <span className="font-medium">{model}</span>
+
+                            <span className="text-xs">
+                              {checkingModel === model && (
+                                <span className="text-dark-500 animate-pulse">
+                                  Checking...
+                                </span>
+                              )}
+                              {!checkingModel &&
+                                modelStatuses[model] === "working" && (
+                                  <span className="text-idle font-medium">
+                                    ✓ Working
+                                  </span>
+                                )}
+                              {!checkingModel &&
+                                modelStatuses[model] === "error" && (
+                                  <span className="text-red-400 font-medium">
+                                    ✗ Not working
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-dark-500 mt-2">
+                    Select the Gemini model to use for transcription refinement.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Hotkeys */}

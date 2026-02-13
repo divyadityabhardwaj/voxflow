@@ -6,6 +6,10 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function CheckGeminiModel(arg1) {
+  return window['go']['main']['App']['CheckGeminiModel'](arg1);
+}
+
 export function ClearAllHistory() {
   return window['go']['main']['App']['ClearAllHistory']();
 }
@@ -40,6 +44,14 @@ export function GetAllModels() {
 
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
+}
+
+export function GetGeminiModel() {
+  return window['go']['main']['App']['GetGeminiModel']();
+}
+
+export function GetGeminiModels() {
+  return window['go']['main']['App']['GetGeminiModels']();
 }
 
 export function GetHistory(arg1) {
@@ -112,6 +124,10 @@ export function SearchHistory(arg1, arg2) {
 
 export function SetAPIKey(arg1) {
   return window['go']['main']['App']['SetAPIKey'](arg1);
+}
+
+export function SetGeminiModel(arg1) {
+  return window['go']['main']['App']['SetGeminiModel'](arg1);
 }
 
 export function SetHandsFreeHotkey(arg1) {

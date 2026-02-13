@@ -11,19 +11,24 @@ import (
 )
 
 const (
-	baseURL = "https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent"
+	baseAPIURL = "https://generativelanguage.googleapis.com/v1beta"
 )
 
 // Client handles communication with the Gemini API
 type Client struct {
 	apiKey     string
+	modelName  string
 	httpClient *http.Client
 }
 
 // NewClient creates a new Gemini client
-func NewClient(apiKey string) *Client {
+func NewClient(apiKey string, modelName string) *Client {
+	if modelName == "" {
+		modelName = "gemini-1.5-flash"
+	}
 	return &Client{
-		apiKey: apiKey,
+		apiKey:    apiKey,
+		modelName: modelName,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -33,6 +38,11 @@ func NewClient(apiKey string) *Client {
 // SetAPIKey updates the API key
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
+}
+
+// SetModel updates the model name
+func (c *Client) SetModel(modelName string) {
+	c.modelName = modelName
 }
 
 // Request represents a Gemini API request
@@ -114,7 +124,7 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 	}
 
 	// Build URL with API key
-	url := fmt.Sprintf("%s?key=%s", baseURL, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, c.modelName, c.apiKey)
 
 	// Make HTTP request
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
@@ -334,7 +344,7 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s?key=%s", baseURL, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, c.modelName, c.apiKey)
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
@@ -371,4 +381,118 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 	}
 
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+}
+
+// ModelListResponse represents the response from listing models
+type ModelListResponse struct {
+	Models []Model `json:"models"`
+}
+
+// Model represents a Gemini model
+type Model struct {
+	Name                       string   `json:"name"`
+	DisplayName                string   `json:"displayName"`
+	Description                string   `json:"description"`
+	InputTokenLimit            int      `json:"inputTokenLimit"`
+	OutputTokenLimit           int      `json:"outputTokenLimit"`
+	SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+}
+
+// ListModels returns a list of available Gemini models
+func (c *Client) ListModels() ([]string, error) {
+	if c.apiKey == "" {
+		return nil, fmt.Errorf("API key not set")
+	}
+
+	url := fmt.Sprintf("%s/models?key=%s", baseAPIURL, c.apiKey)
+
+	httpReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var listResp ModelListResponse
+	if err := json.Unmarshal(respBody, &listResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	var models []string
+	for _, m := range listResp.Models {
+		// Filter for models that support generateContent
+		isContentGen := false
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				isContentGen = true
+				break
+			}
+		}
+
+		// Only include base models (not tuned), starting with "models/gemini"
+		if isContentGen && strings.HasPrefix(m.Name, "models/gemini") {
+			// Strip "models/" prefix for cleaner display/usage
+			name := strings.TrimPrefix(m.Name, "models/")
+			models = append(models, name)
+		}
+	}
+
+	return models, nil
+}
+
+// CheckModel verifies if a model is working with the current API key
+func (c *Client) CheckModel(modelName string) error {
+	if c.apiKey == "" {
+		return fmt.Errorf("API key not set")
+	}
+
+	// Simple prompt to check if model responds
+	req := Request{
+		Contents: []Content{
+			{
+				Parts: []Part{
+					{Text: "Hello, just checking if you are working."},
+				},
+			},
+		},
+		GenerationConfig: GenerationConfig{
+			Temperature:     0.1,
+			MaxOutputTokens: 10,
+		},
+	}
+
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, modelName, c.apiKey)
+
+	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error: %s (status: %d)", string(respBody), resp.StatusCode)
+	}
+
+	return nil
 }

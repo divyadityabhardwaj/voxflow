@@ -21,6 +21,7 @@ type Config struct {
 	MaximizedY       int    `json:"maximized_y"`         // Saved Y position of maximized window
 	MaximizedW       int    `json:"maximized_w"`         // Saved width of maximized window
 	MaximizedH       int    `json:"maximized_h"`         // Saved height of maximized window
+	GeminiModel      string `json:"gemini_model"`        // Saved Gemini model to use
 	mu               sync.RWMutex
 }
 
@@ -105,6 +106,9 @@ func (c *Config) Load() error {
 	}
 	if c.Mode == "" {
 		c.Mode = "casual"
+	}
+	if c.GeminiModel == "" {
+		c.GeminiModel = "gemini-1.5-flash"
 	}
 
 	// Check environment variable first for API key
@@ -267,4 +271,21 @@ func (c *Config) SetMaximizedWindowSize(w, h int) {
 	defer c.mu.Unlock()
 	c.MaximizedW = w
 	c.MaximizedH = h
+}
+
+// GetGeminiModel returns the configured Gemini model
+func (c *Config) GetGeminiModel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.GeminiModel == "" {
+		return "gemini-1.5-flash"
+	}
+	return c.GeminiModel
+}
+
+// SetGeminiModel sets the configured Gemini model
+func (c *Config) SetGeminiModel(model string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.GeminiModel = model
 }

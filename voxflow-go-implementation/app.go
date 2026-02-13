@@ -45,9 +45,31 @@ func NewApp() *App {
 		isMiniMode:     true, // Start in mini mode (floating indicator)
 		audioRecorder:  audio.NewRecorder(),
 		whisperService: whisper.NewService(),
-		geminiClient:   gemini.NewClient(cfg.GetGeminiAPIKey()),
+		geminiClient:   gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
 	}
 	return app
+}
+
+// SetGeminiModel sets the Gemini model
+func (a *App) SetGeminiModel(model string) error {
+	a.config.SetGeminiModel(model)
+	a.geminiClient.SetModel(model)
+	return a.config.Save()
+}
+
+// GetGeminiModel returns the current Gemini model
+func (a *App) GetGeminiModel() string {
+	return a.config.GetGeminiModel()
+}
+
+// GetGeminiModels returns all available Gemini models
+func (a *App) GetGeminiModels() ([]string, error) {
+	return a.geminiClient.ListModels()
+}
+
+// CheckGeminiModel checks if a Gemini model is working
+func (a *App) CheckGeminiModel(model string) error {
+	return a.geminiClient.CheckModel(model)
 }
 
 // startup is called when the app starts
@@ -624,6 +646,7 @@ func (a *App) GetConfig() map[string]interface{} {
 		"hands_free_hotkey":   a.config.GetHandsFreeHotkey(),
 		"push_to_talk_hotkey": a.config.GetPushToTalkHotkey(),
 		"whisper_model":       a.config.GetWhisperModel(),
+		"gemini_model":        a.config.GetGeminiModel(),
 		"mode":                a.config.GetMode(),
 		"api_key_set":         a.config.GetGeminiAPIKey() != "",
 	}

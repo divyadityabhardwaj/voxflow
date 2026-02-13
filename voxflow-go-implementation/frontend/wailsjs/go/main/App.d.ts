@@ -5,6 +5,8 @@ import {history} from '../models';
 
 export function CancelDownload():Promise<void>;
 
+export function CheckGeminiModel(arg1:string):Promise<void>;
+
 export function ClearAllHistory():Promise<void>;
 
 export function CopyToClipboard(arg1:string):Promise<void>;
@@ -22,6 +24,10 @@ export function EnsureWhisperCLI():Promise<void>;
 export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 
 export function GetConfig():Promise<Record<string, any>>;
+
+export function GetGeminiModel():Promise<string>;
+
+export function GetGeminiModels():Promise<Array<string>>;
 
 export function GetHistory(arg1:number):Promise<Array<history.Transcript>>;
 
@@ -58,6 +64,8 @@ export function RetryWithGemini(arg1:number,arg2:string):Promise<string>;
 export function SearchHistory(arg1:string,arg2:number):Promise<Array<history.Transcript>>;
 
 export function SetAPIKey(arg1:string):Promise<void>;
+
+export function SetGeminiModel(arg1:string):Promise<void>;
 
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
