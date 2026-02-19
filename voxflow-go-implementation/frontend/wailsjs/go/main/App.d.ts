@@ -5,7 +5,9 @@ import {history} from '../models';
 
 export function CancelDownload():Promise<void>;
 
-export function CheckGeminiModel(arg1:string):Promise<void>;
+export function CheckGeminiModel(arg1:string):Promise<number>;
+
+export function CheckOpenRouterModel(arg1:string):Promise<number>;
 
 export function ClearAllHistory():Promise<void>;
 
@@ -30,6 +32,14 @@ export function GetGeminiModel():Promise<string>;
 export function GetGeminiModels():Promise<Array<string>>;
 
 export function GetHistory(arg1:number):Promise<Array<history.Transcript>>;
+
+export function GetLLMProvider():Promise<string>;
+
+export function GetOpenRouterModel():Promise<string>;
+
+export function GetOpenRouterModelDescriptions():Promise<Record<string, string>>;
+
+export function GetOpenRouterModels():Promise<Array<string>>;
 
 export function GetStatus():Promise<string>;
 
@@ -71,7 +81,13 @@ export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
 export function SetHotkey(arg1:string):Promise<void>;
 
+export function SetLLMProvider(arg1:string):Promise<void>;
+
 export function SetMode(arg1:string):Promise<void>;
+
+export function SetOpenRouterAPIKey(arg1:string):Promise<void>;
+
+export function SetOpenRouterModel(arg1:string):Promise<void>;
 
 export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 

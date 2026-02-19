@@ -10,6 +10,7 @@ import (
 // Config holds the application configuration
 type Config struct {
 	GeminiAPIKey     string `json:"gemini_api_key"`
+	OpenRouterAPIKey string `json:"openrouter_api_key"`
 	HandsFreeHotkey  string `json:"hands_free_hotkey"`   // e.g., "cmd+shift+space"
 	PushToTalkHotkey string `json:"push_to_talk_hotkey"` // e.g., "cmd+shift+p"
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
@@ -22,6 +23,8 @@ type Config struct {
 	MaximizedW       int    `json:"maximized_w"`         // Saved width of maximized window
 	MaximizedH       int    `json:"maximized_h"`         // Saved height of maximized window
 	GeminiModel      string `json:"gemini_model"`        // Saved Gemini model to use
+	LLMProvider      string `json:"llm_provider"`        // "gemini" or "openrouter"
+	OpenRouterModel  string `json:"openrouter_model"`    // Saved OpenRouter model to use
 	mu               sync.RWMutex
 }
 
@@ -110,10 +113,19 @@ func (c *Config) Load() error {
 	if c.GeminiModel == "" {
 		c.GeminiModel = "gemini-1.5-flash"
 	}
+	if c.LLMProvider == "" {
+		c.LLMProvider = "gemini"
+	}
+	if c.OpenRouterModel == "" {
+		c.OpenRouterModel = "qwen/qwen3-235b-a22b:free"
+	}
 
 	// Check environment variable first for API key
 	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
 		c.GeminiAPIKey = apiKey
+	}
+	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" {
+		c.OpenRouterAPIKey = apiKey
 	}
 
 	return nil
@@ -288,4 +300,55 @@ func (c *Config) SetGeminiModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.GeminiModel = model
+}
+
+// GetOpenRouterAPIKey returns the OpenRouter API key
+func (c *Config) GetOpenRouterAPIKey() string {
+	if envKey := os.Getenv("OPENROUTER_API_KEY"); envKey != "" {
+		return envKey
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.OpenRouterAPIKey
+}
+
+// SetOpenRouterAPIKey sets the OpenRouter API key
+func (c *Config) SetOpenRouterAPIKey(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.OpenRouterAPIKey = key
+}
+
+// GetLLMProvider returns the LLM provider (gemini or openrouter)
+func (c *Config) GetLLMProvider() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.LLMProvider == "" {
+		return "gemini" // Default to Gemini
+	}
+	return c.LLMProvider
+}
+
+// SetLLMProvider sets the LLM provider
+func (c *Config) SetLLMProvider(provider string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.LLMProvider = provider
+}
+
+// GetOpenRouterModel returns the configured OpenRouter model
+func (c *Config) GetOpenRouterModel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.OpenRouterModel == "" {
+		return "qwen/qwen3-235b-a22b:free" // Default to Qwen
+	}
+	return c.OpenRouterModel
+}
+
+// SetOpenRouterModel sets the OpenRouter model
+func (c *Config) SetOpenRouterModel(model string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.OpenRouterModel = model
 }

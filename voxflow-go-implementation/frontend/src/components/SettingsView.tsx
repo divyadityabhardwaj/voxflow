@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   GetConfig,
   SetAPIKey,
+  SetOpenRouterAPIKey,
   SetHotkey,
   SetHandsFreeHotkey,
   SetPushToTalkHotkey,
@@ -15,6 +16,10 @@ import {
   GetGeminiModels,
   SetGeminiModel,
   CheckGeminiModel,
+  GetOpenRouterModels,
+  SetLLMProvider,
+  SetOpenRouterModel,
+  CheckOpenRouterModel,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -29,6 +34,9 @@ interface Config {
   gemini_model: string;
   mode: string;
   api_key_set: boolean;
+  llm_provider: string;
+  openrouter_model: string;
+  openrouter_api_key_set: boolean;
 }
 
 interface ModelInfo {
@@ -39,12 +47,19 @@ interface ModelInfo {
   file_path: string;
 }
 
+interface ModelStatus {
+  latency?: number;
+  working?: boolean;
+  checking?: boolean;
+}
+
 export default function SettingsView() {
   const [config, setConfig] = useState<Config | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
+  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -57,13 +72,24 @@ export default function SettingsView() {
   const [geminiModelsError, setGeminiModelsError] = useState<string | null>(
     null,
   );
-  const [checkingModel, setCheckingModel] = useState<string | null>(null); // Model currently being checked
+
+  // OpenRouter Model State
+  const [openRouterModels, setOpenRouterModels] = useState<string[]>([]);
+  const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
+
+  // Model status (latency for each model)
   const [modelStatuses, setModelStatuses] = useState<
-    Record<string, "working" | "error" | null>
+    Record<string, ModelStatus>
   >({});
 
+  const [checkingAllModels, setCheckingAllModels] = useState(false);
+
+  const [checkingModel, setCheckingModel] = useState<string | null>(null);
+
   const [isGeminiDropdownOpen, setIsGeminiDropdownOpen] = useState(false);
+  const [isOpenRouterDropdownOpen, setIsOpenRouterDropdownOpen] = useState(false);
   const geminiDropdownRef = useRef<HTMLDivElement>(null);
+  const openRouterDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -72,6 +98,12 @@ export default function SettingsView() {
         !geminiDropdownRef.current.contains(event.target as Node)
       ) {
         setIsGeminiDropdownOpen(false);
+      }
+      if (
+        openRouterDropdownRef.current &&
+        !openRouterDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpenRouterDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -107,6 +139,11 @@ export default function SettingsView() {
     }
   }, [config?.api_key_set]);
 
+  // Load OpenRouter models on mount
+  useEffect(() => {
+    loadOpenRouterModels();
+  }, []);
+
   const loadConfig = async () => {
     try {
       const cfg = await GetConfig();
@@ -131,28 +168,89 @@ export default function SettingsView() {
     }
   };
 
+  const loadOpenRouterModels = async () => {
+    setOpenRouterModelsLoading(true);
+    try {
+      const models = await GetOpenRouterModels();
+      console.log("Loaded OpenRouter models:", models);
+      setOpenRouterModels(models || []);
+    } catch (err) {
+      console.error("Failed to load OpenRouter models:", err);
+    } finally {
+      setOpenRouterModelsLoading(false);
+    }
+  };
+
   const checkGeminiModelStatus = async (model: string) => {
     setCheckingModel(model);
-    console.log(`Checking status for model: ${model}...`);
+    setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
+    console.log(`Checking status for Gemini model: ${model}...`);
+    
+    const startTime = Date.now();
+    
     try {
       await CheckGeminiModel(model);
-      console.log(`Model ${model} is WORKING.`);
-      setModelStatuses((prev) => ({ ...prev, [model]: "working" }));
+      const latencyMs = Date.now() - startTime;
+      console.log(`Model ${model} is WORKING (${latencyMs}ms).`);
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: true, latency: latencyMs },
+      }));
     } catch (err) {
       console.error(`Model ${model} check FAILED:`, err);
-      setModelStatuses((prev) => ({ ...prev, [model]: "error" }));
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: false },
+      }));
     } finally {
       setCheckingModel(null);
     }
   };
 
-  const checkAllGeminiModels = async () => {
-    if (geminiModels.length === 0) return;
-
-    // Check one by one to avoid rate limits or overwhelming UI
-    for (const model of geminiModels) {
-      await checkGeminiModelStatus(model);
+  const checkOpenRouterModelStatus = async (model: string) => {
+    setCheckingModel(model);
+    setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
+    console.log(`Checking status for OpenRouter model: ${model}...`);
+    
+    const startTime = Date.now();
+    
+    try {
+      await CheckOpenRouterModel(model);
+      const latencyMs = Date.now() - startTime;
+      console.log(`Model ${model} is WORKING (${latencyMs}ms).`);
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: true, latency: latencyMs },
+      }));
+    } catch (err) {
+      console.error(`Model ${model} check FAILED:`, err);
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: false },
+      }));
+    } finally {
+      setCheckingModel(null);
     }
+  };
+
+  const checkAllModels = async () => {
+    const provider = config?.llm_provider || "gemini";
+    const models = provider === "openrouter" ? openRouterModels : geminiModels;
+    
+    if (models.length === 0) return;
+
+    setCheckingAllModels(true);
+    
+    // Check models sequentially to avoid rate limits
+    for (const model of models) {
+      if (provider === "openrouter") {
+        await checkOpenRouterModelStatus(model);
+      } else {
+        await checkGeminiModelStatus(model);
+      }
+    }
+    
+    setCheckingAllModels(false);
   };
 
   const loadModels = async () => {
@@ -194,6 +292,51 @@ export default function SettingsView() {
       showSuccess("apiKey");
     } catch (err) {
       console.error("Failed to save API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveOpenRouterApiKey = async () => {
+    if (!openRouterApiKey.trim()) return;
+    setSaving("openRouterApiKey");
+    try {
+      await SetOpenRouterAPIKey(openRouterApiKey);
+      setConfig((prev) =>
+        prev ? { ...prev, openrouter_api_key_set: true } : null,
+      );
+      setOpenRouterApiKey("");
+      showSuccess("openRouterApiKey");
+    } catch (err) {
+      console.error("Failed to save OpenRouter API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleLLMProviderChange = async (provider: string) => {
+    setSaving("llmProvider");
+    try {
+      await SetLLMProvider(provider);
+      setConfig((prev) => (prev ? { ...prev, llm_provider: provider } : null));
+      showSuccess("llmProvider");
+    } catch (err) {
+      console.error("Failed to save LLM provider:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleOpenRouterModelSelect = async (modelName: string) => {
+    setSaving("openrouter_model");
+    try {
+      await SetOpenRouterModel(modelName);
+      setConfig((prev) =>
+        prev ? { ...prev, openrouter_model: modelName } : null,
+      );
+      showSuccess("openrouter_model");
+    } catch (err) {
+      console.error("Failed to save OpenRouter model:", err);
     } finally {
       setSaving(null);
     }
@@ -387,174 +530,307 @@ export default function SettingsView() {
           </section>
         )}
 
-        {/* API Key */}
+        {/* LLM Provider Selection */}
         <section className="card p-6">
           <h3 className="font-serif text-lg font-medium text-primary mb-4">
-            Gemini API Key
+            LLM Provider
           </h3>
           <p className="text-sm text-dark-500 mb-4">
-            Get your API key from{" "}
-            <a
-              href="https://makersuite.google.com/app/apikey"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent-400 hover:underline"
-            >
-              Google AI Studio
-            </a>
+            Choose which LLM provider to use for text refinement.
           </p>
-          <div className="flex gap-3 mb-6">
-            <div className="relative flex-1">
-              <input
-                type="password"
-                placeholder={
-                  config.api_key_set ? "••••••••••••••••" : "Enter your API key"
-                }
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                         text-dark-200 placeholder-dark-500
-                         focus:outline-none focus:ring-2 focus:ring-accent-600"
-              />
-              {config.api_key_set && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
-                  ✓ Set
-                </span>
-              )}
-            </div>
+
+          {/* Provider Selector */}
+          <div className="flex gap-4 mb-6">
             <button
-              onClick={handleSaveApiKey}
-              disabled={!apiKey.trim() || saving === "apiKey"}
-              title={
-                apiKey.trim()
-                  ? "Save your Gemini API key"
-                  : "Enter an API key first"
-              }
-              className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
-                       text-white rounded-lg transition-colors"
+              onClick={() => handleLLMProviderChange("gemini")}
+              disabled={saving === "llmProvider"}
+              className={`flex-1 p-4 rounded-lg border transition-colors ${
+                (config.llm_provider === "gemini" || !config.llm_provider)
+                  ? "bg-accent-600/10 border-accent-600"
+                  : "border-dark-800 hover:bg-dark-800"
+              }`}
             >
-              {saving === "apiKey"
-                ? "Saving..."
-                : success === "apiKey"
-                  ? "Saved!"
-                  : "Save"}
+              <p className="font-medium text-dark-200">Gemini</p>
+              <p className="text-sm text-dark-500 mt-1">Google's fast & capable model</p>
+            </button>
+            <button
+              onClick={() => handleLLMProviderChange("openrouter")}
+              disabled={saving === "llmProvider"}
+              className={`flex-1 p-4 rounded-lg border transition-colors ${
+                config.llm_provider === "openrouter"
+                  ? "bg-accent-600/10 border-accent-600"
+                  : "border-dark-800 hover:bg-dark-800"
+              }`}
+            >
+              <p className="font-medium text-dark-200">OpenRouter</p>
+              <p className="text-sm text-dark-500 mt-1">Free open-source models</p>
             </button>
           </div>
 
-          {/* Gemini Models */}
-          {config.api_key_set && (
+          {/* Gemini API Key Section */}
+          {(config.llm_provider === "gemini" || !config.llm_provider) && (
             <div className="pt-6 border-t border-dark-700">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="font-medium text-dark-200">Gemini Model</h4>
-                <button
-                  onClick={checkAllGeminiModels}
-                  disabled={checkingModel !== null || geminiModelsLoading}
-                  className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
+              <h4 className="font-medium text-dark-200 mb-4">Gemini API Key</h4>
+              <p className="text-sm text-dark-500 mb-4">
+                Get your API key from{" "}
+                <a
+                  href="https://makersuite.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-400 hover:underline"
                 >
-                  {checkingModel ? "Checking models..." : "Check Models"}
+                  Google AI Studio
+                </a>
+              </p>
+              <div className="flex gap-3 mb-6">
+                <div className="relative flex-1">
+                  <input
+                    type="password"
+                    placeholder={
+                      config.api_key_set ? "••••••••••••••••" : "Enter your API key"
+                    }
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                             text-dark-200 placeholder-dark-500
+                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                  />
+                  {config.api_key_set && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                      ✓ Set
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleSaveApiKey}
+                  disabled={!apiKey.trim() || saving === "apiKey"}
+                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
+                           text-white rounded-lg transition-colors"
+                >
+                  {saving === "apiKey" ? "Saving..." : success === "apiKey" ? "Saved!" : "Save"}
                 </button>
               </div>
 
-              {geminiModelsLoading ? (
-                <p className="text-sm text-dark-500">Loading models...</p>
-              ) : geminiModelsError ? (
-                <div className="text-sm text-red-400">
-                  {geminiModelsError}
-                  <button
-                    onClick={loadGeminiModels}
-                    className="ml-2 underline hover:text-red-300"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="relative" ref={geminiDropdownRef}>
+              {/* Gemini Models */}
+              {config.api_key_set && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-medium text-dark-200">Gemini Model</h4>
                     <button
-                      onClick={() =>
-                        !saving &&
-                        setIsGeminiDropdownOpen(!isGeminiDropdownOpen)
-                      }
-                      disabled={saving === "gemini_model"}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                               text-dark-200 flex items-center justify-between
-                               focus:outline-none focus:ring-2 focus:ring-accent-600
-                               disabled:opacity-50 text-left"
+                      onClick={checkAllModels}
+                      disabled={checkingAllModels || geminiModelsLoading}
+                      className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
                     >
-                      <span>
-                        {config.gemini_model}
-                        {modelStatuses[config.gemini_model] === "working" && (
-                          <span className="text-idle ml-2 text-xs">
-                            ✓ Working
-                          </span>
-                        )}
-                        {modelStatuses[config.gemini_model] === "error" && (
-                          <span className="text-red-400 ml-2 text-xs">
-                            ✗ Error
-                          </span>
-                        )}
-                      </span>
-                      <svg
-                        className={`w-4 h-4 text-dark-500 transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
+                      {checkingAllModels ? "Checking models..." : "Check Models (with latency)"}
                     </button>
-
-                    {isGeminiDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                        {geminiModels.map((model) => (
-                          <div
-                            key={model}
-                            onClick={() => {
-                              handleGeminiModelSelect(model);
-                              setIsGeminiDropdownOpen(false);
-                            }}
-                            className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
-                              config.gemini_model === model
-                                ? "bg-accent-600/10 text-accent-400"
-                                : "text-txt-primary hover:bg-tertiary"
-                            }`}
-                          >
-                            <span className="font-medium">{model}</span>
-
-                            <span className="text-xs">
-                              {checkingModel === model && (
-                                <span className="text-dark-500 animate-pulse">
-                                  Checking...
-                                </span>
-                              )}
-                              {!checkingModel &&
-                                modelStatuses[model] === "working" && (
-                                  <span className="text-idle font-medium">
-                                    ✓ Working
-                                  </span>
-                                )}
-                              {!checkingModel &&
-                                modelStatuses[model] === "error" && (
-                                  <span className="text-red-400 font-medium">
-                                    ✗ Not working
-                                  </span>
-                                )}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                  <p className="text-xs text-dark-500 mt-2">
-                    Select the Gemini model to use for transcription refinement.
-                  </p>
+
+                  {geminiModelsLoading ? (
+                    <p className="text-sm text-dark-500">Loading models...</p>
+                  ) : geminiModelsError ? (
+                    <div className="text-sm text-red-400">
+                      {geminiModelsError}
+                      <button onClick={loadGeminiModels} className="ml-2 underline hover:text-red-300">
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative" ref={geminiDropdownRef}>
+                        <button
+                          onClick={() => !saving && setIsGeminiDropdownOpen(!isGeminiDropdownOpen)}
+                          disabled={saving === "gemini_model"}
+                          className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                                   text-dark-200 flex items-center justify-between
+                                   focus:outline-none focus:ring-2 focus:ring-accent-600
+                                   disabled:opacity-50 text-left"
+                        >
+                          <span>
+                            {config.gemini_model}
+                            {modelStatuses[config.gemini_model]?.working && (
+                              <span className="text-idle ml-2 text-xs">
+                                ✓ {modelStatuses[config.gemini_model]?.latency}ms
+                              </span>
+                            )}
+                            {modelStatuses[config.gemini_model]?.working === false && (
+                              <span className="text-red-400 ml-2 text-xs">✗ Error</span>
+                            )}
+                          </span>
+                          <svg className={`w-4 h-4 text-dark-500 transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+
+                        {isGeminiDropdownOpen && (
+                          <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                            {geminiModels.map((model) => (
+                              <div
+                                key={model}
+                                onClick={() => {
+                                  handleGeminiModelSelect(model);
+                                  setIsGeminiDropdownOpen(false);
+                                }}
+                                className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                                  config.gemini_model === model
+                                    ? "bg-accent-600/10 text-accent-400"
+                                    : "text-txt-primary hover:bg-tertiary"
+                                }`}
+                              >
+                                <span className="font-medium">{model}</span>
+                                <span className="text-xs">
+                                  {checkingModel === model && (
+                                    <span className="text-dark-500 animate-pulse">Checking...</span>
+                                  )}
+                                  {!checkingModel && modelStatuses[model]?.working && (
+                                    <span className="text-idle font-medium">
+                                      ✓ {modelStatuses[model]?.latency}ms
+                                    </span>
+                                  )}
+                                  {!checkingModel && modelStatuses[model]?.working === false && (
+                                    <span className="text-red-400 font-medium">✗ Error</span>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-dark-500 mt-2">
+                        Select the Gemini model to use for transcription refinement.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* OpenRouter Section */}
+          {config.llm_provider === "openrouter" && (
+            <div className="pt-6 border-t border-dark-700">
+              <h4 className="font-medium text-dark-200 mb-4">OpenRouter API Key</h4>
+              <p className="text-sm text-dark-500 mb-4">
+                Get your API key from{" "}
+                <a
+                  href="https://openrouter.ai/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-400 hover:underline"
+                >
+                  OpenRouter Settings
+                </a>
+              </p>
+              <div className="flex gap-3 mb-6">
+                <div className="relative flex-1">
+                  <input
+                    type="password"
+                    placeholder={
+                      config.openrouter_api_key_set ? "••••••••••••••••" : "Enter your OpenRouter API key"
+                    }
+                    value={openRouterApiKey}
+                    onChange={(e) => setOpenRouterApiKey(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                             text-dark-200 placeholder-dark-500
+                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                  />
+                  {config.openrouter_api_key_set && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                      ✓ Set
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleSaveOpenRouterApiKey}
+                  disabled={!openRouterApiKey.trim() || saving === "openRouterApiKey"}
+                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
+                           text-white rounded-lg transition-colors"
+                >
+                  {saving === "openRouterApiKey" ? "Saving..." : success === "openRouterApiKey" ? "Saved!" : "Save"}
+                </button>
+              </div>
+
+              {/* OpenRouter Models */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-dark-200">OpenRouter Free Models</h4>
+                  <button
+                    onClick={checkAllModels}
+                    disabled={checkingAllModels || openRouterModelsLoading}
+                    className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                  >
+                    {checkingAllModels ? "Checking models..." : "Check Models (with latency)"}
+                  </button>
+                </div>
+
+                {openRouterModelsLoading ? (
+                  <p className="text-sm text-dark-500">Loading models...</p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative" ref={openRouterDropdownRef}>
+                      <button
+                        onClick={() => !saving && setIsOpenRouterDropdownOpen(!isOpenRouterDropdownOpen)}
+                        disabled={saving === "openrouter_model"}
+                        className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                                 text-dark-200 flex items-center justify-between
+                                 focus:outline-none focus:ring-2 focus:ring-accent-600
+                                 disabled:opacity-50 text-left"
+                      >
+                        <span>
+                          {config.openrouter_model}
+                          {modelStatuses[config.openrouter_model]?.working && (
+                            <span className="text-idle ml-2 text-xs">
+                              ✓ {modelStatuses[config.openrouter_model]?.latency}ms
+                            </span>
+                          )}
+                          {modelStatuses[config.openrouter_model]?.working === false && (
+                            <span className="text-red-400 ml-2 text-xs">✗ Error</span>
+                          )}
+                        </span>
+                        <svg className={`w-4 h-4 text-dark-500 transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {isOpenRouterDropdownOpen && (
+                        <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          {openRouterModels.map((model) => (
+                            <div
+                              key={model}
+                              onClick={() => {
+                                handleOpenRouterModelSelect(model);
+                                setIsOpenRouterDropdownOpen(false);
+                              }}
+                              className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                                config.openrouter_model === model
+                                  ? "bg-accent-600/10 text-accent-400"
+                                  : "text-txt-primary hover:bg-tertiary"
+                              }`}
+                            >
+                              <span className="font-medium text-sm">{model.split("/")[1]?.split(":")[0]}</span>
+                              <span className="text-xs">
+                                {checkingModel === model && (
+                                  <span className="text-dark-500 animate-pulse">Checking...</span>
+                                )}
+                                {!checkingModel && modelStatuses[model]?.working && (
+                                  <span className="text-idle font-medium">
+                                    ✓ {modelStatuses[model]?.latency}ms
+                                  </span>
+                                )}
+                                {!checkingModel && modelStatuses[model]?.working === false && (
+                                  <span className="text-red-400 font-medium">✗ Error</span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-dark-500 mt-2">
+                      Select a free OpenRouter model. Click "Check Models" to test latency.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </section>

@@ -12,6 +12,7 @@ import (
 	"voxflow/internal/history"
 	"voxflow/internal/hotkey"
 	"voxflow/internal/injection"
+	"voxflow/internal/openrouter"
 	"voxflow/internal/whisper"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -26,6 +27,7 @@ type App struct {
 	audioRecorder           *audio.Recorder
 	whisperService          *whisper.Service
 	geminiClient            *gemini.Client
+	openRouterClient        *openrouter.Client
 	historyService          *history.Service
 	injectionService        *injection.Service
 	modelReady              bool
@@ -40,12 +42,13 @@ type App struct {
 func NewApp() *App {
 	cfg := config.GetInstance()
 	app := &App{
-		config:         cfg,
-		state:          hotkey.StateIdle,
-		isMiniMode:     true, // Start in mini mode (floating indicator)
-		audioRecorder:  audio.NewRecorder(),
-		whisperService: whisper.NewService(),
-		geminiClient:   gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
+		config:           cfg,
+		state:            hotkey.StateIdle,
+		isMiniMode:       true, // Start in mini mode (floating indicator)
+		audioRecorder:    audio.NewRecorder(),
+		whisperService:   whisper.NewService(),
+		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
+		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
 	}
 	return app
 }
@@ -67,9 +70,53 @@ func (a *App) GetGeminiModels() ([]string, error) {
 	return a.geminiClient.ListModels()
 }
 
-// CheckGeminiModel checks if a Gemini model is working
-func (a *App) CheckGeminiModel(model string) error {
+// CheckGeminiModel tests a Gemini model and returns latency in milliseconds
+func (a *App) CheckGeminiModel(model string) (int64, error) {
 	return a.geminiClient.CheckModel(model)
+}
+
+// GetOpenRouterModels returns all available free OpenRouter models
+func (a *App) GetOpenRouterModels() ([]string, error) {
+	return a.openRouterClient.GetFreeModels()
+}
+
+// GetOpenRouterModelDescriptions returns descriptions for all OpenRouter models
+func (a *App) GetOpenRouterModelDescriptions() map[string]string {
+	return openrouter.ModelDescriptions
+}
+
+// CheckOpenRouterModel tests an OpenRouter model and returns latency in milliseconds
+func (a *App) CheckOpenRouterModel(model string) (int64, error) {
+	return a.openRouterClient.CheckModel(model)
+}
+
+// SetOpenRouterAPIKey sets the OpenRouter API key
+func (a *App) SetOpenRouterAPIKey(key string) error {
+	a.config.SetOpenRouterAPIKey(key)
+	a.openRouterClient.SetAPIKey(key)
+	return a.config.Save()
+}
+
+// SetLLMProvider sets the LLM provider (gemini or openrouter)
+func (a *App) SetLLMProvider(provider string) error {
+	a.config.SetLLMProvider(provider)
+	return a.config.Save()
+}
+
+// GetLLMProvider returns the current LLM provider
+func (a *App) GetLLMProvider() string {
+	return a.config.GetLLMProvider()
+}
+
+// SetOpenRouterModel sets the OpenRouter model
+func (a *App) SetOpenRouterModel(model string) error {
+	a.config.SetOpenRouterModel(model)
+	return a.config.Save()
+}
+
+// GetOpenRouterModel returns the current OpenRouter model
+func (a *App) GetOpenRouterModel() string {
+	return a.config.GetOpenRouterModel()
 }
 
 // startup is called when the app starts
@@ -528,14 +575,26 @@ func (a *App) processRecording() {
 		return
 	}
 
-	// Refine with Gemini - DO NOT fall back to raw text on error
+	// Refine with Gemini or OpenRouter - based on provider setting
 	mode := a.config.GetMode()
-	geminiStart := time.Now()
-	polishedText, err := a.geminiClient.RefineText(rawText, mode)
-	geminiDuration := time.Since(geminiStart)
+	llmProvider := a.config.GetLLMProvider()
+
+	var polishedText string
+	var llmDuration time.Duration
+	var llmStart time.Time
+
+	if llmProvider == "openrouter" {
+		llmStart = time.Now()
+		polishedText, err = a.openRouterClient.RefineText(rawText, a.config.GetOpenRouterModel(), mode)
+		llmDuration = time.Since(llmStart)
+	} else {
+		llmStart = time.Now()
+		polishedText, err = a.geminiClient.RefineText(rawText, mode)
+		llmDuration = time.Since(llmStart)
+	}
 
 	if err != nil {
-		a.emitToast("Gemini error: "+err.Error(), "error")
+		a.emitToast(llmProvider+" error: "+err.Error(), "error")
 		a.resetToIdle()
 		return
 	}
@@ -565,15 +624,20 @@ func (a *App) processRecording() {
 	totalProcessingTime := time.Since(processingStartTime)
 
 	// Create formatted output string
+	llmName := "Gemini"
+	if llmProvider == "openrouter" {
+		llmName = "OpenRouter"
+	}
 	output := fmt.Sprintf(
 		"\nProcessing Complete:\n"+
 			"Audio captured:        %.2fs\n"+
 			"Whisper transcription: %.2fs\n"+
-			"Gemini refinement:     %.2fs\n"+
+			"%s refinement:     %.2fs\n"+
 			"Total processing:      %.2fs\n",
 		audioDuration.Seconds(),
 		whisperDuration.Seconds(),
-		geminiDuration.Seconds(),
+		llmName,
+		llmDuration.Seconds(),
 		totalProcessingTime.Seconds(),
 	)
 	fmt.Println(output)
@@ -588,7 +652,7 @@ func (a *App) processRecording() {
 		"details": map[string]float64{
 			"audio":   audioDuration.Seconds(),
 			"whisper": whisperDuration.Seconds(),
-			"gemini":  geminiDuration.Seconds(),
+			"llm":     llmDuration.Seconds(),
 		},
 	})
 }
@@ -642,13 +706,16 @@ func (a *App) ToggleRecording() string {
 // GetConfig returns the current configuration
 func (a *App) GetConfig() map[string]interface{} {
 	return map[string]interface{}{
-		"hotkey":              a.config.GetHotkey(),
-		"hands_free_hotkey":   a.config.GetHandsFreeHotkey(),
-		"push_to_talk_hotkey": a.config.GetPushToTalkHotkey(),
-		"whisper_model":       a.config.GetWhisperModel(),
-		"gemini_model":        a.config.GetGeminiModel(),
-		"mode":                a.config.GetMode(),
-		"api_key_set":         a.config.GetGeminiAPIKey() != "",
+		"hotkey":                 a.config.GetHotkey(),
+		"hands_free_hotkey":      a.config.GetHandsFreeHotkey(),
+		"push_to_talk_hotkey":    a.config.GetPushToTalkHotkey(),
+		"whisper_model":          a.config.GetWhisperModel(),
+		"gemini_model":           a.config.GetGeminiModel(),
+		"mode":                   a.config.GetMode(),
+		"api_key_set":            a.config.GetGeminiAPIKey() != "",
+		"llm_provider":           a.config.GetLLMProvider(),
+		"openrouter_model":       a.config.GetOpenRouterModel(),
+		"openrouter_api_key_set": a.config.GetOpenRouterAPIKey() != "",
 	}
 }
 

@@ -449,50 +449,95 @@ func (c *Client) ListModels() ([]string, error) {
 	return models, nil
 }
 
-// CheckModel verifies if a model is working with the current API key
-func (c *Client) CheckModel(modelName string) error {
+// LatencyTestText is a sample transcription for testing model latency
+const LatencyTestText = `um hello uh so i was thinking about the project right and like i mean we need to get things done you know
+okay so here's the thing uh basically we have three main points first uh the budget right
+two the timeline and three the resources basically
+um so uh let's start with the budget right so basically we're looking at around maybe like five thousand dollars
+but you know i mean that could change depending on what we need right
+uh second point uh timeline i think we should aim for like three months you know
+but actually let me think about that again i mean it might take longer
+um and third resources um we need like two developers and one designer right
+okay so that's the basic plan um oh wait i forgot to mention one more thing
+uh the client wants it done by end of quarter right so basically that's like two months
+you know i mean it's tight but doable right
+um let me go back to the first point about budget actually
+uh we might need extra for testing you know what i mean
+so like maybe six thousand would be safer i think
+okay next let's talk about timeline period
+if we start next week we can finish by july fifteenth
+that's like eight weeks right
+but there might be delays you know
+um what about the second point again oh timeline right
+uh we should build in some buffer time like two weeks extra
+okay moving on to resources
+we need one senior developer and one junior developer
+and also a ux designer right
+oh wait do we need a qa person too let me think
+i mean probably not for the first phase right
+okay so that's three people total
+um now let me summarize the main points period
+one budget six thousand dollars comma two timeline ten weeks comma three resources three people
+is that clear question mark
+okay great um next steps we need to create a detailed plan
+uh first task is to write the specification document
+second task is to set up the development environment
+third task is to create the prototype
+um and fourth task is to get client approval right
+okay so that's it for now
+let me know if you have any questions
+uh oh and one more thing we should schedule a meeting next tuesday
+that's like at two pm right
+okay sounds good
+um that's all for now thanks bye`
+
+// CheckModel tests a model and returns latency in milliseconds
+func (c *Client) CheckModel(modelName string) (int64, error) {
 	if c.apiKey == "" {
-		return fmt.Errorf("API key not set")
+		return 0, fmt.Errorf("API key not set")
 	}
 
-	// Simple prompt to check if model responds
 	req := Request{
 		Contents: []Content{
 			{
 				Parts: []Part{
-					{Text: "Hello, just checking if you are working."},
+					{Text: LatencyTestText},
 				},
 			},
 		},
 		GenerationConfig: GenerationConfig{
-			Temperature:     0.1,
-			MaxOutputTokens: 10,
+			Temperature: 0.3,
+			// No max tokens cap - let it generate full response for accurate latency test
 		},
 	}
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, modelName, c.apiKey)
 
+	startTime := time.Now()
+
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return 0, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	latency := time.Since(startTime).Milliseconds()
+
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error: %s (status: %d)", string(respBody), resp.StatusCode)
+		return 0, fmt.Errorf("API error: %s (status: %d)", string(respBody), resp.StatusCode)
 	}
 
-	return nil
+	return latency, nil
 }

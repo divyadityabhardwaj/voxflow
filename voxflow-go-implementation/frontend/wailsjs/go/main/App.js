@@ -10,6 +10,10 @@ export function CheckGeminiModel(arg1) {
   return window['go']['main']['App']['CheckGeminiModel'](arg1);
 }
 
+export function CheckOpenRouterModel(arg1) {
+  return window['go']['main']['App']['CheckOpenRouterModel'](arg1);
+}
+
 export function ClearAllHistory() {
   return window['go']['main']['App']['ClearAllHistory']();
 }
@@ -56,6 +60,22 @@ export function GetGeminiModels() {
 
 export function GetHistory(arg1) {
   return window['go']['main']['App']['GetHistory'](arg1);
+}
+
+export function GetLLMProvider() {
+  return window['go']['main']['App']['GetLLMProvider']();
+}
+
+export function GetOpenRouterModel() {
+  return window['go']['main']['App']['GetOpenRouterModel']();
+}
+
+export function GetOpenRouterModelDescriptions() {
+  return window['go']['main']['App']['GetOpenRouterModelDescriptions']();
+}
+
+export function GetOpenRouterModels() {
+  return window['go']['main']['App']['GetOpenRouterModels']();
 }
 
 export function GetStatus() {
@@ -138,8 +158,20 @@ export function SetHotkey(arg1) {
   return window['go']['main']['App']['SetHotkey'](arg1);
 }
 
+export function SetLLMProvider(arg1) {
+  return window['go']['main']['App']['SetLLMProvider'](arg1);
+}
+
 export function SetMode(arg1) {
   return window['go']['main']['App']['SetMode'](arg1);
+}
+
+export function SetOpenRouterAPIKey(arg1) {
+  return window['go']['main']['App']['SetOpenRouterAPIKey'](arg1);
+}
+
+export function SetOpenRouterModel(arg1) {
+  return window['go']['main']['App']['SetOpenRouterModel'](arg1);
 }
 
 export function SetPushToTalkHotkey(arg1) {
