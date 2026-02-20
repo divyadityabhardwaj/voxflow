@@ -87,7 +87,8 @@ export default function SettingsView() {
   const [checkingModel, setCheckingModel] = useState<string | null>(null);
 
   const [isGeminiDropdownOpen, setIsGeminiDropdownOpen] = useState(false);
-  const [isOpenRouterDropdownOpen, setIsOpenRouterDropdownOpen] = useState(false);
+  const [isOpenRouterDropdownOpen, setIsOpenRouterDropdownOpen] =
+    useState(false);
   const geminiDropdownRef = useRef<HTMLDivElement>(null);
   const openRouterDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +117,7 @@ export default function SettingsView() {
     loadConfig();
     loadModels();
     checkWhisperCLI();
+    setModelStatuses({});
 
     // Listen for download progress
     EventsOn(
@@ -134,15 +136,20 @@ export default function SettingsView() {
 
   // Load Gemini models when config (and thus API key) is loaded
   useEffect(() => {
-    if (config?.api_key_set) {
+    if (
+      config?.api_key_set &&
+      (config?.llm_provider === "gemini" || !config?.llm_provider)
+    ) {
       loadGeminiModels();
     }
-  }, [config?.api_key_set]);
+  }, [config?.api_key_set, config?.llm_provider]);
 
-  // Load OpenRouter models on mount
+  // Load OpenRouter models when provider is OpenRouter
   useEffect(() => {
-    loadOpenRouterModels();
-  }, []);
+    if (config?.llm_provider === "openrouter") {
+      loadOpenRouterModels();
+    }
+  }, [config?.llm_provider]);
 
   const loadConfig = async () => {
     try {
@@ -185,9 +192,9 @@ export default function SettingsView() {
     setCheckingModel(model);
     setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
     console.log(`Checking status for Gemini model: ${model}...`);
-    
+
     const startTime = Date.now();
-    
+
     try {
       await CheckGeminiModel(model);
       const latencyMs = Date.now() - startTime;
@@ -211,9 +218,9 @@ export default function SettingsView() {
     setCheckingModel(model);
     setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
     console.log(`Checking status for OpenRouter model: ${model}...`);
-    
+
     const startTime = Date.now();
-    
+
     try {
       await CheckOpenRouterModel(model);
       const latencyMs = Date.now() - startTime;
@@ -236,11 +243,11 @@ export default function SettingsView() {
   const checkAllModels = async () => {
     const provider = config?.llm_provider || "gemini";
     const models = provider === "openrouter" ? openRouterModels : geminiModels;
-    
+
     if (models.length === 0) return;
 
     setCheckingAllModels(true);
-    
+
     // Check models sequentially to avoid rate limits
     for (const model of models) {
       if (provider === "openrouter") {
@@ -249,7 +256,7 @@ export default function SettingsView() {
         await checkGeminiModelStatus(model);
       }
     }
-    
+
     setCheckingAllModels(false);
   };
 
@@ -545,13 +552,15 @@ export default function SettingsView() {
               onClick={() => handleLLMProviderChange("gemini")}
               disabled={saving === "llmProvider"}
               className={`flex-1 p-4 rounded-lg border transition-colors ${
-                (config.llm_provider === "gemini" || !config.llm_provider)
+                config.llm_provider === "gemini" || !config.llm_provider
                   ? "bg-accent-600/10 border-accent-600"
                   : "border-dark-800 hover:bg-dark-800"
               }`}
             >
               <p className="font-medium text-dark-200">Gemini</p>
-              <p className="text-sm text-dark-500 mt-1">Google's fast & capable model</p>
+              <p className="text-sm text-dark-500 mt-1">
+                Google's fast & capable model
+              </p>
             </button>
             <button
               onClick={() => handleLLMProviderChange("openrouter")}
@@ -563,7 +572,9 @@ export default function SettingsView() {
               }`}
             >
               <p className="font-medium text-dark-200">OpenRouter</p>
-              <p className="text-sm text-dark-500 mt-1">Free open-source models</p>
+              <p className="text-sm text-dark-500 mt-1">
+                Free open-source models
+              </p>
             </button>
           </div>
 
@@ -587,7 +598,9 @@ export default function SettingsView() {
                   <input
                     type="password"
                     placeholder={
-                      config.api_key_set ? "••••••••••••••••" : "Enter your API key"
+                      config.api_key_set
+                        ? "••••••••••••••••"
+                        : "Enter your API key"
                     }
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
@@ -607,7 +620,11 @@ export default function SettingsView() {
                   className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
                            text-white rounded-lg transition-colors"
                 >
-                  {saving === "apiKey" ? "Saving..." : success === "apiKey" ? "Saved!" : "Save"}
+                  {saving === "apiKey"
+                    ? "Saving..."
+                    : success === "apiKey"
+                      ? "Saved!"
+                      : "Save"}
                 </button>
               </div>
 
@@ -621,7 +638,9 @@ export default function SettingsView() {
                       disabled={checkingAllModels || geminiModelsLoading}
                       className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
                     >
-                      {checkingAllModels ? "Checking models..." : "Check Models (with latency)"}
+                      {checkingAllModels
+                        ? "Checking models..."
+                        : "Check Models (with latency)"}
                     </button>
                   </div>
 
@@ -630,7 +649,10 @@ export default function SettingsView() {
                   ) : geminiModelsError ? (
                     <div className="text-sm text-red-400">
                       {geminiModelsError}
-                      <button onClick={loadGeminiModels} className="ml-2 underline hover:text-red-300">
+                      <button
+                        onClick={loadGeminiModels}
+                        className="ml-2 underline hover:text-red-300"
+                      >
                         Retry
                       </button>
                     </div>
@@ -638,7 +660,10 @@ export default function SettingsView() {
                     <div className="space-y-2">
                       <div className="relative" ref={geminiDropdownRef}>
                         <button
-                          onClick={() => !saving && setIsGeminiDropdownOpen(!isGeminiDropdownOpen)}
+                          onClick={() =>
+                            !saving &&
+                            setIsGeminiDropdownOpen(!isGeminiDropdownOpen)
+                          }
                           disabled={saving === "gemini_model"}
                           className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
                                    text-dark-200 flex items-center justify-between
@@ -649,15 +674,29 @@ export default function SettingsView() {
                             {config.gemini_model}
                             {modelStatuses[config.gemini_model]?.working && (
                               <span className="text-idle ml-2 text-xs">
-                                ✓ {modelStatuses[config.gemini_model]?.latency}ms
+                                ✓ {modelStatuses[config.gemini_model]?.latency}
+                                ms
                               </span>
                             )}
-                            {modelStatuses[config.gemini_model]?.working === false && (
-                              <span className="text-red-400 ml-2 text-xs">✗ Error</span>
+                            {modelStatuses[config.gemini_model]?.working ===
+                              false && (
+                              <span className="text-red-400 ml-2 text-xs">
+                                ✗ Error
+                              </span>
                             )}
                           </span>
-                          <svg className={`w-4 h-4 text-dark-500 transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          <svg
+                            className={`w-4 h-4 text-dark-500 transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 9l-7 7-7-7"
+                            />
                           </svg>
                         </button>
 
@@ -679,16 +718,22 @@ export default function SettingsView() {
                                 <span className="font-medium">{model}</span>
                                 <span className="text-xs">
                                   {checkingModel === model && (
-                                    <span className="text-dark-500 animate-pulse">Checking...</span>
-                                  )}
-                                  {!checkingModel && modelStatuses[model]?.working && (
-                                    <span className="text-idle font-medium">
-                                      ✓ {modelStatuses[model]?.latency}ms
+                                    <span className="text-dark-500 animate-pulse">
+                                      Checking...
                                     </span>
                                   )}
-                                  {!checkingModel && modelStatuses[model]?.working === false && (
-                                    <span className="text-red-400 font-medium">✗ Error</span>
-                                  )}
+                                  {!checkingModel &&
+                                    modelStatuses[model]?.working && (
+                                      <span className="text-idle font-medium">
+                                        ✓ {modelStatuses[model]?.latency}ms
+                                      </span>
+                                    )}
+                                  {!checkingModel &&
+                                    modelStatuses[model]?.working === false && (
+                                      <span className="text-red-400 font-medium">
+                                        ✗ Error
+                                      </span>
+                                    )}
                                 </span>
                               </div>
                             ))}
@@ -696,7 +741,8 @@ export default function SettingsView() {
                         )}
                       </div>
                       <p className="text-xs text-dark-500 mt-2">
-                        Select the Gemini model to use for transcription refinement.
+                        Select the Gemini model to use for transcription
+                        refinement.
                       </p>
                     </div>
                   )}
@@ -708,7 +754,9 @@ export default function SettingsView() {
           {/* OpenRouter Section */}
           {config.llm_provider === "openrouter" && (
             <div className="pt-6 border-t border-dark-700">
-              <h4 className="font-medium text-dark-200 mb-4">OpenRouter API Key</h4>
+              <h4 className="font-medium text-dark-200 mb-4">
+                OpenRouter API Key
+              </h4>
               <p className="text-sm text-dark-500 mb-4">
                 Get your API key from{" "}
                 <a
@@ -725,7 +773,9 @@ export default function SettingsView() {
                   <input
                     type="password"
                     placeholder={
-                      config.openrouter_api_key_set ? "••••••••••••••••" : "Enter your OpenRouter API key"
+                      config.openrouter_api_key_set
+                        ? "••••••••••••••••"
+                        : "Enter your OpenRouter API key"
                     }
                     value={openRouterApiKey}
                     onChange={(e) => setOpenRouterApiKey(e.target.value)}
@@ -741,24 +791,34 @@ export default function SettingsView() {
                 </div>
                 <button
                   onClick={handleSaveOpenRouterApiKey}
-                  disabled={!openRouterApiKey.trim() || saving === "openRouterApiKey"}
+                  disabled={
+                    !openRouterApiKey.trim() || saving === "openRouterApiKey"
+                  }
                   className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
                            text-white rounded-lg transition-colors"
                 >
-                  {saving === "openRouterApiKey" ? "Saving..." : success === "openRouterApiKey" ? "Saved!" : "Save"}
+                  {saving === "openRouterApiKey"
+                    ? "Saving..."
+                    : success === "openRouterApiKey"
+                      ? "Saved!"
+                      : "Save"}
                 </button>
               </div>
 
               {/* OpenRouter Models */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-medium text-dark-200">OpenRouter Free Models</h4>
+                  <h4 className="font-medium text-dark-200">
+                    OpenRouter Free Models
+                  </h4>
                   <button
                     onClick={checkAllModels}
                     disabled={checkingAllModels || openRouterModelsLoading}
                     className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
                   >
-                    {checkingAllModels ? "Checking models..." : "Check Models (with latency)"}
+                    {checkingAllModels
+                      ? "Checking models..."
+                      : "Check Models (with latency)"}
                   </button>
                 </div>
 
@@ -768,7 +828,10 @@ export default function SettingsView() {
                   <div className="space-y-2">
                     <div className="relative" ref={openRouterDropdownRef}>
                       <button
-                        onClick={() => !saving && setIsOpenRouterDropdownOpen(!isOpenRouterDropdownOpen)}
+                        onClick={() =>
+                          !saving &&
+                          setIsOpenRouterDropdownOpen(!isOpenRouterDropdownOpen)
+                        }
                         disabled={saving === "openrouter_model"}
                         className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
                                  text-dark-200 flex items-center justify-between
@@ -779,15 +842,30 @@ export default function SettingsView() {
                           {config.openrouter_model}
                           {modelStatuses[config.openrouter_model]?.working && (
                             <span className="text-idle ml-2 text-xs">
-                              ✓ {modelStatuses[config.openrouter_model]?.latency}ms
+                              ✓{" "}
+                              {modelStatuses[config.openrouter_model]?.latency}
+                              ms
                             </span>
                           )}
-                          {modelStatuses[config.openrouter_model]?.working === false && (
-                            <span className="text-red-400 ml-2 text-xs">✗ Error</span>
+                          {modelStatuses[config.openrouter_model]?.working ===
+                            false && (
+                            <span className="text-red-400 ml-2 text-xs">
+                              ✗ Error
+                            </span>
                           )}
                         </span>
-                        <svg className={`w-4 h-4 text-dark-500 transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        <svg
+                          className={`w-4 h-4 text-dark-500 transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
                         </svg>
                       </button>
 
@@ -806,19 +884,27 @@ export default function SettingsView() {
                                   : "text-txt-primary hover:bg-tertiary"
                               }`}
                             >
-                              <span className="font-medium text-sm">{model.split("/")[1]?.split(":")[0]}</span>
+                              <span className="font-medium text-sm">
+                                {model.split("/")[1]?.split(":")[0]}
+                              </span>
                               <span className="text-xs">
                                 {checkingModel === model && (
-                                  <span className="text-dark-500 animate-pulse">Checking...</span>
-                                )}
-                                {!checkingModel && modelStatuses[model]?.working && (
-                                  <span className="text-idle font-medium">
-                                    ✓ {modelStatuses[model]?.latency}ms
+                                  <span className="text-dark-500 animate-pulse">
+                                    Checking...
                                   </span>
                                 )}
-                                {!checkingModel && modelStatuses[model]?.working === false && (
-                                  <span className="text-red-400 font-medium">✗ Error</span>
-                                )}
+                                {!checkingModel &&
+                                  modelStatuses[model]?.working && (
+                                    <span className="text-idle font-medium">
+                                      ✓ {modelStatuses[model]?.latency}ms
+                                    </span>
+                                  )}
+                                {!checkingModel &&
+                                  modelStatuses[model]?.working === false && (
+                                    <span className="text-red-400 font-medium">
+                                      ✗ Error
+                                    </span>
+                                  )}
                               </span>
                             </div>
                           ))}
@@ -826,7 +912,8 @@ export default function SettingsView() {
                       )}
                     </div>
                     <p className="text-xs text-dark-500 mt-2">
-                      Select a free OpenRouter model. Click "Check Models" to test latency.
+                      Select a free OpenRouter model. Click "Check Models" to
+                      test latency.
                     </p>
                   </div>
                 )}

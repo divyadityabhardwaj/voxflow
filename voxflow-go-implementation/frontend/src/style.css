@@ -1,70 +1,79 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ===== Theme Variables ===== */
 :root {
-  /* Light Theme (Default - Vintage Cream) */
-  --bg-primary: #faf9f7;
+  /* Light Theme - Modern Warm */
+  --bg-primary: #fafaf9;
   --bg-secondary: #ffffff;
-  --bg-tertiary: #f5f4f2;
+  --bg-tertiary: #f5f5f4;
   --bg-elevated: #ffffff;
-  --text-primary: #1a1a1a;
-  --text-secondary: #6b6b6b;
-  --text-tertiary: #9b9b9b;
-  --accent: #1a1a1a;
-  --accent-rgb: 26, 26, 26;
-  --accent-hover: #333333;
-  --border: #e8e6e3;
-  --border-hover: #d4d2cf;
+  --text-primary: #1c1917;
+  --text-secondary: #57534e;
+  --text-tertiary: #a8a29e;
+  --accent: #0d9488;
+  --accent-rgb: 13, 148, 136;
+  --accent-hover: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.1);
+  --border: #e7e5e4;
+  --border-hover: #d6d3d1;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
 
   /* Status Colors */
-  --recording: #dc2626;
-  --recording-bg: rgba(220, 38, 38, 0.1);
-  --processing: #7c3aed;
-  --processing-bg: rgba(124, 58, 237, 0.1);
-  --idle: #059669;
-  --idle-bg: rgba(5, 150, 105, 0.1);
+  --recording: #ef4444;
+  --recording-bg: rgba(239, 68, 68, 0.1);
+  --processing: #8b5cf6;
+  --processing-bg: rgba(139, 92, 246, 0.1);
+  --idle: #10b981;
+  --idle-bg: rgba(16, 185, 129, 0.1);
 
   /* Typography */
-  --font-serif: "Cormorant Garamond", Georgia, serif;
-  --font-sans:
-    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* Spacing */
   --sidebar-width: 64px;
+
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 
   color-scheme: light;
 }
 
 .dark {
-  /* Dark Theme (Elegant Charcoal) */
-  --bg-primary: #141416;
-  --bg-secondary: #1c1c1f;
-  --bg-tertiary: #242428;
-  --bg-elevated: #2a2a2f;
-  --text-primary: #fafafa;
-  --text-secondary: #a0a0a0;
-  --text-tertiary: #6b6b6b;
-  --accent-rgb: 250, 250, 250;
-  --accent: #fafafa;
-  --accent-hover: #e0e0e0;
-  --border: #2d2d32;
-  --border-hover: #3a3a40;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* Dark Theme - Modern Deep */
+  --bg-primary: #0c0a09;
+  --bg-secondary: #1c1917;
+  --bg-tertiary: #292524;
+  --bg-elevated: #1c1917;
+  --text-primary: #fafaf9;
+  --text-secondary: #a8a29e;
+  --text-tertiary: #78716c;
+  --accent: #2dd4bf;
+  --accent-rgb: 45, 212, 191;
+  --accent-hover: #5eead4;
+  --accent-soft: rgba(45, 212, 191, 0.15);
+  --border: #292524;
+  --border-hover: #44403c;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
 
-  /* Status Colors (slightly adjusted for dark) */
-  --recording: #ef4444;
-  --recording-bg: rgba(239, 68, 68, 0.15);
-  --processing: #8b5cf6;
-  --processing-bg: rgba(139, 92, 246, 0.15);
-  --idle: #10b981;
-  --idle-bg: rgba(16, 185, 129, 0.15);
+  /* Status Colors */
+  --recording: #f87171;
+  --recording-bg: rgba(248, 113, 113, 0.15);
+  --processing: #a78bfa;
+  --processing-bg: rgba(167, 139, 250, 0.15);
+  --idle: #34d399;
+  --idle-bg: rgba(52, 211, 153, 0.15);
 
   color-scheme: dark;
 }
@@ -174,7 +183,7 @@ h3 {
 .card {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   transition:
     box-shadow 0.2s ease,
@@ -183,12 +192,13 @@ h3 {
 
 .card:hover {
   box-shadow: var(--shadow-md);
+  border-color: var(--border-hover);
 }
 
 .card-elevated {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
 
@@ -197,7 +207,7 @@ h3 {
   background: var(--accent);
   color: var(--bg-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 24px;
   font-weight: 500;
   font-size: 14px;
@@ -208,6 +218,7 @@ h3 {
 .btn-primary:hover {
   background: var(--accent-hover);
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.3);
 }
 
 .btn-primary:active {
@@ -218,7 +229,7 @@ h3 {
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 24px;
   font-weight: 500;
   font-size: 14px;
@@ -235,7 +246,7 @@ h3 {
 .input {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   color: var(--text-primary);
   font-size: 14px;
@@ -245,11 +256,7 @@ h3 {
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
-}
-
-.dark .input:focus {
-  box-shadow: 0 0 0 3px rgba(250, 250, 250, 0.1);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .input::placeholder {
@@ -264,17 +271,17 @@ h3 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 0;
+  padding: 20px 0;
   gap: 8px;
 }
 
 .sidebar-btn {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   background: transparent;
   border: none;
@@ -284,12 +291,12 @@ h3 {
 
 .sidebar-btn:hover {
   background: var(--bg-tertiary);
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
 .sidebar-btn.active {
-  background: var(--accent);
-  color: var(--bg-primary);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 /* ===== Animations ===== */

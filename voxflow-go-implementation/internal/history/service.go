@@ -78,7 +78,7 @@ func (s *Service) initDB() error {
 // Save saves a new transcript
 func (s *Service) Save(appName, rawText, polishedText, mode string) (*Transcript, error) {
 	result, err := s.db.Exec(
-		"INSERT INTO transcripts (app_name, raw_text, polished_text, mode) VALUES (?, ?, ?, ?)",
+		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode) VALUES (datetime('now'), ?, ?, ?, ?)",
 		appName, rawText, polishedText, mode,
 	)
 	if err != nil {

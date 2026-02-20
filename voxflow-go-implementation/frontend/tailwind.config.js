@@ -13,6 +13,7 @@ export default {
         accent: {
           DEFAULT: "var(--accent)",
           hover: "var(--accent-hover)",
+          soft: "var(--accent-soft)",
         },
         // Status colors
         recording: {
@@ -40,8 +41,8 @@ export default {
         },
       },
       fontFamily: {
-        serif: ["Cormorant Garamond", "Georgia", "serif"],
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        serif: ["Playfair Display", "Georgia", "serif"],
+        sans: ["DM Sans", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
       },
       boxShadow: {
         'soft-sm': 'var(--shadow-sm)',
@@ -49,8 +50,10 @@ export default {
         'soft-lg': 'var(--shadow-lg)',
       },
       borderRadius: {
-        'xl': '16px',
-        '2xl': '24px',
+        'sm': 'var(--radius-sm)',
+        'md': 'var(--radius-md)',
+        'lg': 'var(--radius-lg)',
+        'xl': 'var(--radius-xl)',
       },
       animation: {
         "fade-in": "fade-in 0.3s ease-out",
