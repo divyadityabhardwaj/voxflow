@@ -267,6 +267,9 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 
 	result := openrouterResp.Choices[0].Message.Content
 
+	// Debug logging (matches Gemini behavior)
+	fmt.Printf("[OpenRouter] Raw output (%d chars):\n%s\n", len(result), result)
+
 	cleanResult := result
 	if strings.HasPrefix(cleanResult, "```json") {
 		cleanResult = strings.TrimPrefix(cleanResult, "```json")
