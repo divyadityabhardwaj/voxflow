@@ -102,17 +102,18 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 
 	t := &Transcript{}
 	var appName, polishedText, mode sql.NullString
-	var timestamp string
 
-	err := row.Scan(&t.ID, &timestamp, &appName, &t.RawText, &polishedText, &mode)
+	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("transcript not found")
+		var timestamp string
+		err = s.db.QueryRow("SELECT timestamp FROM transcripts WHERE id = ?", id).Scan(&timestamp)
+		if err == nil {
+			t.Timestamp = parseTimestamp(timestamp)
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 
-	t.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp)
 	t.AppName = appName.String
 	t.PolishedText = polishedText.String
 	t.Mode = mode.String
@@ -137,14 +138,12 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 	for rows.Next() {
 		t := &Transcript{}
 		var appName, polishedText, mode sql.NullString
-		var timestamp string
 
-		err := rows.Scan(&t.ID, &timestamp, &appName, &t.RawText, &polishedText, &mode)
+		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode)
 		if err != nil {
 			return nil, err
 		}
 
-		t.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp)
 		t.AppName = appName.String
 		t.PolishedText = polishedText.String
 		t.Mode = mode.String
@@ -178,14 +177,11 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	for rows.Next() {
 		t := &Transcript{}
 		var appName, polishedText, mode sql.NullString
-		var timestamp string
-
-		err := rows.Scan(&t.ID, &timestamp, &appName, &t.RawText, &polishedText, &mode)
+		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode)
 		if err != nil {
 			return nil, err
 		}
 
-		t.Timestamp, _ = time.Parse("2006-01-02 15:04:05", timestamp)
 		t.AppName = appName.String
 		t.PolishedText = polishedText.String
 		t.Mode = mode.String
@@ -230,4 +226,20 @@ func (s *Service) GetCount() (int, error) {
 	var count int
 	err := s.db.QueryRow("SELECT COUNT(*) FROM transcripts").Scan(&count)
 	return count, err
+}
+
+// parseTimestamp attempts to parse a timestamp string from multiple formats
+func parseTimestamp(ts string) time.Time {
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05Z",
+		time.RFC3339,
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, ts); err == nil {
+			return t
+		}
+	}
+	fmt.Printf("Warning: Failed to parse timestamp '%s', using current time\n", ts)
+	return time.Now()
 }
