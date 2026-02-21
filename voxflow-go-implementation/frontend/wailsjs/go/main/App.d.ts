@@ -5,7 +5,11 @@ import {history} from '../models';
 
 export function CancelDownload():Promise<void>;
 
+export function CheckCerebrasModel(arg1:string):Promise<number>;
+
 export function CheckGeminiModel(arg1:string):Promise<number>;
+
+export function CheckGroqModel(arg1:string):Promise<number>;
 
 export function CheckOpenRouterModel(arg1:string):Promise<number>;
 
@@ -25,11 +29,23 @@ export function EnsureWhisperCLI():Promise<void>;
 
 export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 
+export function GetCerebrasModel():Promise<string>;
+
+export function GetCerebrasModelDescriptions():Promise<Record<string, string>>;
+
+export function GetCerebrasModels():Promise<Array<string>>;
+
 export function GetConfig():Promise<Record<string, any>>;
 
 export function GetGeminiModel():Promise<string>;
 
 export function GetGeminiModels():Promise<Array<string>>;
+
+export function GetGroqModel():Promise<string>;
+
+export function GetGroqModelDescriptions():Promise<Record<string, string>>;
+
+export function GetGroqModels():Promise<Array<string>>;
 
 export function GetHistory(arg1:number):Promise<Array<history.Transcript>>;
 
@@ -75,7 +91,15 @@ export function SearchHistory(arg1:string,arg2:number):Promise<Array<history.Tra
 
 export function SetAPIKey(arg1:string):Promise<void>;
 
+export function SetCerebrasAPIKey(arg1:string):Promise<void>;
+
+export function SetCerebrasModel(arg1:string):Promise<void>;
+
 export function SetGeminiModel(arg1:string):Promise<void>;
+
+export function SetGroqAPIKey(arg1:string):Promise<void>;
+
+export function SetGroqModel(arg1:string):Promise<void>;
 
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 

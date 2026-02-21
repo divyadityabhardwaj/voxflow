@@ -6,8 +6,16 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function CheckCerebrasModel(arg1) {
+  return window['go']['main']['App']['CheckCerebrasModel'](arg1);
+}
+
 export function CheckGeminiModel(arg1) {
   return window['go']['main']['App']['CheckGeminiModel'](arg1);
+}
+
+export function CheckGroqModel(arg1) {
+  return window['go']['main']['App']['CheckGroqModel'](arg1);
 }
 
 export function CheckOpenRouterModel(arg1) {
@@ -46,6 +54,18 @@ export function GetAllModels() {
   return window['go']['main']['App']['GetAllModels']();
 }
 
+export function GetCerebrasModel() {
+  return window['go']['main']['App']['GetCerebrasModel']();
+}
+
+export function GetCerebrasModelDescriptions() {
+  return window['go']['main']['App']['GetCerebrasModelDescriptions']();
+}
+
+export function GetCerebrasModels() {
+  return window['go']['main']['App']['GetCerebrasModels']();
+}
+
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }
@@ -56,6 +76,18 @@ export function GetGeminiModel() {
 
 export function GetGeminiModels() {
   return window['go']['main']['App']['GetGeminiModels']();
+}
+
+export function GetGroqModel() {
+  return window['go']['main']['App']['GetGroqModel']();
+}
+
+export function GetGroqModelDescriptions() {
+  return window['go']['main']['App']['GetGroqModelDescriptions']();
+}
+
+export function GetGroqModels() {
+  return window['go']['main']['App']['GetGroqModels']();
 }
 
 export function GetHistory(arg1) {
@@ -146,8 +178,24 @@ export function SetAPIKey(arg1) {
   return window['go']['main']['App']['SetAPIKey'](arg1);
 }
 
+export function SetCerebrasAPIKey(arg1) {
+  return window['go']['main']['App']['SetCerebrasAPIKey'](arg1);
+}
+
+export function SetCerebrasModel(arg1) {
+  return window['go']['main']['App']['SetCerebrasModel'](arg1);
+}
+
 export function SetGeminiModel(arg1) {
   return window['go']['main']['App']['SetGeminiModel'](arg1);
+}
+
+export function SetGroqAPIKey(arg1) {
+  return window['go']['main']['App']['SetGroqAPIKey'](arg1);
+}
+
+export function SetGroqModel(arg1) {
+  return window['go']['main']['App']['SetGroqModel'](arg1);
 }
 
 export function SetHandsFreeHotkey(arg1) {

@@ -20,6 +20,14 @@ import {
   SetLLMProvider,
   SetOpenRouterModel,
   CheckOpenRouterModel,
+  GetGroqModels,
+  SetGroqAPIKey,
+  SetGroqModel,
+  CheckGroqModel,
+  GetCerebrasModels,
+  SetCerebrasAPIKey,
+  SetCerebrasModel,
+  CheckCerebrasModel,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -37,6 +45,10 @@ interface Config {
   llm_provider: string;
   openrouter_model: string;
   openrouter_api_key_set: boolean;
+  groq_model: string;
+  groq_api_key_set: boolean;
+  cerebras_model: string;
+  cerebras_api_key_set: boolean;
 }
 
 interface ModelInfo {
@@ -77,6 +89,16 @@ export default function SettingsView() {
   const [openRouterModels, setOpenRouterModels] = useState<string[]>([]);
   const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
 
+  // Groq Model State
+  const [groqModels, setGroqModels] = useState<string[]>([]);
+  const [groqModelsLoading, setGroqModelsLoading] = useState(false);
+  const [groqApiKey, setGroqApiKey] = useState("");
+
+  // Cerebras Model State
+  const [cerebrasModels, setCerebrasModels] = useState<string[]>([]);
+  const [cerebrasModelsLoading, setCerebrasModelsLoading] = useState(false);
+  const [cerebrasApiKey, setCerebrasApiKey] = useState("");
+
   // Model status (latency for each model)
   const [modelStatuses, setModelStatuses] = useState<
     Record<string, ModelStatus>
@@ -86,14 +108,27 @@ export default function SettingsView() {
 
   const [checkingModel, setCheckingModel] = useState<string | null>(null);
 
+  const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
   const [isGeminiDropdownOpen, setIsGeminiDropdownOpen] = useState(false);
   const [isOpenRouterDropdownOpen, setIsOpenRouterDropdownOpen] =
     useState(false);
+  const [isGroqDropdownOpen, setIsGroqDropdownOpen] = useState(false);
+  const [isCerebrasDropdownOpen, setIsCerebrasDropdownOpen] = useState(false);
+
+  const providerDropdownRef = useRef<HTMLDivElement>(null);
   const geminiDropdownRef = useRef<HTMLDivElement>(null);
   const openRouterDropdownRef = useRef<HTMLDivElement>(null);
+  const groqDropdownRef = useRef<HTMLDivElement>(null);
+  const cerebrasDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (
+        providerDropdownRef.current &&
+        !providerDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsProviderDropdownOpen(false);
+      }
       if (
         geminiDropdownRef.current &&
         !geminiDropdownRef.current.contains(event.target as Node)
@@ -105,6 +140,18 @@ export default function SettingsView() {
         !openRouterDropdownRef.current.contains(event.target as Node)
       ) {
         setIsOpenRouterDropdownOpen(false);
+      }
+      if (
+        groqDropdownRef.current &&
+        !groqDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsGroqDropdownOpen(false);
+      }
+      if (
+        cerebrasDropdownRef.current &&
+        !cerebrasDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsCerebrasDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -148,6 +195,10 @@ export default function SettingsView() {
   useEffect(() => {
     if (config?.llm_provider === "openrouter") {
       loadOpenRouterModels();
+    } else if (config?.llm_provider === "groq") {
+      loadGroqModels();
+    } else if (config?.llm_provider === "cerebras") {
+      loadCerebrasModels();
     }
   }, [config?.llm_provider]);
 
@@ -185,6 +236,32 @@ export default function SettingsView() {
       console.error("Failed to load OpenRouter models:", err);
     } finally {
       setOpenRouterModelsLoading(false);
+    }
+  };
+
+  const loadGroqModels = async () => {
+    setGroqModelsLoading(true);
+    try {
+      const models = await GetGroqModels();
+      console.log("Loaded Groq models:", models);
+      setGroqModels(models || []);
+    } catch (err) {
+      console.error("Failed to load Groq models:", err);
+    } finally {
+      setGroqModelsLoading(false);
+    }
+  };
+
+  const loadCerebrasModels = async () => {
+    setCerebrasModelsLoading(true);
+    try {
+      const models = await GetCerebrasModels();
+      console.log("Loaded Cerebras models:", models);
+      setCerebrasModels(models || []);
+    } catch (err) {
+      console.error("Failed to load Cerebras models:", err);
+    } finally {
+      setCerebrasModelsLoading(false);
     }
   };
 
@@ -242,7 +319,11 @@ export default function SettingsView() {
 
   const checkAllModels = async () => {
     const provider = config?.llm_provider || "gemini";
-    const models = provider === "openrouter" ? openRouterModels : geminiModels;
+    let models: string[] = [];
+    if (provider === "openrouter") models = openRouterModels;
+    else if (provider === "groq") models = groqModels;
+    else if (provider === "cerebras") models = cerebrasModels;
+    else models = geminiModels;
 
     if (models.length === 0) return;
 
@@ -252,12 +333,50 @@ export default function SettingsView() {
     for (const model of models) {
       if (provider === "openrouter") {
         await checkOpenRouterModelStatus(model);
+      } else if (provider === "groq") {
+        await checkGroqModelStatus(model);
+      } else if (provider === "cerebras") {
+        await checkCerebrasModelStatus(model);
       } else {
         await checkGeminiModelStatus(model);
       }
     }
 
     setCheckingAllModels(false);
+  };
+
+  const checkGroqModelStatus = async (model: string) => {
+    setCheckingModel(model);
+    setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
+    const startTime = Date.now();
+    try {
+      await CheckGroqModel(model);
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: true, latency: Date.now() - startTime },
+      }));
+    } catch (err) {
+      setModelStatuses((prev) => ({ ...prev, [model]: { working: false } }));
+    } finally {
+      setCheckingModel(null);
+    }
+  };
+
+  const checkCerebrasModelStatus = async (model: string) => {
+    setCheckingModel(model);
+    setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
+    const startTime = Date.now();
+    try {
+      await CheckCerebrasModel(model);
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: true, latency: Date.now() - startTime },
+      }));
+    } catch (err) {
+      setModelStatuses((prev) => ({ ...prev, [model]: { working: false } }));
+    } finally {
+      setCheckingModel(null);
+    }
   };
 
   const loadModels = async () => {
@@ -321,6 +440,38 @@ export default function SettingsView() {
     }
   };
 
+  const handleSaveGroqApiKey = async () => {
+    if (!groqApiKey.trim()) return;
+    setSaving("groqApiKey");
+    try {
+      await SetGroqAPIKey(groqApiKey);
+      setConfig((prev) => (prev ? { ...prev, groq_api_key_set: true } : null));
+      setGroqApiKey("");
+      showSuccess("groqApiKey");
+    } catch (err) {
+      console.error("Failed to save Groq API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveCerebrasApiKey = async () => {
+    if (!cerebrasApiKey.trim()) return;
+    setSaving("cerebrasApiKey");
+    try {
+      await SetCerebrasAPIKey(cerebrasApiKey);
+      setConfig((prev) =>
+        prev ? { ...prev, cerebras_api_key_set: true } : null,
+      );
+      setCerebrasApiKey("");
+      showSuccess("cerebrasApiKey");
+    } catch (err) {
+      console.error("Failed to save Cerebras API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const handleLLMProviderChange = async (provider: string) => {
     setSaving("llmProvider");
     try {
@@ -344,6 +495,34 @@ export default function SettingsView() {
       showSuccess("openrouter_model");
     } catch (err) {
       console.error("Failed to save OpenRouter model:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleGroqModelSelect = async (modelName: string) => {
+    setSaving("groq_model");
+    try {
+      await SetGroqModel(modelName);
+      setConfig((prev) => (prev ? { ...prev, groq_model: modelName } : null));
+      showSuccess("groq_model");
+    } catch (err) {
+      console.error("Failed to save Groq model:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleCerebrasModelSelect = async (modelName: string) => {
+    setSaving("cerebras_model");
+    try {
+      await SetCerebrasModel(modelName);
+      setConfig((prev) =>
+        prev ? { ...prev, cerebras_model: modelName } : null,
+      );
+      showSuccess("cerebras_model");
+    } catch (err) {
+      console.error("Failed to save Cerebras model:", err);
     } finally {
       setSaving(null);
     }
@@ -546,36 +725,78 @@ export default function SettingsView() {
             Choose which LLM provider to use for text refinement.
           </p>
 
-          {/* Provider Selector */}
-          <div className="flex gap-4 mb-6">
+          {/* Provider Selector Dropdown */}
+          <div className="relative mb-6" ref={providerDropdownRef}>
             <button
-              onClick={() => handleLLMProviderChange("gemini")}
+              onClick={() =>
+                !saving && setIsProviderDropdownOpen(!isProviderDropdownOpen)
+              }
               disabled={saving === "llmProvider"}
-              className={`flex-1 p-4 rounded-lg border transition-colors ${
-                config.llm_provider === "gemini" || !config.llm_provider
-                  ? "bg-accent-600/10 border-accent-600"
-                  : "border-dark-800 hover:bg-dark-800"
-              }`}
+              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                       text-dark-200 flex items-center justify-between
+                       focus:outline-none focus:ring-2 focus:ring-accent-600
+                       disabled:opacity-50 text-left capitalize"
             >
-              <p className="font-medium text-dark-200">Gemini</p>
-              <p className="text-sm text-dark-500 mt-1">
-                Google's fast & capable model
-              </p>
+              <span>{config.llm_provider || "gemini"}</span>
+              <svg
+                className={`w-4 h-4 text-dark-500 transition-transform ${isProviderDropdownOpen ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
             </button>
-            <button
-              onClick={() => handleLLMProviderChange("openrouter")}
-              disabled={saving === "llmProvider"}
-              className={`flex-1 p-4 rounded-lg border transition-colors ${
-                config.llm_provider === "openrouter"
-                  ? "bg-accent-600/10 border-accent-600"
-                  : "border-dark-800 hover:bg-dark-800"
-              }`}
-            >
-              <p className="font-medium text-dark-200">OpenRouter</p>
-              <p className="text-sm text-dark-500 mt-1">
-                Free open-source models
-              </p>
-            </button>
+
+            {isProviderDropdownOpen && (
+              <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
+                {[
+                  {
+                    id: "gemini",
+                    label: "Gemini",
+                    sub: "Google's fast & capable model",
+                  },
+                  {
+                    id: "openrouter",
+                    label: "OpenRouter",
+                    sub: "Free open-source models",
+                  },
+                  {
+                    id: "groq",
+                    label: "Groq",
+                    sub: "Ultra-fast LPU inference",
+                  },
+                  {
+                    id: "cerebras",
+                    label: "Cerebras",
+                    sub: "Wafer-scale fast inference",
+                  },
+                ].map((prov) => (
+                  <div
+                    key={prov.id}
+                    onClick={() => {
+                      handleLLMProviderChange(prov.id);
+                      setIsProviderDropdownOpen(false);
+                    }}
+                    className={`flex flex-col px-4 py-3 cursor-pointer transition-colors ${
+                      (config.llm_provider || "gemini") === prov.id
+                        ? "bg-accent-600/10 text-accent-400"
+                        : "text-txt-primary hover:bg-tertiary"
+                    }`}
+                  >
+                    <span className="font-medium capitalize">{prov.label}</span>
+                    <span className="text-xs text-dark-500 mt-1">
+                      {prov.sub}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Gemini API Key Section */}
@@ -914,6 +1135,335 @@ export default function SettingsView() {
                     <p className="text-xs text-dark-500 mt-2">
                       Select a free OpenRouter model. Click "Check Models" to
                       test latency.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Groq Section */}
+          {config.llm_provider === "groq" && (
+            <div className="pt-6 border-t border-dark-700">
+              <h4 className="font-medium text-dark-200 mb-4">Groq API Key</h4>
+              <p className="text-sm text-dark-500 mb-4">
+                Get your API key from{" "}
+                <a
+                  href="https://console.groq.com/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-400 hover:underline"
+                >
+                  Groq Console
+                </a>
+              </p>
+              <div className="flex gap-3 mb-6">
+                <div className="relative flex-1">
+                  <input
+                    type="password"
+                    placeholder={
+                      config.groq_api_key_set
+                        ? "••••••••••••••••"
+                        : "Enter your Groq API key"
+                    }
+                    value={groqApiKey}
+                    onChange={(e) => setGroqApiKey(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                             text-dark-200 placeholder-dark-500
+                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                  />
+                  {config.groq_api_key_set && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                      ✓ Set
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleSaveGroqApiKey}
+                  disabled={!groqApiKey.trim() || saving === "groqApiKey"}
+                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
+                           text-white rounded-lg transition-colors"
+                >
+                  {saving === "groqApiKey"
+                    ? "Saving..."
+                    : success === "groqApiKey"
+                      ? "Saved!"
+                      : "Save"}
+                </button>
+              </div>
+
+              {/* Groq Models */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-dark-200">Groq Models</h4>
+                  <button
+                    onClick={checkAllModels}
+                    disabled={checkingAllModels || groqModelsLoading}
+                    className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                  >
+                    {checkingAllModels
+                      ? "Checking models..."
+                      : "Check Models (with latency)"}
+                  </button>
+                </div>
+
+                {groqModelsLoading ? (
+                  <p className="text-sm text-dark-500">Loading models...</p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative" ref={groqDropdownRef}>
+                      <button
+                        onClick={() =>
+                          !saving && setIsGroqDropdownOpen(!isGroqDropdownOpen)
+                        }
+                        disabled={saving === "groq_model"}
+                        className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                                 text-dark-200 flex items-center justify-between
+                                 focus:outline-none focus:ring-2 focus:ring-accent-600
+                                 disabled:opacity-50 text-left"
+                      >
+                        <span>
+                          {config.groq_model}
+                          {modelStatuses[config.groq_model]?.working && (
+                            <span className="text-idle ml-2 text-xs">
+                              ✓ {modelStatuses[config.groq_model]?.latency}
+                              ms
+                            </span>
+                          )}
+                          {modelStatuses[config.groq_model]?.working ===
+                            false && (
+                            <span className="text-red-400 ml-2 text-xs">
+                              ✗ Error
+                            </span>
+                          )}
+                        </span>
+                        <svg
+                          className={`w-4 h-4 text-dark-500 transition-transform ${isGroqDropdownOpen ? "rotate-180" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+
+                      {isGroqDropdownOpen && (
+                        <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          {groqModels.map((model) => (
+                            <div
+                              key={model}
+                              onClick={() => {
+                                handleGroqModelSelect(model);
+                                setIsGroqDropdownOpen(false);
+                              }}
+                              className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                                config.groq_model === model
+                                  ? "bg-accent-600/10 text-accent-400"
+                                  : "text-txt-primary hover:bg-tertiary"
+                              }`}
+                            >
+                              <span className="font-medium text-sm">
+                                {model}
+                              </span>
+                              <span className="text-xs">
+                                {checkingModel === model && (
+                                  <span className="text-dark-500 animate-pulse">
+                                    Checking...
+                                  </span>
+                                )}
+                                {!checkingModel &&
+                                  modelStatuses[model]?.working && (
+                                    <span className="text-idle font-medium">
+                                      ✓ {modelStatuses[model]?.latency}ms
+                                    </span>
+                                  )}
+                                {!checkingModel &&
+                                  modelStatuses[model]?.working === false && (
+                                    <span className="text-red-400 font-medium">
+                                      ✗ Error
+                                    </span>
+                                  )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-dark-500 mt-2">
+                      Select a Groq model for ultra-fast LPU inference
+                      constraints.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cerebras Section */}
+          {config.llm_provider === "cerebras" && (
+            <div className="pt-6 border-t border-dark-700">
+              <h4 className="font-medium text-dark-200 mb-4">
+                Cerebras API Key
+              </h4>
+              <p className="text-sm text-dark-500 mb-4">
+                Get your API key from{" "}
+                <a
+                  href="https://cloud.cerebras.ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-400 hover:underline"
+                >
+                  Cerebras Cloud
+                </a>
+              </p>
+              <div className="flex gap-3 mb-6">
+                <div className="relative flex-1">
+                  <input
+                    type="password"
+                    placeholder={
+                      config.cerebras_api_key_set
+                        ? "••••••••••••••••"
+                        : "Enter your Cerebras API key"
+                    }
+                    value={cerebrasApiKey}
+                    onChange={(e) => setCerebrasApiKey(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                             text-dark-200 placeholder-dark-500
+                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                  />
+                  {config.cerebras_api_key_set && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                      ✓ Set
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleSaveCerebrasApiKey}
+                  disabled={
+                    !cerebrasApiKey.trim() || saving === "cerebrasApiKey"
+                  }
+                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
+                           text-white rounded-lg transition-colors"
+                >
+                  {saving === "cerebrasApiKey"
+                    ? "Saving..."
+                    : success === "cerebrasApiKey"
+                      ? "Saved!"
+                      : "Save"}
+                </button>
+              </div>
+
+              {/* Cerebras Models */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-dark-200">Cerebras Models</h4>
+                  <button
+                    onClick={checkAllModels}
+                    disabled={checkingAllModels || cerebrasModelsLoading}
+                    className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                  >
+                    {checkingAllModels
+                      ? "Checking models..."
+                      : "Check Models (with latency)"}
+                  </button>
+                </div>
+
+                {cerebrasModelsLoading ? (
+                  <p className="text-sm text-dark-500">Loading models...</p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative" ref={cerebrasDropdownRef}>
+                      <button
+                        onClick={() =>
+                          !saving &&
+                          setIsCerebrasDropdownOpen(!isCerebrasDropdownOpen)
+                        }
+                        disabled={saving === "cerebras_model"}
+                        className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                                 text-dark-200 flex items-center justify-between
+                                 focus:outline-none focus:ring-2 focus:ring-accent-600
+                                 disabled:opacity-50 text-left"
+                      >
+                        <span>
+                          {config.cerebras_model}
+                          {modelStatuses[config.cerebras_model]?.working && (
+                            <span className="text-idle ml-2 text-xs">
+                              ✓ {modelStatuses[config.cerebras_model]?.latency}
+                              ms
+                            </span>
+                          )}
+                          {modelStatuses[config.cerebras_model]?.working ===
+                            false && (
+                            <span className="text-red-400 ml-2 text-xs">
+                              ✗ Error
+                            </span>
+                          )}
+                        </span>
+                        <svg
+                          className={`w-4 h-4 text-dark-500 transition-transform ${isCerebrasDropdownOpen ? "rotate-180" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+
+                      {isCerebrasDropdownOpen && (
+                        <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          {cerebrasModels.map((model) => (
+                            <div
+                              key={model}
+                              onClick={() => {
+                                handleCerebrasModelSelect(model);
+                                setIsCerebrasDropdownOpen(false);
+                              }}
+                              className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                                config.cerebras_model === model
+                                  ? "bg-accent-600/10 text-accent-400"
+                                  : "text-txt-primary hover:bg-tertiary"
+                              }`}
+                            >
+                              <span className="font-medium text-sm">
+                                {model}
+                              </span>
+                              <span className="text-xs">
+                                {checkingModel === model && (
+                                  <span className="text-dark-500 animate-pulse">
+                                    Checking...
+                                  </span>
+                                )}
+                                {!checkingModel &&
+                                  modelStatuses[model]?.working && (
+                                    <span className="text-idle font-medium">
+                                      ✓ {modelStatuses[model]?.latency}ms
+                                    </span>
+                                  )}
+                                {!checkingModel &&
+                                  modelStatuses[model]?.working === false && (
+                                    <span className="text-red-400 font-medium">
+                                      ✗ Error
+                                    </span>
+                                  )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-dark-500 mt-2">
+                      Select a Cerebras model to leverage wafer-scale high-speed
+                      inference.
                     </p>
                   </div>
                 )}

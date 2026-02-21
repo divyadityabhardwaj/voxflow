@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 	"voxflow/internal/audio"
+	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
 	"voxflow/internal/gemini"
+	"voxflow/internal/groq"
 	"voxflow/internal/history"
 	"voxflow/internal/hotkey"
 	"voxflow/internal/injection"
@@ -28,6 +30,8 @@ type App struct {
 	whisperService          *whisper.Service
 	geminiClient            *gemini.Client
 	openRouterClient        *openrouter.Client
+	groqClient              *groq.Client
+	cerebrasClient          *cerebras.Client
 	historyService          *history.Service
 	injectionService        *injection.Service
 	modelReady              bool
@@ -49,6 +53,8 @@ func NewApp() *App {
 		whisperService:   whisper.NewService(),
 		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
 		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
+		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
+		cerebrasClient:   cerebras.NewClient(cfg.GetCerebrasAPIKey()),
 	}
 	return app
 }
@@ -117,6 +123,72 @@ func (a *App) SetOpenRouterModel(model string) error {
 // GetOpenRouterModel returns the current OpenRouter model
 func (a *App) GetOpenRouterModel() string {
 	return a.config.GetOpenRouterModel()
+}
+
+// GetGroqModels returns all available Groq models
+func (a *App) GetGroqModels() ([]string, error) {
+	return a.groqClient.GetModels()
+}
+
+// GetGroqModelDescriptions returns descriptions for all Groq models
+func (a *App) GetGroqModelDescriptions() map[string]string {
+	return groq.ModelDescriptions
+}
+
+// CheckGroqModel tests a Groq model and returns latency in ms
+func (a *App) CheckGroqModel(model string) (int64, error) {
+	return a.groqClient.CheckModel(model)
+}
+
+// SetGroqAPIKey sets the Groq API key
+func (a *App) SetGroqAPIKey(key string) error {
+	a.config.SetGroqAPIKey(key)
+	a.groqClient.SetAPIKey(key)
+	return a.config.Save()
+}
+
+// SetGroqModel sets the Groq model
+func (a *App) SetGroqModel(model string) error {
+	a.config.SetGroqModel(model)
+	return a.config.Save()
+}
+
+// GetGroqModel returns the current Groq model
+func (a *App) GetGroqModel() string {
+	return a.config.GetGroqModel()
+}
+
+// GetCerebrasModels returns all available Cerebras models
+func (a *App) GetCerebrasModels() ([]string, error) {
+	return a.cerebrasClient.GetModels()
+}
+
+// GetCerebrasModelDescriptions returns descriptions for all Cerebras models
+func (a *App) GetCerebrasModelDescriptions() map[string]string {
+	return cerebras.ModelDescriptions
+}
+
+// CheckCerebrasModel tests a Cerebras model and returns latency in ms
+func (a *App) CheckCerebrasModel(model string) (int64, error) {
+	return a.cerebrasClient.CheckModel(model)
+}
+
+// SetCerebrasAPIKey sets the Cerebras API key
+func (a *App) SetCerebrasAPIKey(key string) error {
+	a.config.SetCerebrasAPIKey(key)
+	a.cerebrasClient.SetAPIKey(key)
+	return a.config.Save()
+}
+
+// SetCerebrasModel sets the Cerebras model
+func (a *App) SetCerebrasModel(model string) error {
+	a.config.SetCerebrasModel(model)
+	return a.config.Save()
+}
+
+// GetCerebrasModel returns the current Cerebras model
+func (a *App) GetCerebrasModel() string {
+	return a.config.GetCerebrasModel()
 }
 
 // startup is called when the app starts
@@ -587,6 +659,14 @@ func (a *App) processRecording() {
 		llmStart = time.Now()
 		polishedText, err = a.openRouterClient.RefineText(rawText, a.config.GetOpenRouterModel(), mode)
 		llmDuration = time.Since(llmStart)
+	} else if llmProvider == "groq" {
+		llmStart = time.Now()
+		polishedText, err = a.groqClient.RefineText(rawText, a.config.GetGroqModel(), mode)
+		llmDuration = time.Since(llmStart)
+	} else if llmProvider == "cerebras" {
+		llmStart = time.Now()
+		polishedText, err = a.cerebrasClient.RefineText(rawText, a.config.GetCerebrasModel(), mode)
+		llmDuration = time.Since(llmStart)
 	} else {
 		llmStart = time.Now()
 		polishedText, err = a.geminiClient.RefineText(rawText, mode)
@@ -627,6 +707,10 @@ func (a *App) processRecording() {
 	llmName := "Gemini"
 	if llmProvider == "openrouter" {
 		llmName = "OpenRouter"
+	} else if llmProvider == "groq" {
+		llmName = "Groq"
+	} else if llmProvider == "cerebras" {
+		llmName = "Cerebras"
 	}
 	output := fmt.Sprintf(
 		"\nProcessing Complete:\n"+
@@ -716,6 +800,10 @@ func (a *App) GetConfig() map[string]interface{} {
 		"llm_provider":           a.config.GetLLMProvider(),
 		"openrouter_model":       a.config.GetOpenRouterModel(),
 		"openrouter_api_key_set": a.config.GetOpenRouterAPIKey() != "",
+		"groq_model":             a.config.GetGroqModel(),
+		"groq_api_key_set":       a.config.GetGroqAPIKey() != "",
+		"cerebras_model":         a.config.GetCerebrasModel(),
+		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
 	}
 }
 

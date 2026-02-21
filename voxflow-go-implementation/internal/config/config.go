@@ -23,8 +23,12 @@ type Config struct {
 	MaximizedW       int    `json:"maximized_w"`         // Saved width of maximized window
 	MaximizedH       int    `json:"maximized_h"`         // Saved height of maximized window
 	GeminiModel      string `json:"gemini_model"`        // Saved Gemini model to use
-	LLMProvider      string `json:"llm_provider"`        // "gemini" or "openrouter"
+	LLMProvider      string `json:"llm_provider"`        // "gemini", "openrouter", "groq", "cerebras"
 	OpenRouterModel  string `json:"openrouter_model"`    // Saved OpenRouter model to use
+	GroqAPIKey       string `json:"groq_api_key"`
+	GroqModel        string `json:"groq_model"`
+	CerebrasAPIKey   string `json:"cerebras_api_key"`
+	CerebrasModel    string `json:"cerebras_model"`
 	mu               sync.RWMutex
 }
 
@@ -119,6 +123,12 @@ func (c *Config) Load() error {
 	if c.OpenRouterModel == "" {
 		c.OpenRouterModel = "qwen/qwen3-235b-a22b:free"
 	}
+	if c.GroqModel == "" {
+		c.GroqModel = "llama-3.1-8b-instant"
+	}
+	if c.CerebrasModel == "" {
+		c.CerebrasModel = "llama3.1-8b"
+	}
 
 	// Check environment variable first for API key
 	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
@@ -126,6 +136,12 @@ func (c *Config) Load() error {
 	}
 	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" {
 		c.OpenRouterAPIKey = apiKey
+	}
+	if apiKey := os.Getenv("GROQ_API_KEY"); apiKey != "" {
+		c.GroqAPIKey = apiKey
+	}
+	if apiKey := os.Getenv("CEREBRAS_API_KEY"); apiKey != "" {
+		c.CerebrasAPIKey = apiKey
 	}
 
 	return nil
@@ -351,4 +367,72 @@ func (c *Config) SetOpenRouterModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.OpenRouterModel = model
+}
+
+// GetGroqAPIKey returns the Groq API key
+func (c *Config) GetGroqAPIKey() string {
+	if envKey := os.Getenv("GROQ_API_KEY"); envKey != "" {
+		return envKey
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.GroqAPIKey
+}
+
+// SetGroqAPIKey sets the Groq API key
+func (c *Config) SetGroqAPIKey(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.GroqAPIKey = key
+}
+
+// GetGroqModel returns the configured Groq model
+func (c *Config) GetGroqModel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.GroqModel == "" {
+		return "llama-3.1-8b-instant"
+	}
+	return c.GroqModel
+}
+
+// SetGroqModel sets the Groq model
+func (c *Config) SetGroqModel(model string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.GroqModel = model
+}
+
+// GetCerebrasAPIKey returns the Cerebras API key
+func (c *Config) GetCerebrasAPIKey() string {
+	if envKey := os.Getenv("CEREBRAS_API_KEY"); envKey != "" {
+		return envKey
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.CerebrasAPIKey
+}
+
+// SetCerebrasAPIKey sets the Cerebras API key
+func (c *Config) SetCerebrasAPIKey(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.CerebrasAPIKey = key
+}
+
+// GetCerebrasModel returns the configured Cerebras model
+func (c *Config) GetCerebrasModel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.CerebrasModel == "" {
+		return "llama3.1-8b"
+	}
+	return c.CerebrasModel
+}
+
+// SetCerebrasModel sets the Cerebras model
+func (c *Config) SetCerebrasModel(model string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.CerebrasModel = model
 }
