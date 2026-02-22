@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"voxflow/internal/llm"
 )
@@ -39,6 +40,8 @@ var FallbackFreeModels = []string{
 type Client struct {
 	apiKey     string
 	httpClient *http.Client
+	models     []string
+	modelsMu   sync.Mutex
 }
 
 // NewClient creates a new OpenRouter client
@@ -115,6 +118,13 @@ type Pricing struct {
 
 // GetFreeModels fetches available free models from OpenRouter API
 func (c *Client) GetFreeModels() ([]string, error) {
+	c.modelsMu.Lock()
+	if c.models != nil {
+		c.modelsMu.Unlock()
+		return c.models, nil
+	}
+	c.modelsMu.Unlock()
+
 	url := fmt.Sprintf("%s/models?free=true", baseAPIURL)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -154,6 +164,10 @@ func (c *Client) GetFreeModels() ([]string, error) {
 	if len(freeModels) == 0 {
 		return FallbackFreeModels, nil
 	}
+
+	c.modelsMu.Lock()
+	c.models = freeModels
+	c.modelsMu.Unlock()
 
 	return freeModels, nil
 }

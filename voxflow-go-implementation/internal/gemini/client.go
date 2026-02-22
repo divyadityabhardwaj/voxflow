@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"voxflow/internal/llm"
 )
@@ -20,6 +21,8 @@ type Client struct {
 	apiKey     string
 	modelName  string
 	httpClient *http.Client
+	models     []string
+	modelsMu   sync.Mutex
 }
 
 // NewClient creates a new Gemini client
@@ -405,6 +408,13 @@ func (c *Client) ListModels() ([]string, error) {
 		return nil, fmt.Errorf("API key not set")
 	}
 
+	c.modelsMu.Lock()
+	if c.models != nil {
+		c.modelsMu.Unlock()
+		return c.models, nil
+	}
+	c.modelsMu.Unlock()
+
 	url := fmt.Sprintf("%s/models?key=%s", baseAPIURL, c.apiKey)
 
 	httpReq, err := http.NewRequest("GET", url, nil)
@@ -446,6 +456,10 @@ func (c *Client) ListModels() ([]string, error) {
 			models = append(models, name)
 		}
 	}
+
+	c.modelsMu.Lock()
+	c.models = models
+	c.modelsMu.Unlock()
 
 	return models, nil
 }

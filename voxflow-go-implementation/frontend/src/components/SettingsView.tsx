@@ -1043,101 +1043,96 @@ export default function SettingsView() {
                   </button>
                 </div>
 
-                {openRouterModelsLoading ? (
-                  <p className="text-sm text-dark-500">Loading models...</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative" ref={openRouterDropdownRef}>
-                      <button
-                        onClick={() =>
-                          !saving &&
-                          setIsOpenRouterDropdownOpen(!isOpenRouterDropdownOpen)
-                        }
-                        disabled={saving === "openrouter_model"}
-                        className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                <div className="space-y-2">
+                  <div className="relative" ref={openRouterDropdownRef}>
+                    <button
+                      onClick={() =>
+                        !saving &&
+                        setIsOpenRouterDropdownOpen(!isOpenRouterDropdownOpen)
+                      }
+                      disabled={saving === "openrouter_model"}
+                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
                                  text-dark-200 flex items-center justify-between
                                  focus:outline-none focus:ring-2 focus:ring-accent-600
                                  disabled:opacity-50 text-left"
+                    >
+                      <span>
+                        {config.openrouter_model}
+                        {modelStatuses[config.openrouter_model]?.working && (
+                          <span className="text-idle ml-2 text-xs">
+                            ✓ {modelStatuses[config.openrouter_model]?.latency}
+                            ms
+                          </span>
+                        )}
+                        {modelStatuses[config.openrouter_model]?.working ===
+                          false && (
+                          <span className="text-red-400 ml-2 text-xs">
+                            ✗ Error
+                          </span>
+                        )}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-dark-500 transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <span>
-                          {config.openrouter_model}
-                          {modelStatuses[config.openrouter_model]?.working && (
-                            <span className="text-idle ml-2 text-xs">
-                              ✓{" "}
-                              {modelStatuses[config.openrouter_model]?.latency}
-                              ms
-                            </span>
-                          )}
-                          {modelStatuses[config.openrouter_model]?.working ===
-                            false && (
-                            <span className="text-red-400 ml-2 text-xs">
-                              ✗ Error
-                            </span>
-                          )}
-                        </span>
-                        <svg
-                          className={`w-4 h-4 text-dark-500 transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </button>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
 
-                      {isOpenRouterDropdownOpen && (
-                        <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                          {openRouterModels.map((model) => (
-                            <div
-                              key={model}
-                              onClick={() => {
-                                handleOpenRouterModelSelect(model);
-                                setIsOpenRouterDropdownOpen(false);
-                              }}
-                              className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
-                                config.openrouter_model === model
-                                  ? "bg-accent-600/10 text-accent-400"
-                                  : "text-txt-primary hover:bg-tertiary"
-                              }`}
-                            >
-                              <span className="font-medium text-sm">
-                                {model.split("/")[1]?.split(":")[0]}
-                              </span>
-                              <span className="text-xs">
-                                {checkingModel === model && (
-                                  <span className="text-dark-500 animate-pulse">
-                                    Checking...
+                    {isOpenRouterDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        {openRouterModels.map((model) => (
+                          <div
+                            key={model}
+                            onClick={() => {
+                              handleOpenRouterModelSelect(model);
+                              setIsOpenRouterDropdownOpen(false);
+                            }}
+                            className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                              config.openrouter_model === model
+                                ? "bg-accent-600/10 text-accent-400"
+                                : "text-txt-primary hover:bg-tertiary"
+                            }`}
+                          >
+                            <span className="font-medium text-sm">
+                              {model.split("/")[1]?.split(":")[0]}
+                            </span>
+                            <span className="text-xs">
+                              {checkingModel === model && (
+                                <span className="text-dark-500 animate-pulse">
+                                  Checking...
+                                </span>
+                              )}
+                              {!checkingModel &&
+                                modelStatuses[model]?.working && (
+                                  <span className="text-idle font-medium">
+                                    ✓ {modelStatuses[model]?.latency}ms
                                   </span>
                                 )}
-                                {!checkingModel &&
-                                  modelStatuses[model]?.working && (
-                                    <span className="text-idle font-medium">
-                                      ✓ {modelStatuses[model]?.latency}ms
-                                    </span>
-                                  )}
-                                {!checkingModel &&
-                                  modelStatuses[model]?.working === false && (
-                                    <span className="text-red-400 font-medium">
-                                      ✗ Error
-                                    </span>
-                                  )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-dark-500 mt-2">
-                      Select a free OpenRouter model. Click "Check Models" to
-                      test latency.
-                    </p>
+                              {!checkingModel &&
+                                modelStatuses[model]?.working === false && (
+                                  <span className="text-red-400 font-medium">
+                                    ✗ Error
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                  <p className="text-xs text-dark-500 mt-2">
+                    Select a free OpenRouter model. Click "Check Models" to test
+                    latency.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -1207,99 +1202,93 @@ export default function SettingsView() {
                   </button>
                 </div>
 
-                {groqModelsLoading ? (
-                  <p className="text-sm text-dark-500">Loading models...</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative" ref={groqDropdownRef}>
-                      <button
-                        onClick={() =>
-                          !saving && setIsGroqDropdownOpen(!isGroqDropdownOpen)
-                        }
-                        disabled={saving === "groq_model"}
-                        className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                <div className="space-y-2">
+                  <div className="relative" ref={groqDropdownRef}>
+                    <button
+                      onClick={() =>
+                        !saving && setIsGroqDropdownOpen(!isGroqDropdownOpen)
+                      }
+                      disabled={saving === "groq_model"}
+                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
                                  text-dark-200 flex items-center justify-between
                                  focus:outline-none focus:ring-2 focus:ring-accent-600
                                  disabled:opacity-50 text-left"
+                    >
+                      <span>
+                        {config.groq_model}
+                        {modelStatuses[config.groq_model]?.working && (
+                          <span className="text-idle ml-2 text-xs">
+                            ✓ {modelStatuses[config.groq_model]?.latency}
+                            ms
+                          </span>
+                        )}
+                        {modelStatuses[config.groq_model]?.working ===
+                          false && (
+                          <span className="text-red-400 ml-2 text-xs">
+                            ✗ Error
+                          </span>
+                        )}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-dark-500 transition-transform ${isGroqDropdownOpen ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <span>
-                          {config.groq_model}
-                          {modelStatuses[config.groq_model]?.working && (
-                            <span className="text-idle ml-2 text-xs">
-                              ✓ {modelStatuses[config.groq_model]?.latency}
-                              ms
-                            </span>
-                          )}
-                          {modelStatuses[config.groq_model]?.working ===
-                            false && (
-                            <span className="text-red-400 ml-2 text-xs">
-                              ✗ Error
-                            </span>
-                          )}
-                        </span>
-                        <svg
-                          className={`w-4 h-4 text-dark-500 transition-transform ${isGroqDropdownOpen ? "rotate-180" : ""}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </button>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
 
-                      {isGroqDropdownOpen && (
-                        <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                          {groqModels.map((model) => (
-                            <div
-                              key={model}
-                              onClick={() => {
-                                handleGroqModelSelect(model);
-                                setIsGroqDropdownOpen(false);
-                              }}
-                              className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
-                                config.groq_model === model
-                                  ? "bg-accent-600/10 text-accent-400"
-                                  : "text-txt-primary hover:bg-tertiary"
-                              }`}
-                            >
-                              <span className="font-medium text-sm">
-                                {model}
-                              </span>
-                              <span className="text-xs">
-                                {checkingModel === model && (
-                                  <span className="text-dark-500 animate-pulse">
-                                    Checking...
+                    {isGroqDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        {groqModels.map((model) => (
+                          <div
+                            key={model}
+                            onClick={() => {
+                              handleGroqModelSelect(model);
+                              setIsGroqDropdownOpen(false);
+                            }}
+                            className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                              config.groq_model === model
+                                ? "bg-accent-600/10 text-accent-400"
+                                : "text-txt-primary hover:bg-tertiary"
+                            }`}
+                          >
+                            <span className="font-medium text-sm">{model}</span>
+                            <span className="text-xs">
+                              {checkingModel === model && (
+                                <span className="text-dark-500 animate-pulse">
+                                  Checking...
+                                </span>
+                              )}
+                              {!checkingModel &&
+                                modelStatuses[model]?.working && (
+                                  <span className="text-idle font-medium">
+                                    ✓ {modelStatuses[model]?.latency}ms
                                   </span>
                                 )}
-                                {!checkingModel &&
-                                  modelStatuses[model]?.working && (
-                                    <span className="text-idle font-medium">
-                                      ✓ {modelStatuses[model]?.latency}ms
-                                    </span>
-                                  )}
-                                {!checkingModel &&
-                                  modelStatuses[model]?.working === false && (
-                                    <span className="text-red-400 font-medium">
-                                      ✗ Error
-                                    </span>
-                                  )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-dark-500 mt-2">
-                      Select a Groq model for ultra-fast LPU inference
-                      constraints.
-                    </p>
+                              {!checkingModel &&
+                                modelStatuses[model]?.working === false && (
+                                  <span className="text-red-400 font-medium">
+                                    ✗ Error
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                  <p className="text-xs text-dark-500 mt-2">
+                    Select a Groq model for ultra-fast LPU inference
+                    constraints.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -1373,100 +1362,94 @@ export default function SettingsView() {
                   </button>
                 </div>
 
-                {cerebrasModelsLoading ? (
-                  <p className="text-sm text-dark-500">Loading models...</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative" ref={cerebrasDropdownRef}>
-                      <button
-                        onClick={() =>
-                          !saving &&
-                          setIsCerebrasDropdownOpen(!isCerebrasDropdownOpen)
-                        }
-                        disabled={saving === "cerebras_model"}
-                        className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                <div className="space-y-2">
+                  <div className="relative" ref={cerebrasDropdownRef}>
+                    <button
+                      onClick={() =>
+                        !saving &&
+                        setIsCerebrasDropdownOpen(!isCerebrasDropdownOpen)
+                      }
+                      disabled={saving === "cerebras_model"}
+                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
                                  text-dark-200 flex items-center justify-between
                                  focus:outline-none focus:ring-2 focus:ring-accent-600
                                  disabled:opacity-50 text-left"
+                    >
+                      <span>
+                        {config.cerebras_model}
+                        {modelStatuses[config.cerebras_model]?.working && (
+                          <span className="text-idle ml-2 text-xs">
+                            ✓ {modelStatuses[config.cerebras_model]?.latency}
+                            ms
+                          </span>
+                        )}
+                        {modelStatuses[config.cerebras_model]?.working ===
+                          false && (
+                          <span className="text-red-400 ml-2 text-xs">
+                            ✗ Error
+                          </span>
+                        )}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-dark-500 transition-transform ${isCerebrasDropdownOpen ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
                       >
-                        <span>
-                          {config.cerebras_model}
-                          {modelStatuses[config.cerebras_model]?.working && (
-                            <span className="text-idle ml-2 text-xs">
-                              ✓ {modelStatuses[config.cerebras_model]?.latency}
-                              ms
-                            </span>
-                          )}
-                          {modelStatuses[config.cerebras_model]?.working ===
-                            false && (
-                            <span className="text-red-400 ml-2 text-xs">
-                              ✗ Error
-                            </span>
-                          )}
-                        </span>
-                        <svg
-                          className={`w-4 h-4 text-dark-500 transition-transform ${isCerebrasDropdownOpen ? "rotate-180" : ""}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </button>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
 
-                      {isCerebrasDropdownOpen && (
-                        <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                          {cerebrasModels.map((model) => (
-                            <div
-                              key={model}
-                              onClick={() => {
-                                handleCerebrasModelSelect(model);
-                                setIsCerebrasDropdownOpen(false);
-                              }}
-                              className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
-                                config.cerebras_model === model
-                                  ? "bg-accent-600/10 text-accent-400"
-                                  : "text-txt-primary hover:bg-tertiary"
-                              }`}
-                            >
-                              <span className="font-medium text-sm">
-                                {model}
-                              </span>
-                              <span className="text-xs">
-                                {checkingModel === model && (
-                                  <span className="text-dark-500 animate-pulse">
-                                    Checking...
+                    {isCerebrasDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        {cerebrasModels.map((model) => (
+                          <div
+                            key={model}
+                            onClick={() => {
+                              handleCerebrasModelSelect(model);
+                              setIsCerebrasDropdownOpen(false);
+                            }}
+                            className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                              config.cerebras_model === model
+                                ? "bg-accent-600/10 text-accent-400"
+                                : "text-txt-primary hover:bg-tertiary"
+                            }`}
+                          >
+                            <span className="font-medium text-sm">{model}</span>
+                            <span className="text-xs">
+                              {checkingModel === model && (
+                                <span className="text-dark-500 animate-pulse">
+                                  Checking...
+                                </span>
+                              )}
+                              {!checkingModel &&
+                                modelStatuses[model]?.working && (
+                                  <span className="text-idle font-medium">
+                                    ✓ {modelStatuses[model]?.latency}ms
                                   </span>
                                 )}
-                                {!checkingModel &&
-                                  modelStatuses[model]?.working && (
-                                    <span className="text-idle font-medium">
-                                      ✓ {modelStatuses[model]?.latency}ms
-                                    </span>
-                                  )}
-                                {!checkingModel &&
-                                  modelStatuses[model]?.working === false && (
-                                    <span className="text-red-400 font-medium">
-                                      ✗ Error
-                                    </span>
-                                  )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-dark-500 mt-2">
-                      Select a Cerebras model to leverage wafer-scale high-speed
-                      inference.
-                    </p>
+                              {!checkingModel &&
+                                modelStatuses[model]?.working === false && (
+                                  <span className="text-red-400 font-medium">
+                                    ✗ Error
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                  <p className="text-xs text-dark-500 mt-2">
+                    Select a Cerebras model to leverage wafer-scale high-speed
+                    inference.
+                  </p>
+                </div>
               </div>
             </div>
           )}

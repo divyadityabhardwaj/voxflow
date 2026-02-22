@@ -634,6 +634,8 @@ func (a *App) processRecording() {
 	}
 	whisperDuration = time.Since(whisperStart)
 
+	fmt.Printf("\n[App] Whisper raw output (%d chars):\n%s\n", len(rawText), rawText)
+
 	if rawText == "" {
 		a.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
 		a.resetToIdle()
@@ -700,6 +702,8 @@ func (a *App) processRecording() {
 			}
 		}()
 	}
+
+	fmt.Printf("\n[App] LLM refined output (%d chars):\n%s\n", len(polishedText), polishedText)
 
 	totalProcessingTime := time.Since(processingStartTime)
 
