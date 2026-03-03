@@ -15,6 +15,7 @@ import (
 	"voxflow/internal/hotkey"
 	"voxflow/internal/injection"
 	"voxflow/internal/localgguf"
+	"voxflow/internal/logger"
 	"voxflow/internal/openrouter"
 	"voxflow/internal/whisper"
 
@@ -987,9 +988,12 @@ func (a *App) GetLocalModels() ([]localgguf.ModelInfo, error) {
 
 // DownloadLocalModel downloads a specific local GGUF model (cancellable)
 func (a *App) DownloadLocalModel(modelName string) error {
+	logger.Infof("[App] DownloadLocalModel called for: %s", modelName)
+
 	a.localDownloadMu.Lock()
 
 	if a.localDownloadCancel != nil {
+		logger.Debugf("[App] Cancelling existing download...")
 		a.localDownloadCancel()
 	}
 
@@ -997,8 +1001,11 @@ func (a *App) DownloadLocalModel(modelName string) error {
 	a.localDownloadCancel = cancel
 	a.localDownloadMu.Unlock()
 
+	logger.Debugf("[App] Starting download for model: %s", modelName)
+
 	err := a.localGGUFService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
 		progress := float64(downloaded) / float64(total) * 100
+		logger.Debugf("[App] Download progress: %.1f%% (%d/%d bytes)", progress, downloaded, total)
 		runtime.EventsEmit(a.ctx, "local-model-download-progress", map[string]interface{}{
 			"model":      modelName,
 			"downloaded": downloaded,
@@ -1012,6 +1019,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 	a.localDownloadMu.Unlock()
 
 	if err != nil {
+		logger.Errorf("[App] Download failed for %s: %v", modelName, err)
 		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
 			"model": modelName,
 			"error": err.Error(),
@@ -1019,6 +1027,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 		return err
 	}
 
+	logger.Infof("[App] Download complete for model: %s", modelName)
 	runtime.EventsEmit(a.ctx, "local-model-download-complete", modelName)
 	return nil
 }
@@ -1029,7 +1038,7 @@ func (a *App) CancelLocalModelDownload() {
 	defer a.localDownloadMu.Unlock()
 
 	if a.localDownloadCancel != nil {
-		fmt.Println("[App] Cancelling local model download...")
+		logger.Warn("[App] Cancelling local model download...")
 		a.localDownloadCancel()
 		a.localDownloadCancel = nil
 		runtime.EventsEmit(a.ctx, "local-model-download-cancelled", nil)

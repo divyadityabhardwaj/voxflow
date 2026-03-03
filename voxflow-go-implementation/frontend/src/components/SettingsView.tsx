@@ -880,6 +880,11 @@ export default function SettingsView() {
                     label: "Cerebras",
                     sub: "Wafer-scale fast inference",
                   },
+                  {
+                    id: "local",
+                    label: "Local",
+                    sub: "Run models locally on your device",
+                  },
                 ].map((prov) => (
                   <div
                     key={prov.id}
@@ -1559,82 +1564,67 @@ export default function SettingsView() {
           )}
         </section>
 
-        {/* Hotkeys */}
-        <section className="space-y-6">
-          <div className="card p-6">
-            <h3 className="font-serif text-lg font-medium text-primary mb-4">
-              Push-to-Talk Hotkey
+        {/* Local Models Section - shown when local provider is selected */}
+        {config.llm_provider === "local" && (
+          <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
+            <h3 className="text-lg font-medium text-dark-200 mb-4">
+              Local Models (GGUF)
             </h3>
-            <p className="text-sm text-secondary mb-4">
-              Hold this shortcut to record. Release to process.
+            <p className="text-sm text-dark-500 mb-4">
+              Download and use local GGUF models for offline inference. Runs entirely on your device.
             </p>
-            <div className="flex gap-3">
-              <div
-                onClick={() =>
-                  openHotkeyModal("ptt", config.push_to_talk_hotkey)
-                }
-                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
-                         flex items-center justify-between group"
-              >
-                <span className="font-mono">
-                  {formatHotkey(config.push_to_talk_hotkey || "None")}
-                </span>
-                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
-                  Click to edit
-                </span>
+            {localModelsLoading ? (
+              <p className="text-sm text-dark-500 text-center py-4">Loading models...</p>
+            ) : localModels.length === 0 ? (
+              <p className="text-sm text-dark-500 text-center py-4">No models available</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {localModels.map((model) => (
+                  <div
+                    key={model.name}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      config.local_model === model.name ? "bg-accent-600/10 border-accent-600" : "border-dark-700 hover:bg-dark-800"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="local_model"
+                        checked={config.local_model === model.name}
+                        onChange={() => model.downloaded && handleLocalModelSelect(model.name)}
+                        disabled={!model.downloaded}
+                        className="w-4 h-4 text-accent-600"
+                      />
+                      <div>
+                        <p className="text-dark-200 font-medium text-sm">{model.name}</p>
+                        <p className="text-xs text-dark-500">{model.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {model.downloaded ? (
+                        <span className="text-xs text-idle">✓</span>
+                      ) : localDownloading === model.name ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-12 h-1.5 bg-dark-700 rounded-full">
+                            <div className="h-full bg-accent-500 rounded-full" style={{ width: `${localDownloadProgress}%` }} />
+                          </div>
+                          <span className="text-xs text-dark-400">{localDownloadProgress}%</span>
+                          <button onClick={handleCancelLocalDownload} className="text-dark-500 hover:text-red-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => handleDownloadLocalModel(model.name)} className="px-2 py-1 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded">
+                          Download
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              {saving === "ptt" && (
-                <span className="flex items-center text-sm text-dark-500">
-                  Saving...
-                </span>
-              )}
-              {success === "ptt" && (
-                <span className="flex items-center text-sm text-idle">
-                  ✓ Saved
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="card p-6">
-            <h3 className="font-serif text-lg font-medium text-primary mb-4">
-              Hands-Free Hotkey
-            </h3>
-            <p className="text-sm text-secondary mb-4">
-              Press once to start recording. Press again to stop.
-            </p>
-            <div className="flex gap-3">
-              <div
-                onClick={() =>
-                  openHotkeyModal("handsFree", config.hands_free_hotkey)
-                }
-                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
-                         flex items-center justify-between group"
-              >
-                <span className="font-mono">
-                  {formatHotkey(config.hands_free_hotkey || "None")}
-                </span>
-                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
-                  Click to edit
-                </span>
-              </div>
-
-              {saving === "handsFree" && (
-                <span className="flex items-center text-sm text-dark-500">
-                  Saving...
-                </span>
-              )}
-              {success === "handsFree" && (
-                <span className="flex items-center text-sm text-idle">
-                  ✓ Saved
-                </span>
-              )}
-            </div>
-          </div>
-        </section>
+            )}
+          </section>
+        )}
 
         <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
           <h3 className="text-lg font-medium text-dark-200 mb-4">

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"voxflow/internal/logger"
 )
 
 var modelURLs = map[string]string{
@@ -77,27 +79,37 @@ type ModelInfo struct {
 }
 
 func (s *Service) GetModelSizeFromServer(modelName string) (int64, error) {
+	logger.Debugf("[LocalGGUF] Getting model size from server for: %s", modelName)
+
 	url, ok := modelURLs[modelName]
 	if !ok {
+		logger.Errorf("[LocalGGUF] Unknown model: %s", modelName)
 		return 0, fmt.Errorf("unknown model: %s", modelName)
 	}
 
+	logger.Debugf("[LocalGGUF] Sending HEAD request to: %s", url)
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
+		logger.Errorf("[LocalGGUF] Failed to create HEAD request: %v", err)
 		return 0, err
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		logger.Errorf("[LocalGGUF] HEAD request failed: %v", err)
 		return 0, err
 	}
 	defer resp.Body.Close()
 
+	logger.Debugf("[LocalGGUF] HEAD response status: %d", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusOK {
+		logger.Errorf("[LocalGGUF] HEAD request failed with status: %d", resp.StatusCode)
 		return 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
+	logger.Infof("[LocalGGUF] Model %s size: %d bytes", modelName, resp.ContentLength)
 	return resp.ContentLength, nil
 }
 
@@ -152,51 +164,75 @@ func (s *Service) DeleteModel(modelName string) error {
 }
 
 func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string, progress ProgressCallback) error {
+	logger.Debugf("[LocalGGUF] Starting download for model: %s", modelName)
+
 	url, ok := modelURLs[modelName]
 	if !ok {
+		logger.Errorf("[LocalGGUF] Unknown model: %s", modelName)
 		return fmt.Errorf("unknown model: %s", modelName)
 	}
 
+	logger.Debugf("[LocalGGUF] URL for %s: %s", modelName, url)
+
 	modelsDir, err := GetModelsDir()
 	if err != nil {
+		logger.Errorf("[LocalGGUF] Failed to get models dir: %v", err)
 		return err
 	}
 
+	logger.Debugf("[LocalGGUF] Models directory: %s", modelsDir)
+
 	modelPath := filepath.Join(modelsDir, fmt.Sprintf("%s.gguf", modelName))
+	logger.Debugf("[LocalGGUF] Target model path: %s", modelPath)
 
 	// Check if already downloaded
 	if info, err := os.Stat(modelPath); err == nil && info.Size() > 1024*1024 {
+		logger.Infof("[LocalGGUF] Model already downloaded: %s (%d bytes)", modelName, info.Size())
 		return nil
 	}
+
+	logger.Debugf("[LocalGGUF] Model not found, fetching size from server...")
 
 	// Get size from server
 	expectedSize, err := s.GetModelSizeFromServer(modelName)
 	if err != nil {
+		logger.Errorf("[LocalGGUF] Failed to get model size from server: %v", err)
 		return fmt.Errorf("failed to get model size: %w", err)
 	}
+	logger.Infof("[LocalGGUF] Model %s size: %d bytes", modelName, expectedSize)
 
+	logger.Debugf("[LocalGGUF] Creating HTTP request...")
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		logger.Errorf("[LocalGGUF] Failed to create request: %v", err)
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
+	logger.Debugf("[LocalGGUF] Sending HTTP request...")
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.Canceled {
+			logger.Warnf("[LocalGGUF] Download cancelled by user")
 			return fmt.Errorf("download cancelled")
 		}
+		logger.Errorf("[LocalGGUF] HTTP request failed: %v", err)
 		return fmt.Errorf("failed to download model: %w", err)
 	}
 	defer resp.Body.Close()
 
+	logger.Debugf("[LocalGGUF] Response status: %d", resp.StatusCode)
+
 	if resp.StatusCode != http.StatusOK {
+		logger.Errorf("[LocalGGUF] HTTP error: status %d", resp.StatusCode)
 		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
 	}
 
+	logger.Debugf("[LocalGGUF] Creating temp file...")
 	tempPath := modelPath + ".tmp"
 	file, err := os.Create(tempPath)
 	if err != nil {
+		logger.Errorf("[LocalGGUF] Failed to create temp file: %v", err)
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 
@@ -204,6 +240,8 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 	if totalSize <= 0 {
 		totalSize = expectedSize
 	}
+	logger.Infof("[LocalGGUF] Starting download: %d bytes expected", totalSize)
+
 	var downloaded int64
 
 	reader := &cancellableProgressReader{
@@ -223,28 +261,36 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 	if err != nil {
 		os.Remove(tempPath)
 		if ctx.Err() == context.Canceled {
+			logger.Warnf("[LocalGGUF] Download cancelled during copy")
 			return fmt.Errorf("download cancelled")
 		}
+		logger.Errorf("[LocalGGUF] Failed to copy data: %v", err)
 		return fmt.Errorf("failed to save model: %w", err)
 	}
 
 	if ctx.Err() == context.Canceled {
 		os.Remove(tempPath)
+		logger.Warnf("[LocalGGUF] Download cancelled after copy")
 		return fmt.Errorf("download cancelled")
 	}
+
+	logger.Debugf("[LocalGGUF] Download complete: %d bytes written", bytesWritten)
 
 	minSize := int64(float64(expectedSize) * 0.95)
 	if bytesWritten < minSize {
 		os.Remove(tempPath)
+		logger.Errorf("[LocalGGUF] Download incomplete: got %d bytes, expected at least %d", bytesWritten, minSize)
 		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
 	}
 
+	logger.Debugf("[LocalGGUF] Renaming temp file to final location...")
 	if err := os.Rename(tempPath, modelPath); err != nil {
 		os.Remove(tempPath)
+		logger.Errorf("[LocalGGUF] Failed to rename temp file: %v", err)
 		return fmt.Errorf("failed to finalize model file: %w", err)
 	}
 
-	fmt.Printf("[LocalGGUF] Model %s downloaded successfully (%d bytes)\n", modelName, bytesWritten)
+	logger.Infof("[LocalGGUF] Model %s downloaded successfully (%d bytes)", modelName, bytesWritten)
 	return nil
 }
 
