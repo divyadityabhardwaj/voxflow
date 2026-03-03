@@ -144,6 +144,7 @@ func (a *App) CheckGroqModel(model string) (int64, error) {
 func (a *App) SetGroqAPIKey(key string) error {
 	a.config.SetGroqAPIKey(key)
 	a.groqClient.SetAPIKey(key)
+	a.groqClient.ClearModelsCache()
 	return a.config.Save()
 }
 
@@ -177,6 +178,7 @@ func (a *App) CheckCerebrasModel(model string) (int64, error) {
 func (a *App) SetCerebrasAPIKey(key string) error {
 	a.config.SetCerebrasAPIKey(key)
 	a.cerebrasClient.SetAPIKey(key)
+	a.cerebrasClient.ClearModelsCache()
 	return a.config.Save()
 }
 
