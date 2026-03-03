@@ -6,6 +6,10 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function CancelLocalModelDownload() {
+  return window['go']['main']['App']['CancelLocalModelDownload']();
+}
+
 export function CheckCerebrasModel(arg1) {
   return window['go']['main']['App']['CheckCerebrasModel'](arg1);
 }
@@ -30,12 +34,20 @@ export function CopyToClipboard(arg1) {
   return window['go']['main']['App']['CopyToClipboard'](arg1);
 }
 
+export function DeleteLocalModel(arg1) {
+  return window['go']['main']['App']['DeleteLocalModel'](arg1);
+}
+
 export function DeleteModelByName(arg1) {
   return window['go']['main']['App']['DeleteModelByName'](arg1);
 }
 
 export function DeleteTranscript(arg1) {
   return window['go']['main']['App']['DeleteTranscript'](arg1);
+}
+
+export function DownloadLocalModel(arg1) {
+  return window['go']['main']['App']['DownloadLocalModel'](arg1);
 }
 
 export function DownloadModel() {
@@ -96,6 +108,18 @@ export function GetHistory(arg1) {
 
 export function GetLLMProvider() {
   return window['go']['main']['App']['GetLLMProvider']();
+}
+
+export function GetLocalModel() {
+  return window['go']['main']['App']['GetLocalModel']();
+}
+
+export function GetLocalModels() {
+  return window['go']['main']['App']['GetLocalModels']();
+}
+
+export function GetLocalProvider() {
+  return window['go']['main']['App']['GetLocalProvider']();
 }
 
 export function GetOpenRouterModel() {
@@ -208,6 +232,14 @@ export function SetHotkey(arg1) {
 
 export function SetLLMProvider(arg1) {
   return window['go']['main']['App']['SetLLMProvider'](arg1);
+}
+
+export function SetLocalModel(arg1) {
+  return window['go']['main']['App']['SetLocalModel'](arg1);
+}
+
+export function SetLocalProvider(arg1) {
+  return window['go']['main']['App']['SetLocalProvider'](arg1);
 }
 
 export function SetMode(arg1) {

@@ -28,6 +28,12 @@ import {
   SetCerebrasAPIKey,
   SetCerebrasModel,
   CheckCerebrasModel,
+  GetLocalModels,
+  DownloadLocalModel,
+  DeleteLocalModel,
+  CancelLocalModelDownload,
+  SetLocalProvider,
+  SetLocalModel,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -37,7 +43,7 @@ import HotkeyInput from "./HotkeyInput"; // Keep if needed or remove if fully re
 interface Config {
   hands_free_hotkey: string;
   push_to_talk_hotkey: string;
-  hotkey: string; // Keep for legacy
+  hotkey: string;
   whisper_model: string;
   gemini_model: string;
   mode: string;
@@ -49,6 +55,8 @@ interface Config {
   groq_api_key_set: boolean;
   cerebras_model: string;
   cerebras_api_key_set: boolean;
+  local_provider: string;
+  local_model: string;
 }
 
 interface ModelInfo {
@@ -98,6 +106,12 @@ export default function SettingsView() {
   const [cerebrasModels, setCerebrasModels] = useState<string[]>([]);
   const [cerebrasModelsLoading, setCerebrasModelsLoading] = useState(false);
   const [cerebrasApiKey, setCerebrasApiKey] = useState("");
+
+  // Local Models State
+  const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
+  const [localModelsLoading, setLocalModelsLoading] = useState(true);
+  const [localDownloading, setLocalDownloading] = useState<string | null>(null);
+  const [localDownloadProgress, setLocalDownloadProgress] = useState(0);
 
   // Model status (latency for each model)
   const [modelStatuses, setModelStatuses] = useState<
@@ -163,6 +177,7 @@ export default function SettingsView() {
   useEffect(() => {
     loadConfig();
     loadModels();
+    loadLocalModels();
     checkWhisperCLI();
     setModelStatuses({});
 
@@ -178,6 +193,25 @@ export default function SettingsView() {
       setDownloading(null);
       setDownloadProgress(0);
       loadModels();
+    });
+
+    // Listen for local model download progress
+    EventsOn(
+      "local-model-download-progress",
+      (data: { model: string; progress: number }) => {
+        setLocalDownloadProgress(Math.round(data.progress));
+      },
+    );
+
+    EventsOn("local-model-download-complete", () => {
+      setLocalDownloading(null);
+      setLocalDownloadProgress(0);
+      loadLocalModels();
+    });
+
+    EventsOn("local-model-download-error", () => {
+      setLocalDownloading(null);
+      setLocalDownloadProgress(0);
     });
   }, []);
 
@@ -391,6 +425,76 @@ export default function SettingsView() {
       setModelsError(String(err));
     } finally {
       setModelsLoading(false);
+    }
+  };
+
+  const loadLocalModels = async () => {
+    setLocalModelsLoading(true);
+    try {
+      const modelList = await GetLocalModels();
+      console.log("Loaded local models:", modelList);
+      setLocalModels(modelList || []);
+    } catch (err) {
+      console.error("Failed to load local models:", err);
+    } finally {
+      setLocalModelsLoading(false);
+    }
+  };
+
+  const handleDownloadLocalModel = async (modelName: string) => {
+    setLocalDownloading(modelName);
+    setLocalDownloadProgress(0);
+    try {
+      await DownloadLocalModel(modelName);
+    } catch (err) {
+      console.error("Failed to download local model:", err);
+      setLocalDownloading(null);
+    }
+  };
+
+  const handleCancelLocalDownload = async () => {
+    try {
+      await CancelLocalModelDownload();
+      setLocalDownloading(null);
+      setLocalDownloadProgress(0);
+    } catch (err) {
+      console.error("Failed to cancel local download:", err);
+    }
+  };
+
+  const handleDeleteLocalModel = async (modelName: string) => {
+    try {
+      await DeleteLocalModel(modelName);
+      loadLocalModels();
+    } catch (err) {
+      console.error("Failed to delete local model:", err);
+      alert(String(err));
+    }
+  };
+
+  const handleLocalProviderChange = async (enabled: boolean) => {
+    setSaving("localProvider");
+    try {
+      await SetLocalProvider(enabled);
+      setConfig((prev) => (prev ? { ...prev, local_provider: enabled ? "local" : "" } : null));
+      showSuccess("localProvider");
+    } catch (err) {
+      console.error("Failed to save local provider:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleLocalModelSelect = async (modelName: string) => {
+    setSaving("localModel");
+    try {
+      await SetLocalModel(modelName);
+      setConfig((prev) => (prev ? { ...prev, local_model: modelName } : null));
+      showSuccess("localModel");
+    } catch (err) {
+      console.error("Failed to save local model:", err);
+    } finally {
+      setSaving(null);
     }
   };
 
@@ -1661,6 +1765,128 @@ export default function SettingsView() {
                       <button
                         onClick={() => handleDownloadModel(model.name)}
                         title={`Download ${model.name} model (${Math.round(model.size / 1024 / 1024)}MB)`}
+                        className="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+                      >
+                        Download
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* Local Models */}
+        <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-dark-200">
+              Local Models (GGUF)
+            </h3>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-sm text-dark-400">Enable</span>
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={config.local_provider === "local"}
+                  onChange={(e) => handleLocalProviderChange(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-11 h-6 rounded-full transition-colors ${
+                  config.local_provider === "local" ? "bg-accent-600" : "bg-dark-700"
+                }`}>
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform mt-0.5 ${
+                    config.local_provider === "local" ? "translate-x-5 ml-0.5" : "translate-x-0.5"
+                  }`} />
+                </div>
+              </div>
+            </label>
+          </div>
+          <p className="text-sm text-dark-500 mb-4">
+            Download and use local GGUF models for LLM inference. Runs entirely on your device.
+          </p>
+          <div className="space-y-3">
+            {localModelsLoading ? (
+              <p className="text-sm text-dark-500 text-center py-4">
+                Loading models...
+              </p>
+            ) : localModels.length === 0 ? (
+              <p className="text-sm text-dark-500 text-center py-4">
+                No models available
+              </p>
+            ) : (
+              localModels.map((model) => (
+                <div
+                  key={model.name}
+                  className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                    config.local_model === model.name && config.local_provider === "local"
+                      ? "bg-accent-600/10 border-accent-600"
+                      : "border-dark-800 hover:bg-dark-800/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="radio"
+                      name="local_model"
+                      checked={config.local_model === model.name}
+                      onChange={() => model.downloaded && handleLocalModelSelect(model.name)}
+                      disabled={!model.downloaded || config.local_provider !== "local"}
+                      className="w-4 h-4 text-accent-600 focus:ring-accent-600"
+                    />
+                    <div>
+                      <p className="text-dark-200 font-medium">
+                        {model.name}
+                        {config.local_model === model.name && config.local_provider === "local" && (
+                          <span className="ml-2 text-xs text-accent-400">(Active)</span>
+                        )}
+                      </p>
+                      <p className="text-sm text-dark-500">
+                        {model.description}
+                        {model.size > 0 && ` • ${formatSize(model.size)}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {model.downloaded ? (
+                      <>
+                        <span className="text-xs text-idle">✓ Downloaded</span>
+                        {config.local_model !== model.name && (
+                          <button
+                            onClick={() => handleDeleteLocalModel(model.name)}
+                            className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                            title="Delete model"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </>
+                    ) : localDownloading === model.name ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-2 bg-dark-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-accent-500 transition-all duration-300"
+                            style={{ width: `${localDownloadProgress}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-dark-400 w-8">
+                          {localDownloadProgress}%
+                        </span>
+                        <button
+                          onClick={handleCancelLocalDownload}
+                          className="p-1 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                          title="Cancel download"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleDownloadLocalModel(model.name)}
                         className="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
                       >
                         Download

@@ -14,6 +14,7 @@ import (
 	"voxflow/internal/history"
 	"voxflow/internal/hotkey"
 	"voxflow/internal/injection"
+	"voxflow/internal/localgguf"
 	"voxflow/internal/openrouter"
 	"voxflow/internal/whisper"
 
@@ -28,6 +29,7 @@ type App struct {
 	state                   hotkey.State
 	audioRecorder           *audio.Recorder
 	whisperService          *whisper.Service
+	localGGUFService        *localgguf.Service
 	geminiClient            *gemini.Client
 	openRouterClient        *openrouter.Client
 	groqClient              *groq.Client
@@ -40,6 +42,8 @@ type App struct {
 	downloadCancel          context.CancelFunc // Cancel function for active download
 	downloadMu              sync.Mutex         // Mutex for download operations
 	positionWatchCancel     context.CancelFunc // Cancel function for position polling
+	localDownloadCancel     context.CancelFunc // Cancel function for local model download
+	localDownloadMu         sync.Mutex         // Mutex for local download operations
 }
 
 // NewApp creates a new App application struct
@@ -51,6 +55,7 @@ func NewApp() *App {
 		isMiniMode:       true, // Start in mini mode (floating indicator)
 		audioRecorder:    audio.NewRecorder(),
 		whisperService:   whisper.NewService(),
+		localGGUFService: localgguf.NewService(),
 		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
 		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
 		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
@@ -810,6 +815,8 @@ func (a *App) GetConfig() map[string]interface{} {
 		"groq_api_key_set":       a.config.GetGroqAPIKey() != "",
 		"cerebras_model":         a.config.GetCerebrasModel(),
 		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
+		"local_provider":         a.config.GetLocalProvider(),
+		"local_model":            a.config.GetLocalModel(),
 	}
 }
 
@@ -971,6 +978,126 @@ func (a *App) IsWhisperCLIReady() bool {
 // EnsureWhisperCLI ensures whisper-cli is installed
 func (a *App) EnsureWhisperCLI() error {
 	return a.whisperService.EnsureWhisperCLI(nil)
+}
+
+// GetLocalModels returns all available local GGUF models
+func (a *App) GetLocalModels() ([]localgguf.ModelInfo, error) {
+	return a.localGGUFService.GetAllModels()
+}
+
+// DownloadLocalModel downloads a specific local GGUF model (cancellable)
+func (a *App) DownloadLocalModel(modelName string) error {
+	a.localDownloadMu.Lock()
+
+	if a.localDownloadCancel != nil {
+		a.localDownloadCancel()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.localDownloadCancel = cancel
+	a.localDownloadMu.Unlock()
+
+	err := a.localGGUFService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
+		progress := float64(downloaded) / float64(total) * 100
+		runtime.EventsEmit(a.ctx, "local-model-download-progress", map[string]interface{}{
+			"model":      modelName,
+			"downloaded": downloaded,
+			"total":      total,
+			"progress":   progress,
+		})
+	})
+
+	a.localDownloadMu.Lock()
+	a.localDownloadCancel = nil
+	a.localDownloadMu.Unlock()
+
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
+			"model": modelName,
+			"error": err.Error(),
+		})
+		return err
+	}
+
+	runtime.EventsEmit(a.ctx, "local-model-download-complete", modelName)
+	return nil
+}
+
+// CancelLocalModelDownload cancels any active local model download
+func (a *App) CancelLocalModelDownload() {
+	a.localDownloadMu.Lock()
+	defer a.localDownloadMu.Unlock()
+
+	if a.localDownloadCancel != nil {
+		fmt.Println("[App] Cancelling local model download...")
+		a.localDownloadCancel()
+		a.localDownloadCancel = nil
+		runtime.EventsEmit(a.ctx, "local-model-download-cancelled", nil)
+	}
+}
+
+// DeleteLocalModel deletes a specific local GGUF model
+func (a *App) DeleteLocalModel(modelName string) error {
+	activeModel := a.config.GetLocalModel()
+	if modelName == activeModel {
+		return fmt.Errorf("cannot delete the currently active model")
+	}
+
+	err := a.localGGUFService.DeleteModel(modelName)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SetLocalProvider enables or disables local GGUF provider
+func (a *App) SetLocalProvider(enabled bool) error {
+	if enabled {
+		a.config.SetLocalProvider("local")
+	} else {
+		a.config.SetLocalProvider("")
+	}
+	return a.config.Save()
+}
+
+// GetLocalProvider returns whether local provider is enabled
+func (a *App) GetLocalProvider() string {
+	return a.config.GetLocalProvider()
+}
+
+// SetLocalModel sets the active local GGUF model
+func (a *App) SetLocalModel(modelName string) error {
+	downloaded, err := a.localGGUFService.IsModelDownloaded(modelName)
+	if err != nil {
+		return err
+	}
+	if !downloaded {
+		return fmt.Errorf("model not downloaded: %s", modelName)
+	}
+
+	a.config.SetLocalModel(modelName)
+	err = a.config.Save()
+	if err != nil {
+		return err
+	}
+
+	if err := a.localGGUFService.LoadModel(modelName); err != nil {
+		return err
+	}
+
+	runtime.EventsEmit(a.ctx, "local-model-status", map[string]interface{}{
+		"downloaded": true,
+		"loaded":     true,
+		"model":      modelName,
+	})
+
+	return nil
+}
+
+// GetLocalModel returns the currently selected local model
+func (a *App) GetLocalModel() string {
+	return a.config.GetLocalModel()
 }
 
 // GetHistory returns transcript history
