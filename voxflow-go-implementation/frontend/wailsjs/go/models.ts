@@ -8,6 +8,10 @@ export namespace history {
 	    raw_text: string;
 	    polished_text: string;
 	    mode: string;
+	    llm_provider: string;
+	    llm_model: string;
+	    translation_time_ms: number;
+	    tokens_per_second: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Transcript(source);
@@ -21,6 +25,10 @@ export namespace history {
 	        this.raw_text = source["raw_text"];
 	        this.polished_text = source["polished_text"];
 	        this.mode = source["mode"];
+	        this.llm_provider = source["llm_provider"];
+	        this.llm_model = source["llm_model"];
+	        this.translation_time_ms = source["translation_time_ms"];
+	        this.tokens_per_second = source["tokens_per_second"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
