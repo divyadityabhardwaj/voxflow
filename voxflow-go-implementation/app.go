@@ -69,10 +69,6 @@ func NewApp() *App {
 	}
 	app.localClient = localclient.NewClient(app.ollamaService.BaseURL())
 
-	if token := cfg.GetHFToken(); token != "" {
-		localgguf.SetAuthToken(token)
-	}
-
 	return app
 }
 
@@ -202,13 +198,6 @@ func (a *App) SetCerebrasAPIKey(key string) error {
 // SetCerebrasModel sets the Cerebras model
 func (a *App) SetCerebrasModel(model string) error {
 	a.config.SetCerebrasModel(model)
-	return a.config.Save()
-}
-
-// SetHFToken sets the HuggingFace token
-func (a *App) SetHFToken(token string) error {
-	a.config.SetHFToken(token)
-	localgguf.SetAuthToken(token)
 	return a.config.Save()
 }
 
@@ -853,8 +842,8 @@ func (a *App) GetConfig() map[string]interface{} {
 		"groq_api_key_set":       a.config.GetGroqAPIKey() != "",
 		"cerebras_model":         a.config.GetCerebrasModel(),
 		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
-		"hf_token_set":           a.config.GetHFToken() != "",
-		"local_model":            a.config.GetLocalModel(),
+
+		"local_model": a.config.GetLocalModel(),
 	}
 }
 

@@ -218,10 +218,6 @@ export function SetGroqModel(arg1) {
   return window['go']['main']['App']['SetGroqModel'](arg1);
 }
 
-export function SetHFToken(arg1) {
-  return window['go']['main']['App']['SetHFToken'](arg1);
-}
-
 export function SetHandsFreeHotkey(arg1) {
   return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
 }

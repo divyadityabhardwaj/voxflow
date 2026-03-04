@@ -43,17 +43,6 @@ var ollamaModelAliases = map[string]string{
 	"phi4":          "phi4",
 }
 
-func getAuthToken() string {
-	return os.Getenv("HF_TOKEN")
-}
-
-func SetAuthToken(token string) {
-	if token == "" {
-		return
-	}
-	_ = os.Setenv("HF_TOKEN", token)
-}
-
 // Use alternative public mirrors for models
 func getDownloadURL(modelName string) string {
 	// Try direct URL first
@@ -197,13 +186,6 @@ func (s *Service) GetModelSizeFromServer(modelName string) (int64, error) {
 	// Add User-Agent to avoid 401 from HuggingFace
 	req.Header.Set("User-Agent", "voxflow/1.0")
 
-	// Use HF_TOKEN if available
-	token := getAuthToken()
-	if token != "" {
-		logger.Debugf("[LocalGGUF] Using HF_TOKEN for authentication")
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -217,16 +199,13 @@ func (s *Service) GetModelSizeFromServer(modelName string) (int64, error) {
 	// If 401/403, return estimated size and proceed without checking
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		logger.Warnf("[LocalGGUF] Auth required for HEAD, using estimated size")
-		if token == "" {
-			logger.Warnf("[LocalGGUF] Set HF_TOKEN env var to download models: export HF_TOKEN=your_token")
-		}
 		estimatedSize := int64(5 * 1024 * 1024 * 1024) // Default 5GB estimate
 		logger.Infof("[LocalGGUF] Model %s estimated size: %d bytes (auth required)", modelName, estimatedSize)
 		return estimatedSize, nil
 	}
 
-	if resp.StatusCode == http.StatusNotFound && token != "" {
-		logger.Warnf("[LocalGGUF] HEAD returned 404 even with HF_TOKEN. The model might require accepting the HuggingFace license before downloading.")
+	if resp.StatusCode == http.StatusNotFound {
+		logger.Warnf("[LocalGGUF] HEAD returned 404. The model might not be accessible.")
 		estimatedSize := int64(5 * 1024 * 1024 * 1024)
 		logger.Infof("[LocalGGUF] Model %s estimated size: %d bytes (HEAD 404)", modelName, estimatedSize)
 		return estimatedSize, nil
@@ -341,13 +320,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 	// Add User-Agent to avoid 401 from HuggingFace
 	req.Header.Set("User-Agent", "voxflow/1.0")
 
-	// Use HF_TOKEN if available
-	token := getAuthToken()
-	if token != "" {
-		logger.Debugf("[LocalGGUF] Using HF_TOKEN for download (length %d)", len(token))
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
 	logger.Debugf("[LocalGGUF] Sending HTTP request...")
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -364,20 +336,13 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 	logger.Debugf("[LocalGGUF] Response status: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		// If auth required, show helpful message
 		if resp.StatusCode == http.StatusNotFound {
-			if token != "" {
-				repo := getModelRepo(modelName)
-				modelURL := fmt.Sprintf("https://huggingface.co/%s", repo)
-				logger.Errorf("[LocalGGUF] Model %s not accessible (HTTP 404). Please log in to HuggingFace, accept the model license/terms at %s, and ensure your token has read access.", modelName, modelURL)
-			} else {
-				logger.Errorf("[LocalGGUF] Model %s not found (HTTP 404). Please log in or provide a HF_TOKEN with proper access.", modelName)
-			}
+			logger.Errorf("[LocalGGUF] Model %s not found (HTTP 404)", modelName)
 			return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
 		}
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			logger.Errorf("[LocalGGUF] HuggingFace authentication required. Some models need HF_TOKEN set or login. Status: %d", resp.StatusCode)
-			return fmt.Errorf("HuggingFace authentication required (HTTP %d). Some models require a HF_TOKEN or Pro subscription", resp.StatusCode)
+			logger.Errorf("[LocalGGUF] Authentication required for model download. Status: %d", resp.StatusCode)
+			return fmt.Errorf("authentication required (HTTP %d)", resp.StatusCode)
 		}
 		logger.Errorf("[LocalGGUF] HTTP error: status %d", resp.StatusCode)
 		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)

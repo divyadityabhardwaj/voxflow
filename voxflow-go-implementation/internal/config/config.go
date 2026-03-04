@@ -29,9 +29,9 @@ type Config struct {
 	GroqModel        string `json:"groq_model"`
 	CerebrasAPIKey   string `json:"cerebras_api_key"`
 	CerebrasModel    string `json:"cerebras_model"`
-	HFToken          string `json:"hf_token"`
-	LocalModel       string `json:"local_model"` // Selected local GGUF model name
-	mu               sync.RWMutex
+
+	LocalModel string `json:"local_model"` // Selected local GGUF model name
+	mu         sync.RWMutex
 }
 
 var (
@@ -147,9 +147,6 @@ func (c *Config) Load() error {
 	}
 	if apiKey := os.Getenv("CEREBRAS_API_KEY"); apiKey != "" {
 		c.CerebrasAPIKey = apiKey
-	}
-	if token := os.Getenv("HF_TOKEN"); token != "" {
-		c.HFToken = token
 	}
 
 	return nil
@@ -443,23 +440,6 @@ func (c *Config) SetCerebrasModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.CerebrasModel = model
-}
-
-// GetHFToken returns the HuggingFace token
-func (c *Config) GetHFToken() string {
-	if envToken := os.Getenv("HF_TOKEN"); envToken != "" {
-		return envToken
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.HFToken
-}
-
-// SetHFToken sets the HuggingFace token
-func (c *Config) SetHFToken(token string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.HFToken = token
 }
 
 // GetLocalModel returns the selected local model

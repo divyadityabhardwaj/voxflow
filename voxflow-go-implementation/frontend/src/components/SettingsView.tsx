@@ -28,7 +28,6 @@ import {
   SetCerebrasAPIKey,
   SetCerebrasModel,
   CheckCerebrasModel,
-  SetHFToken,
   GetLocalModels,
   DownloadLocalModel,
   DeleteLocalModel,
@@ -55,7 +54,7 @@ interface Config {
   groq_api_key_set: boolean;
   cerebras_model: string;
   cerebras_api_key_set: boolean;
-  hf_token_set: boolean;
+
   local_model: string;
 }
 
@@ -106,7 +105,6 @@ export default function SettingsView() {
   const [cerebrasModels, setCerebrasModels] = useState<string[]>([]);
   const [cerebrasModelsLoading, setCerebrasModelsLoading] = useState(false);
   const [cerebrasApiKey, setCerebrasApiKey] = useState("");
-  const [hfToken, setHfToken] = useState("");
 
   // Local Models State
   const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
@@ -210,23 +208,23 @@ export default function SettingsView() {
       loadLocalModels();
     });
 
-  EventsOn(
-    "local-model-download-error",
-    (data: { model: string; error: string }) => {
-      console.error("Local model download error:", data.error);
-      setLocalDownloading(null);
-      setLocalDownloadProgress(0);
-      if (
-        data.error.includes("401") ||
-        data.error.includes("403") ||
-        data.error.includes("authentication")
-      ) {
-        alert(
-          "HuggingFace authentication required. Some models need a HF_TOKEN.\n\nSet it with: export HF_TOKEN=your_token\n\nOr get a free token from: https://huggingface.co/settings/tokens",
-        );
-      }
-    },
-  );
+    EventsOn(
+      "local-model-download-error",
+      (data: { model: string; error: string }) => {
+        console.error("Local model download error:", data.error);
+        setLocalDownloading(null);
+        setLocalDownloadProgress(0);
+        if (
+          data.error.includes("401") ||
+          data.error.includes("403") ||
+          data.error.includes("authentication")
+        ) {
+          alert(
+            "Download failed: authentication error. Please check the model source.",
+          );
+        }
+      },
+    );
   }, []);
 
   // Load Gemini models when config (and thus API key) is loaded
@@ -577,21 +575,6 @@ export default function SettingsView() {
     }
   };
 
-  const handleSaveHFToken = async () => {
-    if (!hfToken.trim()) return;
-    setSaving("hfToken");
-    try {
-      await SetHFToken(hfToken);
-      setConfig((prev) => (prev ? { ...prev, hf_token_set: true } : null));
-      setHfToken("");
-      showSuccess("hfToken");
-    } catch (err) {
-      console.error("Failed to save HF token:", err);
-    } finally {
-      setSaving(null);
-    }
-  };
-
   const handleLLMProviderChange = async (provider: string) => {
     setSaving("llmProvider");
     try {
@@ -930,58 +913,9 @@ export default function SettingsView() {
                 Local Model (GGUF)
               </h4>
               <p className="text-sm text-dark-500 mb-4">
-                Select a downloaded GGUF model for local inference. Install llama.cpp if you have not already.
+                Select and download models for local inference via Ollama. Runs
+                entirely on your device.
               </p>
-              <div className="p-4 mb-6 bg-dark-800/60 border border-dark-700 rounded-lg">
-                <div className="flex items-center justify-between mb-3">
-                  <h5 className="font-medium text-dark-200">HuggingFace Token</h5>
-                  <a
-                    href="https://huggingface.co/settings/tokens"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-accent-400 hover:text-accent-300"
-                  >
-                    Get a token
-                  </a>
-                </div>
-                <p className="text-xs text-dark-500 mb-3">
-                  Some GGUF models require authentication to download. Paste your HuggingFace token here to enable downloads.
-                </p>
-                <div className="flex gap-3">
-                  <div className="relative flex-1">
-                    <input
-                      type="password"
-                      placeholder={
-                        config.hf_token_set
-                          ? "••••••••••••••••"
-                          : "Enter your HF token"
-                      }
-                      value={hfToken}
-                      onChange={(e) => setHfToken(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-dark-900 border border-dark-700 rounded-lg
-                               text-dark-200 placeholder-dark-500
-                               focus:outline-none focus:ring-2 focus:ring-accent-600"
-                    />
-                    {config.hf_token_set && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
-                        ✓ Set
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={handleSaveHFToken}
-                    disabled={!hfToken.trim() || saving === "hfToken"}
-                    className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
-                             text-white rounded-lg transition-colors"
-                  >
-                    {saving === "hfToken"
-                      ? "Saving..."
-                      : success === "hfToken"
-                        ? "Saved!"
-                        : "Save"}
-                  </button>
-                </div>
-              </div>
               <div className="space-y-3">
                 {localModelsLoading ? (
                   <p className="text-sm text-dark-500 text-center py-4">
@@ -1006,7 +940,10 @@ export default function SettingsView() {
                           type="radio"
                           name="local_model"
                           checked={config.local_model === model.name}
-                          onChange={() => model.downloaded && handleLocalModelSelect(model.name)}
+                          onChange={() =>
+                            model.downloaded &&
+                            handleLocalModelSelect(model.name)
+                          }
                           disabled={!model.downloaded}
                           className="w-4 h-4 text-accent-600 focus:ring-accent-600"
                         />
@@ -1014,7 +951,9 @@ export default function SettingsView() {
                           <p className="text-dark-200 font-medium">
                             {model.name}
                             {config.local_model === model.name && (
-                              <span className="ml-2 text-xs text-accent-400">(Active)</span>
+                              <span className="ml-2 text-xs text-accent-400">
+                                (Active)
+                              </span>
                             )}
                           </p>
                           <p className="text-sm text-dark-500">
@@ -1027,10 +966,14 @@ export default function SettingsView() {
                       <div className="flex items-center gap-2">
                         {model.downloaded ? (
                           <>
-                            <span className="text-xs text-idle">✓ Downloaded</span>
+                            <span className="text-xs text-idle">
+                              ✓ Downloaded
+                            </span>
                             {config.local_model !== model.name && (
                               <button
-                                onClick={() => handleDeleteLocalModel(model.name)}
+                                onClick={() =>
+                                  handleDeleteLocalModel(model.name)
+                                }
                                 className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
                                 title="Delete model"
                               >
@@ -1753,6 +1696,83 @@ export default function SettingsView() {
           )}
         </section>
 
+        {/* Hotkeys */}
+        <section className="space-y-6">
+          <div className="card p-6">
+            <h3 className="font-serif text-lg font-medium text-primary mb-4">
+              Push-to-Talk Hotkey
+            </h3>
+            <p className="text-sm text-secondary mb-4">
+              Hold this shortcut to record. Release to process.
+            </p>
+            <div className="flex gap-3">
+              <div
+                onClick={() =>
+                  openHotkeyModal("ptt", config.push_to_talk_hotkey)
+                }
+                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
+                         flex items-center justify-between group"
+              >
+                <span className="font-mono">
+                  {formatHotkey(config.push_to_talk_hotkey || "None")}
+                </span>
+                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
+                  Click to edit
+                </span>
+              </div>
+
+              {saving === "ptt" && (
+                <span className="flex items-center text-sm text-dark-500">
+                  Saving...
+                </span>
+              )}
+              {success === "ptt" && (
+                <span className="flex items-center text-sm text-idle">
+                  ✓ Saved
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <h3 className="font-serif text-lg font-medium text-primary mb-4">
+              Hands-Free Hotkey
+            </h3>
+            <p className="text-sm text-secondary mb-4">
+              Press once to start recording. Press again to stop.
+            </p>
+            <div className="flex gap-3">
+              <div
+                onClick={() =>
+                  openHotkeyModal("handsFree", config.hands_free_hotkey)
+                }
+                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
+                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
+                         flex items-center justify-between group"
+              >
+                <span className="font-mono">
+                  {formatHotkey(config.hands_free_hotkey || "None")}
+                </span>
+                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
+                  Click to edit
+                </span>
+              </div>
+
+              {saving === "handsFree" && (
+                <span className="flex items-center text-sm text-dark-500">
+                  Saving...
+                </span>
+              )}
+              {success === "handsFree" && (
+                <span className="flex items-center text-sm text-idle">
+                  ✓ Saved
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+
         <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
           <h3 className="text-lg font-medium text-dark-200 mb-4">
             Speech Recognition Models
@@ -1893,7 +1913,6 @@ export default function SettingsView() {
             )}
           </div>
         </section>
-
 
         {/* Mode */}
         <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">

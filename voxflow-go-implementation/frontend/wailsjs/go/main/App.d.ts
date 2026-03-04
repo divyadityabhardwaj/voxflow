@@ -112,8 +112,6 @@ export function SetGroqAPIKey(arg1:string):Promise<void>;
 
 export function SetGroqModel(arg1:string):Promise<void>;
 
-export function SetHFToken(arg1:string):Promise<void>;
-
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
 export function SetHotkey(arg1:string):Promise<void>;
