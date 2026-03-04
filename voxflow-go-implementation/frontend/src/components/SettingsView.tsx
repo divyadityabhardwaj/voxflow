@@ -119,8 +119,6 @@ export default function SettingsView() {
     Record<string, ModelStatus>
   >({});
 
-  const [checkingAllModels, setCheckingAllModels] = useState(false);
-
   const [checkingModel, setCheckingModel] = useState<string | null>(null);
 
   const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
@@ -394,38 +392,6 @@ export default function SettingsView() {
     } finally {
       setCheckingModel(null);
     }
-  };
-
-  const checkAllModels = async () => {
-    const provider = config?.llm_provider || "gemini";
-    let models: string[] = [];
-    if (provider === "openrouter") models = openRouterModels;
-    else if (provider === "groq") models = groqModels;
-    else if (provider === "cerebras") models = cerebrasModels;
-    else if (provider === "local")
-      models = localModels.filter((m) => m.downloaded).map((m) => m.name);
-    else models = geminiModels;
-
-    if (models.length === 0) return;
-
-    setCheckingAllModels(true);
-
-    // Check models sequentially to avoid rate limits
-    for (const model of models) {
-      if (provider === "openrouter") {
-        await checkOpenRouterModelStatus(model);
-      } else if (provider === "groq") {
-        await checkGroqModelStatus(model);
-      } else if (provider === "cerebras") {
-        await checkCerebrasModelStatus(model);
-      } else if (provider === "local") {
-        await checkLocalModelStatus(model);
-      } else {
-        await checkGeminiModelStatus(model);
-      }
-    }
-
-    setCheckingAllModels(false);
   };
 
   const checkGroqModelStatus = async (model: string) => {
@@ -1038,6 +1004,16 @@ export default function SettingsView() {
                                   </span>
                                 )}
                             </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                checkLocalModelStatus(model.name);
+                              }}
+                              disabled={!!checkingModel}
+                              className="text-[10px] text-accent-400 hover:text-accent-300 disabled:opacity-50 ml-1"
+                            >
+                              Check
+                            </button>
                             {config.local_model !== model.name && (
                               <button
                                 onClick={() =>
@@ -1165,15 +1141,6 @@ export default function SettingsView() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="font-medium text-dark-200">Gemini Model</h4>
-                    <button
-                      onClick={checkAllModels}
-                      disabled={checkingAllModels || geminiModelsLoading}
-                      className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
-                    >
-                      {checkingAllModels
-                        ? "Checking models..."
-                        : "Check Models (with latency)"}
-                    </button>
                   </div>
 
                   {geminiModelsLoading ? (
@@ -1253,7 +1220,7 @@ export default function SettingsView() {
                                 }`}
                               >
                                 <span className="font-medium">{model}</span>
-                                <span className="text-xs">
+                                <span className="text-xs flex items-center gap-2">
                                   {checkingModel === model && (
                                     <span className="text-dark-500 animate-pulse">
                                       Checking...
@@ -1274,6 +1241,16 @@ export default function SettingsView() {
                                         ✗ Error
                                       </span>
                                     )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      checkGeminiModelStatus(model);
+                                    }}
+                                    disabled={!!checkingModel}
+                                    className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                                  >
+                                    Check
+                                  </button>
                                 </span>
                               </div>
                             ))}
@@ -1351,15 +1328,6 @@ export default function SettingsView() {
                   <h4 className="font-medium text-dark-200">
                     OpenRouter Free Models
                   </h4>
-                  <button
-                    onClick={checkAllModels}
-                    disabled={checkingAllModels || openRouterModelsLoading}
-                    className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
-                  >
-                    {checkingAllModels
-                      ? "Checking models..."
-                      : "Check Models (with latency)"}
-                  </button>
                 </div>
 
                 <div className="space-y-2">
@@ -1428,7 +1396,7 @@ export default function SettingsView() {
                             <span className="font-medium text-sm">
                               {model.split("/")[1]?.split(":")[0]}
                             </span>
-                            <span className="text-xs">
+                            <span className="text-xs flex items-center gap-2">
                               {checkingModel === model && (
                                 <span className="text-dark-500 animate-pulse">
                                   Checking...
@@ -1446,6 +1414,16 @@ export default function SettingsView() {
                                     ✗ Error
                                   </span>
                                 )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  checkOpenRouterModelStatus(model);
+                                }}
+                                disabled={!!checkingModel}
+                                className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                              >
+                                Check
+                              </button>
                             </span>
                           </div>
                         ))}
@@ -1453,8 +1431,7 @@ export default function SettingsView() {
                     )}
                   </div>
                   <p className="text-xs text-dark-500 mt-2">
-                    Select a free OpenRouter model. Click "Check Models" to test
-                    latency.
+                    Select a free OpenRouter model.
                   </p>
                 </div>
               </div>
@@ -1515,15 +1492,6 @@ export default function SettingsView() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-medium text-dark-200">Groq Models</h4>
-                  <button
-                    onClick={checkAllModels}
-                    disabled={checkingAllModels || groqModelsLoading}
-                    className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
-                  >
-                    {checkingAllModels
-                      ? "Checking models..."
-                      : "Check Models (with latency)"}
-                  </button>
                 </div>
 
                 <div className="space-y-2">
@@ -1588,7 +1556,7 @@ export default function SettingsView() {
                             }`}
                           >
                             <span className="font-medium text-sm">{model}</span>
-                            <span className="text-xs">
+                            <span className="text-xs flex items-center gap-2">
                               {checkingModel === model && (
                                 <span className="text-dark-500 animate-pulse">
                                   Checking...
@@ -1608,6 +1576,16 @@ export default function SettingsView() {
                                     ✗ Error
                                   </span>
                                 )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  checkGroqModelStatus(model);
+                                }}
+                                disabled={!!checkingModel}
+                                className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                              >
+                                Check
+                              </button>
                             </span>
                           </div>
                         ))}
@@ -1681,15 +1659,6 @@ export default function SettingsView() {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-medium text-dark-200">Cerebras Models</h4>
-                  <button
-                    onClick={checkAllModels}
-                    disabled={checkingAllModels || cerebrasModelsLoading}
-                    className="text-xs text-accent-400 hover:text-accent-300 disabled:opacity-50"
-                  >
-                    {checkingAllModels
-                      ? "Checking models..."
-                      : "Check Models (with latency)"}
-                  </button>
                 </div>
 
                 <div className="space-y-2">
@@ -1751,7 +1720,7 @@ export default function SettingsView() {
                             }`}
                           >
                             <span className="font-medium text-sm">{model}</span>
-                            <span className="text-xs">
+                            <span className="text-xs flex items-center gap-2">
                               {checkingModel === model && (
                                 <span className="text-dark-500 animate-pulse">
                                   Checking...
@@ -1769,6 +1738,16 @@ export default function SettingsView() {
                                     ✗ Error
                                   </span>
                                 )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  checkCerebrasModelStatus(model);
+                                }}
+                                disabled={!!checkingModel}
+                                className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                              >
+                                Check
+                              </button>
                             </span>
                           </div>
                         ))}
