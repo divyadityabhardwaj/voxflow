@@ -12,12 +12,16 @@ import (
 
 // Transcript represents a saved transcription
 type Transcript struct {
-	ID           int64     `json:"id"`
-	Timestamp    time.Time `json:"timestamp"`
-	AppName      string    `json:"app_name"`
-	RawText      string    `json:"raw_text"`
-	PolishedText string    `json:"polished_text"`
-	Mode         string    `json:"mode"`
+	ID                int64     `json:"id"`
+	Timestamp         time.Time `json:"timestamp"`
+	AppName           string    `json:"app_name"`
+	RawText           string    `json:"raw_text"`
+	PolishedText      string    `json:"polished_text"`
+	Mode              string    `json:"mode"`
+	LLMProvider       string    `json:"llm_provider"`
+	LLMModel          string    `json:"llm_model"`
+	TranslationTimeMs int64     `json:"translation_time_ms"`
+	TokensPerSecond   float64   `json:"tokens_per_second"`
 }
 
 // Service handles transcript storage and retrieval
@@ -67,19 +71,40 @@ func (s *Service) initDB() error {
 		app_name TEXT,
 		raw_text TEXT NOT NULL,
 		polished_text TEXT,
-		mode TEXT
+		mode TEXT,
+		llm_provider TEXT,
+		llm_model TEXT,
+		translation_time_ms INTEGER,
+		tokens_per_second REAL
 	);
 	CREATE INDEX IF NOT EXISTS idx_timestamp ON transcripts(timestamp DESC);
 	`
 	_, err := s.db.Exec(query)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Migrations for existing databases
+	migrations := []string{
+		"ALTER TABLE transcripts ADD COLUMN llm_provider TEXT;",
+		"ALTER TABLE transcripts ADD COLUMN llm_model TEXT;",
+		"ALTER TABLE transcripts ADD COLUMN translation_time_ms INTEGER;",
+		"ALTER TABLE transcripts ADD COLUMN tokens_per_second REAL;",
+	}
+
+	for _, m := range migrations {
+		// Ignore errors for migrations (column might already exist)
+		_, _ = s.db.Exec(m)
+	}
+
+	return nil
 }
 
 // Save saves a new transcript
-func (s *Service) Save(appName, rawText, polishedText, mode string) (*Transcript, error) {
+func (s *Service) Save(appName, rawText, polishedText, mode, provider, model string, timeMs int64, tps float64) (*Transcript, error) {
 	result, err := s.db.Exec(
-		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode) VALUES (datetime('now'), ?, ?, ?, ?)",
-		appName, rawText, polishedText, mode,
+		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)",
+		appName, rawText, polishedText, mode, provider, model, timeMs, tps,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save transcript: %w", err)
@@ -96,14 +121,16 @@ func (s *Service) Save(appName, rawText, polishedText, mode string) (*Transcript
 // GetByID retrieves a transcript by ID
 func (s *Service) GetByID(id int64) (*Transcript, error) {
 	row := s.db.QueryRow(
-		"SELECT id, timestamp, app_name, raw_text, polished_text, mode FROM transcripts WHERE id = ?",
+		"SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second FROM transcripts WHERE id = ?",
 		id,
 	)
 
 	t := &Transcript{}
-	var appName, polishedText, mode sql.NullString
+	var appName, polishedText, mode, provider, model sql.NullString
+	var timeMs sql.NullInt64
+	var tps sql.NullFloat64
 
-	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode)
+	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps)
 	if err != nil {
 		var timestamp string
 		err = s.db.QueryRow("SELECT timestamp FROM transcripts WHERE id = ?", id).Scan(&timestamp)
@@ -117,13 +144,17 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 	t.AppName = appName.String
 	t.PolishedText = polishedText.String
 	t.Mode = mode.String
+	t.LLMProvider = provider.String
+	t.LLMModel = model.String
+	t.TranslationTimeMs = timeMs.Int64
+	t.TokensPerSecond = tps.Float64
 
 	return t, nil
 }
 
 // GetAll retrieves all transcripts ordered by timestamp desc
 func (s *Service) GetAll(limit int) ([]*Transcript, error) {
-	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode FROM transcripts ORDER BY timestamp DESC"
+	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second FROM transcripts ORDER BY timestamp DESC"
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
@@ -137,9 +168,11 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 	var transcripts []*Transcript
 	for rows.Next() {
 		t := &Transcript{}
-		var appName, polishedText, mode sql.NullString
+		var appName, polishedText, mode, provider, model sql.NullString
+		var timeMs sql.NullInt64
+		var tps sql.NullFloat64
 
-		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode)
+		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps)
 		if err != nil {
 			return nil, err
 		}
@@ -147,6 +180,10 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 		t.AppName = appName.String
 		t.PolishedText = polishedText.String
 		t.Mode = mode.String
+		t.LLMProvider = provider.String
+		t.LLMModel = model.String
+		t.TranslationTimeMs = timeMs.Int64
+		t.TokensPerSecond = tps.Float64
 
 		transcripts = append(transcripts, t)
 	}
@@ -158,7 +195,7 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	searchQuery := "%" + query + "%"
 	sqlQuery := `
-		SELECT id, timestamp, app_name, raw_text, polished_text, mode 
+		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second 
 		FROM transcripts 
 		WHERE raw_text LIKE ? OR polished_text LIKE ?
 		ORDER BY timestamp DESC
@@ -176,8 +213,10 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	var transcripts []*Transcript
 	for rows.Next() {
 		t := &Transcript{}
-		var appName, polishedText, mode sql.NullString
-		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode)
+		var appName, polishedText, mode, provider, model sql.NullString
+		var timeMs sql.NullInt64
+		var tps sql.NullFloat64
+		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps)
 		if err != nil {
 			return nil, err
 		}
@@ -185,6 +224,10 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 		t.AppName = appName.String
 		t.PolishedText = polishedText.String
 		t.Mode = mode.String
+		t.LLMProvider = provider.String
+		t.LLMModel = model.String
+		t.TranslationTimeMs = timeMs.Int64
+		t.TokensPerSecond = tps.Float64
 
 		transcripts = append(transcripts, t)
 	}

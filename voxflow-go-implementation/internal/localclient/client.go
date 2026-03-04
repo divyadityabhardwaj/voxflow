@@ -40,6 +40,13 @@ type response struct {
 	Choices []struct {
 		Message message `json:"message"`
 	} `json:"choices"`
+	Usage usage `json:"usage"`
+}
+
+type usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 type refineResponse struct {
@@ -47,7 +54,7 @@ type refineResponse struct {
 	Refused bool   `json:"refused"`
 }
 
-func (c *Client) RefineText(rawText string, model string, mode string) (string, error) {
+func (c *Client) RefineText(rawText string, model string, mode string) (string, int, error) {
 	systemPrompt := llm.BuildSystemPrompt(mode)
 	req := request{
 		Model: model,
@@ -60,41 +67,45 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(c.baseURL, "/"))
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", 0, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", 0, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("local model error (status %d): %s", resp.StatusCode, string(body))
+		return "", 0, fmt.Errorf("local model error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	var localResp response
 	if err := json.Unmarshal(body, &localResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", 0, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if len(localResp.Choices) == 0 {
-		return "", fmt.Errorf("no response generated")
+		return "", 0, fmt.Errorf("no response generated")
 	}
 
 	result := localResp.Choices[0].Message.Content
+	tokenCount := localResp.Usage.CompletionTokens
+
+	// Debug logging
+	fmt.Printf("[LocalClient] Raw output (%d chars), Tokens: %d:\n%s\n", len(result), tokenCount, result)
 
 	cleanResult := strings.TrimSpace(result)
 	if strings.HasPrefix(cleanResult, "```json") {
@@ -110,10 +121,10 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 	var refineResp refineResponse
 	if err := json.Unmarshal([]byte(cleanResult), &refineResp); err == nil {
 		if refineResp.Refused {
-			return rawText, nil
+			return rawText, tokenCount, nil
 		}
-		return refineResp.Text, nil
+		return refineResp.Text, tokenCount, nil
 	}
 
-	return cleanResult, nil
+	return cleanResult, tokenCount, nil
 }

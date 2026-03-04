@@ -15,6 +15,10 @@ interface Transcript {
   raw_text: string;
   polished_text: string;
   mode: string;
+  llm_provider?: string;
+  llm_model?: string;
+  translation_time_ms?: number;
+  tokens_per_second?: number;
 }
 
 export default function HistoryView() {
@@ -236,6 +240,31 @@ export default function HistoryView() {
                     {selectedTranscript.mode || "casual"}
                   </span>
                 </p>
+                {selectedTranscript.llm_provider && (
+                  <p className="text-sm text-tertiary mt-2 flex items-center gap-2">
+                    <span
+                      title="AI Model used"
+                      className="px-2 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium"
+                    >
+                      🧠{" "}
+                      {selectedTranscript.llm_provider === "local"
+                        ? "Local"
+                        : selectedTranscript.llm_provider}
+                      {selectedTranscript.llm_model &&
+                        ` • ${selectedTranscript.llm_model}`}
+                    </span>
+                    {selectedTranscript.tokens_per_second !== undefined &&
+                      selectedTranscript.tokens_per_second > 0 && (
+                        <span
+                          title="Generation speed"
+                          className="px-2 py-0.5 rounded-md bg-green-500/10 text-green-500 text-xs font-medium"
+                        >
+                          ⚡ {selectedTranscript.tokens_per_second.toFixed(1)}{" "}
+                          t/s
+                        </span>
+                      )}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => handleDelete(selectedTranscript.id)}

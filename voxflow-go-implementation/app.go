@@ -675,35 +675,48 @@ func (a *App) processRecording() {
 	llmProvider := a.config.GetLLMProvider()
 
 	var polishedText string
+	var tokenCount int
 	var llmDuration time.Duration
 	var llmStart time.Time
 
+	var llmModel string
+
 	if llmProvider == "openrouter" {
+		llmModel = a.config.GetOpenRouterModel()
 		llmStart = time.Now()
-		polishedText, err = a.openRouterClient.RefineText(rawText, a.config.GetOpenRouterModel(), mode)
+		polishedText, tokenCount, err = a.openRouterClient.RefineText(rawText, llmModel, mode)
 		llmDuration = time.Since(llmStart)
 	} else if llmProvider == "groq" {
+		llmModel = a.config.GetGroqModel()
 		llmStart = time.Now()
-		polishedText, err = a.groqClient.RefineText(rawText, a.config.GetGroqModel(), mode)
+		polishedText, tokenCount, err = a.groqClient.RefineText(rawText, llmModel, mode)
 		llmDuration = time.Since(llmStart)
 	} else if llmProvider == "cerebras" {
+		llmModel = a.config.GetCerebrasModel()
 		llmStart = time.Now()
-		polishedText, err = a.cerebrasClient.RefineText(rawText, a.config.GetCerebrasModel(), mode)
+		polishedText, tokenCount, err = a.cerebrasClient.RefineText(rawText, llmModel, mode)
 		llmDuration = time.Since(llmStart)
 	} else if llmProvider == "local" {
+		llmModel = localgguf.GetOllamaModelAlias(a.config.GetLocalModel())
 		llmStart = time.Now()
 		ensureErr := a.ensureLocalModelServer()
 		if ensureErr != nil {
 			err = ensureErr
 			llmDuration = time.Since(llmStart)
 			polishedText = ""
+			tokenCount = 0
 		} else {
-			polishedText, err = a.localClient.RefineText(rawText, localgguf.GetOllamaModelAlias(a.config.GetLocalModel()), mode)
+			polishedText, tokenCount, err = a.localClient.RefineText(rawText, llmModel, mode)
 			llmDuration = time.Since(llmStart)
 		}
 	} else {
+		// Default to Gemini which gets its model from its own internal state or config later
+		llmModel = a.config.GetGeminiModel()
+		if llmModel == "" {
+			llmModel = "gemini-1.5-flash"
+		}
 		llmStart = time.Now()
-		polishedText, err = a.geminiClient.RefineText(rawText, mode)
+		polishedText, tokenCount, err = a.geminiClient.RefineText(rawText, mode)
 		llmDuration = time.Since(llmStart)
 	}
 
@@ -713,9 +726,16 @@ func (a *App) processRecording() {
 		return
 	}
 
+	// Calculate speed
+	timeMs := llmDuration.Milliseconds()
+	var tps float64 = 0
+	if timeMs > 0 && tokenCount > 0 {
+		tps = float64(tokenCount) / (float64(timeMs) / 1000.0)
+	}
+
 	// Save to history (only polished text is shown, but we still save raw for potential future use)
 	if a.historyService != nil {
-		_, err := a.historyService.Save("", rawText, polishedText, mode)
+		_, err := a.historyService.Save("", rawText, polishedText, mode, llmProvider, llmModel, timeMs, tps)
 		if err != nil {
 			fmt.Printf("Failed to save to history: %v\n", err)
 		}
@@ -1221,7 +1241,7 @@ func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
 	// Use raw text if no instruction, otherwise apply instruction
 	var newPolished string
 	if instruction == "" {
-		newPolished, err = a.geminiClient.RefineText(transcript.RawText, a.config.GetMode())
+		newPolished, _, err = a.geminiClient.RefineText(transcript.RawText, a.config.GetMode())
 	} else {
 		newPolished, err = a.geminiClient.RetryWithInstruction(transcript.PolishedText, instruction)
 	}

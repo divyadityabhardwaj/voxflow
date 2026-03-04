@@ -78,8 +78,16 @@ type GenerationConfig struct {
 
 // Response represents a Gemini API response
 type Response struct {
-	Candidates []Candidate `json:"candidates"`
-	Error      *APIError   `json:"error,omitempty"`
+	Candidates    []Candidate    `json:"candidates"`
+	UsageMetadata *UsageMetadata `json:"usageMetadata,omitempty"`
+	Error         *APIError      `json:"error,omitempty"`
+}
+
+// UsageMetadata represents token usage statistics
+type UsageMetadata struct {
+	PromptTokenCount     int `json:"promptTokenCount"`
+	CandidatesTokenCount int `json:"candidatesTokenCount"`
+	TotalTokenCount      int `json:"totalTokenCount"`
 }
 
 // Candidate represents a generated candidate
@@ -101,10 +109,10 @@ type RefineResponse struct {
 }
 
 // RefineText sends raw transcription to Gemini for refinement
-func (c *Client) RefineText(rawText string, mode string) (string, error) {
+func (c *Client) RefineText(rawText string, mode string) (string, int, error) {
 	fmt.Printf("[Gemini] Refining text: %s\n", rawText)
 	if c.apiKey == "" {
-		return "", fmt.Errorf("API key not set")
+		return "", 0, fmt.Errorf("API key not set")
 	}
 
 	// Build the system prompt based on mode
@@ -128,7 +136,7 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 	// Marshal request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Build URL with API key
@@ -137,47 +145,53 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 	// Make HTTP request
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Send request
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
+		return "", 0, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", 0, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Parse response
 	var geminiResp Response
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
+		return "", 0, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// Check for API error
 	if geminiResp.Error != nil {
-		return "", fmt.Errorf("API error: %s (code: %d)", geminiResp.Error.Message, geminiResp.Error.Code)
+		return "", 0, fmt.Errorf("API error: %s (code: %d)", geminiResp.Error.Message, geminiResp.Error.Code)
 	}
 
 	// Extract the refined text
 	if len(geminiResp.Candidates) == 0 || geminiResp.Candidates[0].Content == nil {
-		return "", fmt.Errorf("no response generated")
+		return "", 0, fmt.Errorf("no response generated")
 	}
 
 	if len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("empty response")
+		return "", 0, fmt.Errorf("empty response")
 	}
 
 	result := geminiResp.Candidates[0].Content.Parts[0].Text
 
 	// Debug logging
 	fmt.Printf("[Gemini] Raw output (%d chars):\n%s\n", len(result), result)
+
+	// Extract token count
+	var tokenCount int
+	if geminiResp.UsageMetadata != nil {
+		tokenCount = geminiResp.UsageMetadata.CandidatesTokenCount
+	}
 
 	// Clean up result - remove markdown code blocks if present
 	cleanResult := result
@@ -197,15 +211,15 @@ func (c *Client) RefineText(rawText string, mode string) (string, error) {
 		// Successfully parsed JSON
 		if refineResp.Refused {
 			fmt.Printf("[Gemini] Content was refused, using raw text instead\n")
-			return rawText, nil
+			return rawText, tokenCount, nil
 		}
 		// Return the text (even if empty - that's what Gemini gave us)
-		return refineResp.Text, nil
+		return refineResp.Text, tokenCount, nil
 	}
 
 	// If JSON parsing failed, Gemini returned plain text (old behavior)
 	fmt.Printf("[Gemini] Warning: Response was not valid JSON, using as plain text\n")
-	return cleanResult, nil
+	return cleanResult, tokenCount, nil
 }
 
 // RetryWithInstruction re-processes text with a custom instruction
