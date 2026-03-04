@@ -71,6 +71,18 @@ Settings are stored in `~/.voxflow/config.json`. You can configure:
 - **Global Hotkey**: Customize the trigger shortcut.
 - **Whisper Model**: Balance between speed (`tiny`) and accuracy (`medium`).
 
+## Troubleshooting
+
+### "VoxFlow is damaged and can't be opened"
+
+Because the app is not signed with an Apple Developer Certificate, macOS may block it. To fix this, run:
+
+```bash
+xattr -cr /Applications/voxflow.app
+```
+
+(Adjust the path if you've moved the app elsewhere)
+
 ---
 
 _VoxFlow is a personal project built for speed and privacy. It's designed to make voice the primary input method for developers and power users._

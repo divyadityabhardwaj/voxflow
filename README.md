@@ -34,6 +34,18 @@ VoxFlow acts as a system-level overlay. It works inside any application where yo
 - **History Vault**: Access and search through past transcriptions with raw and polished views.
 - **Whisper Mode**: Highly sensitive local transcription that picks up quiet whispering for shared spaces.
 
+## Troubleshooting
+
+### "VoxFlow is damaged and can't be opened"
+
+Because the app is not signed with an Apple Developer Certificate, macOS may block it. To fix this, run:
+
+```bash
+xattr -cr /Applications/voxflow.app
+```
+
+(Adjust the path if you've moved the app elsewhere)
+
 ## Implementations
 
 This repository contains the primary Go-based implementation of VoxFlow.
