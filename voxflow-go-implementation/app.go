@@ -49,6 +49,7 @@ type App struct {
 	positionWatchCancel     context.CancelFunc // Cancel function for position polling
 	localDownloadCancel     context.CancelFunc // Cancel function for local model download
 	localDownloadMu         sync.Mutex         // Mutex for local download operations
+	localDownloadingModel   string             // Track which model is currently downloading
 }
 
 // NewApp creates a new App application struct
@@ -84,14 +85,23 @@ func (a *App) GetGeminiModel() string {
 	return a.config.GetGeminiModel()
 }
 
+type CheckResult struct {
+	LatencyMs int64   `json:"latency"`
+	TPS       float64 `json:"tps"`
+}
+
 // GetGeminiModels returns all available Gemini models
 func (a *App) GetGeminiModels() ([]string, error) {
 	return a.geminiClient.ListModels()
 }
 
-// CheckGeminiModel tests a Gemini model and returns latency in milliseconds
-func (a *App) CheckGeminiModel(model string) (int64, error) {
-	return a.geminiClient.CheckModel(model)
+// CheckGeminiModel tests a Gemini model and returns latency and TPS
+func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
+	latency, tps, err := a.geminiClient.CheckModel(model)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
 // GetOpenRouterModels returns all available free OpenRouter models
@@ -104,9 +114,13 @@ func (a *App) GetOpenRouterModelDescriptions() map[string]string {
 	return openrouter.ModelDescriptions
 }
 
-// CheckOpenRouterModel tests an OpenRouter model and returns latency in milliseconds
-func (a *App) CheckOpenRouterModel(model string) (int64, error) {
-	return a.openRouterClient.CheckModel(model)
+// CheckOpenRouterModel tests an OpenRouter model and returns latency and TPS
+func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
+	latency, tps, err := a.openRouterClient.CheckModel(model)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
 // SetOpenRouterAPIKey sets the OpenRouter API key
@@ -148,9 +162,13 @@ func (a *App) GetGroqModelDescriptions() map[string]string {
 	return groq.ModelDescriptions
 }
 
-// CheckGroqModel tests a Groq model and returns latency in ms
-func (a *App) CheckGroqModel(model string) (int64, error) {
-	return a.groqClient.CheckModel(model)
+// CheckGroqModel tests a Groq model and returns latency and TPS
+func (a *App) CheckGroqModel(model string) (*CheckResult, error) {
+	latency, tps, err := a.groqClient.CheckModel(model)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
 // SetGroqAPIKey sets the Groq API key
@@ -182,9 +200,23 @@ func (a *App) GetCerebrasModelDescriptions() map[string]string {
 	return cerebras.ModelDescriptions
 }
 
-// CheckCerebrasModel tests a Cerebras model and returns latency in ms
-func (a *App) CheckCerebrasModel(model string) (int64, error) {
-	return a.cerebrasClient.CheckModel(model)
+// CheckCerebrasModel tests a Cerebras model and returns latency and TPS
+func (a *App) CheckCerebrasModel(model string) (*CheckResult, error) {
+	latency, tps, err := a.cerebrasClient.CheckModel(model)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
+}
+
+// CheckLocalModel tests a local model and returns latency and TPS
+func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
+	alias := localgguf.GetOllamaModelAlias(model)
+	latency, tps, err := a.localClient.CheckModel(alias)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
 // SetCerebrasAPIKey sets the Cerebras API key
@@ -775,11 +807,13 @@ func (a *App) processRecording() {
 			"Audio captured:        %.2fs\n"+
 			"Whisper transcription: %.2fs\n"+
 			"%s refinement:     %.2fs\n"+
+			"Tokens per second:     %.1f t/s\n"+
 			"Total processing:      %.2fs\n",
 		audioDuration.Seconds(),
 		whisperDuration.Seconds(),
 		llmName,
 		llmDuration.Seconds(),
+		tps,
 		totalProcessingTime.Seconds(),
 	)
 	fmt.Println(output)
@@ -1067,6 +1101,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.localDownloadCancel = cancel
+	a.localDownloadingModel = modelName
 	a.localDownloadMu.Unlock()
 
 	// Ensure the Ollama server is running before attempting to pull
@@ -1074,6 +1109,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 		logger.Errorf("[App] Failed to start Ollama server for download: %v", err)
 		a.localDownloadMu.Lock()
 		a.localDownloadCancel = nil
+		a.localDownloadingModel = ""
 		a.localDownloadMu.Unlock()
 
 		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
@@ -1102,6 +1138,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 
 	a.localDownloadMu.Lock()
 	a.localDownloadCancel = nil
+	a.localDownloadingModel = ""
 	a.localDownloadMu.Unlock()
 
 	if err != nil {
@@ -1127,8 +1164,16 @@ func (a *App) CancelLocalModelDownload() {
 		logger.Warn("[App] Cancelling local model download...")
 		a.localDownloadCancel()
 		a.localDownloadCancel = nil
+		a.localDownloadingModel = ""
 		runtime.EventsEmit(a.ctx, "local-model-download-cancelled", nil)
 	}
+}
+
+// GetActiveLocalDownload returns the name of the currently downloading local model, or empty string if none.
+func (a *App) GetActiveLocalDownload() string {
+	a.localDownloadMu.Lock()
+	defer a.localDownloadMu.Unlock()
+	return a.localDownloadingModel
 }
 
 // DeleteLocalModel deletes a specific local GGUF model

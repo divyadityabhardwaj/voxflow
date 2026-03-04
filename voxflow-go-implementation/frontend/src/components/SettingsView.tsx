@@ -33,6 +33,7 @@ import {
   DeleteLocalModel,
   CancelLocalModelDownload,
   SetLocalModel,
+  GetActiveLocalDownload,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -68,6 +69,7 @@ interface ModelInfo {
 
 interface ModelStatus {
   latency?: number;
+  tps?: number;
   working?: boolean;
   checking?: boolean;
 }
@@ -316,15 +318,44 @@ export default function SettingsView() {
     setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
     console.log(`Checking status for Gemini model: ${model}...`);
 
-    const startTime = Date.now();
-
     try {
-      await CheckGeminiModel(model);
-      const latencyMs = Date.now() - startTime;
-      console.log(`Model ${model} is WORKING (${latencyMs}ms).`);
+      const result = (await CheckGeminiModel(model)) as {
+        latency: number;
+        tps: number;
+      };
+      console.log(
+        `Model ${model} is WORKING (${result.latency}ms, ${result.tps.toFixed(1)} t/s).`,
+      );
       setModelStatuses((prev) => ({
         ...prev,
-        [model]: { working: true, latency: latencyMs },
+        [model]: { working: true, latency: result.latency, tps: result.tps },
+      }));
+    } catch (err) {
+      console.error(`Model ${model} check FAILED:`, err);
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: false },
+      }));
+    } finally {
+      setCheckingModel(null);
+    }
+  };
+
+  const checkLocalModelStatus = async (model: string) => {
+    setCheckingModel(model);
+    setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
+    console.log(`Checking status for Local model: ${model}...`);
+
+    try {
+      const result = (await (window as any).go.main.App.CheckLocalModel(
+        model,
+      )) as { latency: number; tps: number };
+      console.log(
+        `Model ${model} is WORKING (${result.latency}ms, ${result.tps.toFixed(1)} t/s).`,
+      );
+      setModelStatuses((prev) => ({
+        ...prev,
+        [model]: { working: true, latency: result.latency, tps: result.tps },
       }));
     } catch (err) {
       console.error(`Model ${model} check FAILED:`, err);
@@ -342,15 +373,17 @@ export default function SettingsView() {
     setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
     console.log(`Checking status for OpenRouter model: ${model}...`);
 
-    const startTime = Date.now();
-
     try {
-      await CheckOpenRouterModel(model);
-      const latencyMs = Date.now() - startTime;
-      console.log(`Model ${model} is WORKING (${latencyMs}ms).`);
+      const result = (await CheckOpenRouterModel(model)) as {
+        latency: number;
+        tps: number;
+      };
+      console.log(
+        `Model ${model} is WORKING (${result.latency}ms, ${result.tps.toFixed(1)} t/s).`,
+      );
       setModelStatuses((prev) => ({
         ...prev,
-        [model]: { working: true, latency: latencyMs },
+        [model]: { working: true, latency: result.latency, tps: result.tps },
       }));
     } catch (err) {
       console.error(`Model ${model} check FAILED:`, err);
@@ -369,6 +402,8 @@ export default function SettingsView() {
     if (provider === "openrouter") models = openRouterModels;
     else if (provider === "groq") models = groqModels;
     else if (provider === "cerebras") models = cerebrasModels;
+    else if (provider === "local")
+      models = localModels.filter((m) => m.downloaded).map((m) => m.name);
     else models = geminiModels;
 
     if (models.length === 0) return;
@@ -383,6 +418,8 @@ export default function SettingsView() {
         await checkGroqModelStatus(model);
       } else if (provider === "cerebras") {
         await checkCerebrasModelStatus(model);
+      } else if (provider === "local") {
+        await checkLocalModelStatus(model);
       } else {
         await checkGeminiModelStatus(model);
       }
@@ -394,12 +431,14 @@ export default function SettingsView() {
   const checkGroqModelStatus = async (model: string) => {
     setCheckingModel(model);
     setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
-    const startTime = Date.now();
     try {
-      await CheckGroqModel(model);
+      const result = (await CheckGroqModel(model)) as {
+        latency: number;
+        tps: number;
+      };
       setModelStatuses((prev) => ({
         ...prev,
-        [model]: { working: true, latency: Date.now() - startTime },
+        [model]: { working: true, latency: result.latency, tps: result.tps },
       }));
     } catch (err) {
       setModelStatuses((prev) => ({ ...prev, [model]: { working: false } }));
@@ -411,12 +450,14 @@ export default function SettingsView() {
   const checkCerebrasModelStatus = async (model: string) => {
     setCheckingModel(model);
     setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
-    const startTime = Date.now();
     try {
-      await CheckCerebrasModel(model);
+      const result = (await CheckCerebrasModel(model)) as {
+        latency: number;
+        tps: number;
+      };
       setModelStatuses((prev) => ({
         ...prev,
-        [model]: { working: true, latency: Date.now() - startTime },
+        [model]: { working: true, latency: result.latency, tps: result.tps },
       }));
     } catch (err) {
       setModelStatuses((prev) => ({ ...prev, [model]: { working: false } }));
@@ -443,9 +484,19 @@ export default function SettingsView() {
   const loadLocalModels = async () => {
     setLocalModelsLoading(true);
     try {
+      const activeDownload = (await GetActiveLocalDownload()) as string;
+      if (activeDownload) {
+        setLocalDownloading(activeDownload);
+      }
+
       const modelList = await GetLocalModels();
       console.log("Loaded local models:", modelList);
-      setLocalModels(modelList || []);
+
+      const sortedModels = (modelList || []).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+
+      setLocalModels(sortedModels);
     } catch (err) {
       console.error("Failed to load local models:", err);
     } finally {
@@ -968,6 +1019,24 @@ export default function SettingsView() {
                           <>
                             <span className="text-xs text-idle">
                               ✓ Downloaded
+                              {modelStatuses[model.name]?.working && (
+                                <span className="ml-1">
+                                  ({modelStatuses[model.name]?.latency}ms |{" "}
+                                  {modelStatuses[model.name]?.tps?.toFixed(1)}{" "}
+                                  t/s)
+                                </span>
+                              )}
+                              {checkingModel === model.name && (
+                                <span className="ml-1 text-dark-500 animate-pulse">
+                                  (Checking...)
+                                </span>
+                              )}
+                              {modelStatuses[model.name]?.working === false &&
+                                !checkingModel && (
+                                  <span className="ml-1 text-red-500">
+                                    (Error)
+                                  </span>
+                                )}
                             </span>
                             {config.local_model !== model.name && (
                               <button
@@ -1139,6 +1208,11 @@ export default function SettingsView() {
                               <span className="text-idle ml-2 text-xs">
                                 ✓ {modelStatuses[config.gemini_model]?.latency}
                                 ms
+                                {" | "}
+                                {modelStatuses[
+                                  config.gemini_model
+                                ]?.tps?.toFixed(1)}{" "}
+                                t/s
                               </span>
                             )}
                             {modelStatuses[config.gemini_model]?.working ===
@@ -1189,6 +1263,9 @@ export default function SettingsView() {
                                     modelStatuses[model]?.working && (
                                       <span className="text-idle font-medium">
                                         ✓ {modelStatuses[model]?.latency}ms
+                                        {modelStatuses[model]?.tps !==
+                                          undefined &&
+                                          ` | ${modelStatuses[model]?.tps?.toFixed(1)} t/s`}
                                       </span>
                                     )}
                                   {!checkingModel &&
@@ -1304,6 +1381,11 @@ export default function SettingsView() {
                           <span className="text-idle ml-2 text-xs">
                             ✓ {modelStatuses[config.openrouter_model]?.latency}
                             ms
+                            {" | "}
+                            {modelStatuses[
+                              config.openrouter_model
+                            ]?.tps?.toFixed(1)}{" "}
+                            t/s
                           </span>
                         )}
                         {modelStatuses[config.openrouter_model]?.working ===
@@ -1460,8 +1542,12 @@ export default function SettingsView() {
                         {config.groq_model}
                         {modelStatuses[config.groq_model]?.working && (
                           <span className="text-idle ml-2 text-xs">
-                            ✓ {modelStatuses[config.groq_model]?.latency}
-                            ms
+                            ✓ {modelStatuses[config.groq_model]?.latency}ms
+                            {" | "}
+                            {modelStatuses[config.groq_model]?.tps?.toFixed(
+                              1,
+                            )}{" "}
+                            t/s
                           </span>
                         )}
                         {modelStatuses[config.groq_model]?.working ===
@@ -1512,6 +1598,8 @@ export default function SettingsView() {
                                 modelStatuses[model]?.working && (
                                   <span className="text-idle font-medium">
                                     ✓ {modelStatuses[model]?.latency}ms
+                                    {" | "}
+                                    {modelStatuses[model]?.tps?.toFixed(1)} t/s
                                   </span>
                                 )}
                               {!checkingModel &&

@@ -128,3 +128,59 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 
 	return cleanResult, tokenCount, nil
 }
+
+// CheckModel tests a model and returns latency in milliseconds and tokens per second
+func (c *Client) CheckModel(model string) (int64, float64, error) {
+	req := request{
+		Model: model,
+		Messages: []message{
+			{Role: "user", Content: llm.LatencyTestText},
+		},
+		Temperature: 0.3,
+	}
+
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(c.baseURL, "/"))
+
+	startTime := time.Now()
+
+	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	latency := time.Since(startTime).Milliseconds()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, fmt.Errorf("API error (status %d)", resp.StatusCode)
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var localResp response
+	if err := json.Unmarshal(respBody, &localResp); err != nil {
+		return latency, 0, nil // Return latency even if TPS fails
+	}
+
+	tokenCount := localResp.Usage.CompletionTokens
+	var tps float64 = 0
+	if latency > 0 && tokenCount > 0 {
+		tps = float64(tokenCount) / (float64(latency) / 1000.0)
+	}
+
+	return latency, tps, nil
+}

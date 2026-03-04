@@ -77,6 +77,25 @@ export namespace localgguf {
 
 }
 
+export namespace main {
+	
+	export class CheckResult {
+	    latency: number;
+	    tps: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CheckResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.latency = source["latency"];
+	        this.tps = source["tps"];
+	    }
+	}
+
+}
+
 export namespace whisper {
 	
 	export class ModelInfo {

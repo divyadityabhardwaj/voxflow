@@ -22,6 +22,10 @@ export function CheckGroqModel(arg1) {
   return window['go']['main']['App']['CheckGroqModel'](arg1);
 }
 
+export function CheckLocalModel(arg1) {
+  return window['go']['main']['App']['CheckLocalModel'](arg1);
+}
+
 export function CheckOpenRouterModel(arg1) {
   return window['go']['main']['App']['CheckOpenRouterModel'](arg1);
 }
@@ -60,6 +64,10 @@ export function DownloadModelByName(arg1) {
 
 export function EnsureWhisperCLI() {
   return window['go']['main']['App']['EnsureWhisperCLI']();
+}
+
+export function GetActiveLocalDownload() {
+  return window['go']['main']['App']['GetActiveLocalDownload']();
 }
 
 export function GetAllModels() {

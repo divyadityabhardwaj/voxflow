@@ -259,10 +259,10 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 	return cleanResult, tokenCount, nil
 }
 
-// CheckModel tests a model and returns latency in milliseconds
-func (c *Client) CheckModel(model string) (int64, error) {
+// CheckModel tests a model and returns latency in milliseconds and tokens per second
+func (c *Client) CheckModel(model string) (int64, float64, error) {
 	if c.apiKey == "" {
-		return 0, fmt.Errorf("API key not set")
+		return 0, 0, fmt.Errorf("API key not set")
 	}
 
 	req := Request{
@@ -275,7 +275,7 @@ func (c *Client) CheckModel(model string) (int64, error) {
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return 0, fmt.Errorf("failed to marshal request: %w", err)
+		return 0, 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/chat/completions", baseAPIURL)
@@ -284,22 +284,38 @@ func (c *Client) CheckModel(model string) (int64, error) {
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
-		return 0, fmt.Errorf("failed to create request: %w", err)
+		return 0, 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return 0, fmt.Errorf("failed to send request: %w", err)
+		return 0, 0, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	latency := time.Since(startTime).Milliseconds()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("API error (status %d)", resp.StatusCode)
+		return 0, 0, fmt.Errorf("API error (status %d)", resp.StatusCode)
 	}
 
-	return latency, nil
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var cerebrasResp Response
+	if err := json.Unmarshal(respBody, &cerebrasResp); err != nil {
+		return latency, 0, nil // Return latency even if TPS fails
+	}
+
+	tokenCount := cerebrasResp.Usage.CompletionTokens
+	var tps float64 = 0
+	if latency > 0 && tokenCount > 0 {
+		tps = float64(tokenCount) / (float64(latency) / 1000.0)
+	}
+
+	return latency, tps, nil
 }
