@@ -1,101 +1,76 @@
-# Voxflow
+# VoxFlow (Go Implementation)
 
-**AI-powered voice dictation for macOS** — Speak naturally, get polished text instantly.
+**The core desktop application for VoxFlow, built with Go, Wails, and React.**
 
-Voxflow captures your voice, transcribes it locally using Whisper, refines it with Gemini AI, and pastes the result directly into any application.
+VoxFlow is a macOS-optimized voice-to-text tool that captures your voice, transcribes it locally, and uses LLMs to refine it into professional, ready-to-use text.
 
-## Features
+## How It Works
 
-- 🎙️ **Global Hotkey** — Press `Cmd+Shift+V` from any app to start/stop recording
-- 🔒 **Privacy-First** — Speech recognition runs locally via Whisper
-- ✨ **AI Refinement** — Gemini removes filler words, fixes grammar, follows commands
-- 📝 **History Vault** — Search past transcriptions with raw vs polished view
-- ⚡ **Fast** — Under 3 seconds from stop to paste
+1.  **Global Capture**: A system-wide hotkey (`Cmd+Shift+V`) triggers the recording state.
+2.  **Audio Processing**: The app captures system audio via PortAudio and saves it as a high-fidelity WAV file.
+3.  **Local Transcription**: The audio is processed locally using `whisper.cpp`. No voice data leaves your machine.
+4.  **AI refinement**: The raw text is sent to an LLM (Gemini, Groq, OpenRouter, or Local GGUF) for punctuation, filler removal, and style formatting.
+5.  **Smart Injection**: The polished text is automatically injected into the active application's cursor position using AppleScript.
 
-## Prerequisites
+## Project Structure
 
-- **macOS** (Apple Silicon)
-- **Go 1.21+**
-- **Node.js 18+**
-- **Wails CLI** — `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
-- **PortAudio** — `brew install portaudio`
-- **Ollama** — `brew install ollama` (used for local GGUF models; run `ollama serve` or allow Voxflow to start it automatically)
-- **Gemini API Key** — [Get one free](https://makersuite.google.com/app/apikey)
-
-## Quick Start
-
-```bash
-# Clone the repo
-git clone https://github.com/divyadityabhardwaj/voxflow.git
-cd voxflow/voxflow-go-implementation
-
-# Install frontend dependencies
-cd frontend && npm install && cd ..
-
-# Run in dev mode
-wails dev
+```text
+.
+├── app.go                # Main Wails application logic & event handling
+├── main.go               # Entry point and dependency injection
+├── window_darwin.go      # macOS-specific window styling (rounded corners, etc.)
+├── internal/             # Core backend services
+│   ├── audio/            # PortAudio recording implementation
+│   ├── hotkey/           # Global shortcut management (macOS)
+│   ├── whisper/          # whisper.cpp CLI wrapper and model management
+│   ├── llm/              # Refinement prompts and provider abstractions
+│   ├── injection/        # AppleScript-based text injection service
+│   ├── history/          # SQLite-based storage for past transcripts
+│   └── config/           # App settings and API key management
+└── frontend/             # Single Page Application (React + Vite)
+    ├── src/
+    │   ├── components/   # MainView, HistoryView, Settings, etc.
+    │   └── contexts/     # Application state management
 ```
-
-On first launch, the app will download the Whisper model (~142MB).
-
-## Building for Production
-
-```bash
-wails build
-```
-
-The `.app` bundle will be in `build/bin/`.
-
-### Creating a DMG (Optional)
-
-To create a distributable `.dmg` file locally (like the GitHub Release does), you need `create-dmg`:
-
-```bash
-brew install create-dmg
-```
-
-Then run:
-
-```bash
-create-dmg \
-  --volname "Voxflow Installer" \
-  --volicon "build/appicon.png" \
-  --window-pos 200 120 \
-  --window-size 800 400 \
-  --icon-size 100 \
-  --icon "voxflow.app" 200 190 \
-  --hide-extension "voxflow.app" \
-  --app-drop-link 600 185 \
-  "build/bin/voxflow.dmg" \
-  "build/bin/voxflow.app"
-```
-
-### Troubleshooting
-
-**"Voxflow is damaged and can't be opened"**
-This happens because the app is not signed with an Apple Developer Certificate (which costs $99/year). To fix it, run this command in your terminal:
-
-```bash
-xattr -cr /Applications/voxflow.app
-```
-
-(Or point to wherever you unknowingly dragged the app)
-
-## Configuration
-
-Settings are stored in `~/.voxflow/config.json`:
-
-- **API Key** — Your Gemini API key
-- **Hotkey** — Customize the global shortcut
-- **Model** — Choose tiny/base/small/medium
-- **Mode** — Casual or Formal refinement style
 
 ## Tech Stack
 
-| Component | Technology                    |
-| --------- | ----------------------------- |
-| Framework | Wails v2 (Go + Web)           |
-| Frontend  | React + TypeScript + Tailwind |
-| STT       | whisper.cpp (local)           |
-| LLM       | Gemini / OpenRouter / Local GGUF (llama.cpp) |
-| Database  | SQLite                        |
+- **Framework**: [Wails v2](https://wails.io/) (Go backend, Web frontend)
+- **Frontend**: React + TypeScript + Tailwind CSS
+- **STT Engine**: [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (Local, high-performance C++)
+- **Refinement**: Google Gemini, Groq, OpenRouter, Cerebras, or local LLMs (Ollama/GGUF)
+- **Database**: SQLite (via `modernc.org/sqlite`)
+- **Injection**: AppleScript (for seamless system-level pasting)
+
+## Prerequisites
+
+- **macOS** (Optimized for Apple Silicon)
+- **Go 1.21+**
+- **Node.js 18+**
+- **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+- **PortAudio**: `brew install portaudio`
+- **whisper-cli**: `brew install whisper-cpp`
+
+## Development
+
+For a simplified setup and launch, use the provided development script:
+
+```bash
+chmod +x dev.sh
+./dev.sh
+```
+
+On first launch, the app will assist in downloading the necessary Whisper models (~142MB for base).
+
+## Configuration
+
+Settings are stored in `~/.voxflow/config.json`. You can configure:
+
+- **LLM Provider**: Choose between Gemini, OpenRouter, or Local.
+- **Refinement Mode**: "Casual" for messages or "Formal" for documents.
+- **Global Hotkey**: Customize the trigger shortcut.
+- **Whisper Model**: Balance between speed (`tiny`) and accuracy (`medium`).
+
+---
+
+_VoxFlow is a personal project built for speed and privacy. It's designed to make voice the primary input method for developers and power users._

@@ -246,7 +246,7 @@ export default function HistoryView() {
                       title="AI Model used"
                       className="px-2 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium"
                     >
-                      🧠{" "}
+                      {" "}
                       {selectedTranscript.llm_provider === "local"
                         ? "Local"
                         : selectedTranscript.llm_provider}
