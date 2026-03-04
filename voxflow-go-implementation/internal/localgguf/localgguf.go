@@ -27,6 +27,92 @@ var modelURLs = map[string]string{
 	"phi4":          "https://huggingface.co/microsoft/Phi-4-mini-instruct-GGUF/resolve/main/phi-4-mini-instruct-q4_k_m.gguf",
 }
 
+// ollamaModelAliases maps the friendly display names to the aliases used by Ollama.
+// These must match the actual tags on https://ollama.com/library/qwen3
+var ollamaModelAliases = map[string]string{
+	"qwen3-0.5b":    "qwen3:0.6b",
+	"qwen3-1.8b":    "qwen3:1.7b",
+	"qwen3-4.7b":    "qwen3:4b",
+	"qwen3-8b":      "qwen3:8b",
+	"qwen3-14b":     "qwen3:14b",
+	"qwen3-32b":     "qwen3:32b",
+	"qwen3-0.5b-q8": "qwen3:0.6b-q8_0",
+	"qwen3-1.8b-q8": "qwen3:1.7b-q8_0",
+	"qwen3-4.7b-q8": "qwen3:4b-q8_0",
+	"llama3-8b":     "llama3:8b",
+	"phi4":          "phi4",
+}
+
+func getAuthToken() string {
+	return os.Getenv("HF_TOKEN")
+}
+
+func SetAuthToken(token string) {
+	if token == "" {
+		return
+	}
+	_ = os.Setenv("HF_TOKEN", token)
+}
+
+// Use alternative public mirrors for models
+func getDownloadURL(modelName string) string {
+	// Try direct URL first
+	if url, ok := modelURLs[modelName]; ok {
+		return url
+	}
+
+	// For models that require auth, try the HF co-signer or mirror
+	// This is a workaround - in production, user should set HF_TOKEN
+	switch modelName {
+	case "qwen3-0.5b", "qwen3-1.8b", "qwen3-4.7b", "qwen3-8b", "qwen3-14b", "qwen3-32b",
+		"qwen3-0.5b-q8", "qwen3-1.8b-q8", "qwen3-4.7b-q8":
+		// Try using huggingface.co/download which may work
+		return fmt.Sprintf("https://huggingface.co/%s/resolve/main/%s", getModelRepo(modelName), getModelFile(modelName))
+	}
+
+	return modelURLs[modelName]
+}
+
+func getModelRepo(modelName string) string {
+	repos := map[string]string{
+		"qwen3-0.5b":    "Qwen/Qwen3-0.5B-GGUF",
+		"qwen3-1.8b":    "Qwen/Qwen3-1.8B-GGUF",
+		"qwen3-4.7b":    "Qwen/Qwen3-4.7B-GGUF",
+		"qwen3-8b":      "Qwen/Qwen3-8B-GGUF",
+		"qwen3-14b":     "Qwen/Qwen3-14B-GGUF",
+		"qwen3-32b":     "Qwen/Qwen3-32B-GGUF",
+		"qwen3-0.5b-q8": "Qwen/Qwen3-0.5B-GGUF",
+		"qwen3-1.8b-q8": "Qwen/Qwen3-1.8B-GGUF",
+		"qwen3-4.7b-q8": "Qwen/Qwen3-4.7B-GGUF",
+		"llama3-8b":     "Mozilla/Meta-Llama-3-8B-Instruct-GGUF",
+		"phi4":          "microsoft/Phi-4-mini-instruct-GGUF",
+	}
+	if repo, ok := repos[modelName]; ok {
+		return repo
+	}
+	return "unknown"
+}
+
+func getModelFile(modelName string) string {
+	files := map[string]string{
+		"qwen3-0.5b":    "qwen3-0.5b-q4_k_m.gguf",
+		"qwen3-1.8b":    "qwen3-1.8b-q4_k_m.gguf",
+		"qwen3-4.7b":    "qwen3-4.7b-q4_k_m.gguf",
+		"qwen3-8b":      "qwen3-8b-q4_k_m.gguf",
+		"qwen3-14b":     "qwen3-14b-q4_k_m.gguf",
+		"qwen3-32b":     "qwen3-32b-q4_k_m.gguf",
+		"qwen3-0.5b-q8": "qwen3-0.5b-q8_0.gguf",
+		"qwen3-1.8b-q8": "qwen3-1.8b-q8_0.gguf",
+		"qwen3-4.7b-q8": "qwen3-4.7b-q8_0.gguf",
+		"llama3-8b":     "llama3-8b-instruct-q4_k_m.gguf",
+		"phi4":          "phi-4-mini-instruct-q4_k_m.gguf",
+	}
+	if file, ok := files[modelName]; ok {
+		return file
+	}
+	return "model.gguf"
+}
+
 var modelDescriptions = map[string]string{
 	"qwen3-0.5b":    "Qwen 3 0.5B - Fastest, lowest memory",
 	"qwen3-1.8b":    "Qwen 3 1.8B - Fast, good quality",
@@ -43,6 +129,18 @@ var modelDescriptions = map[string]string{
 
 func GetModelDescriptions() map[string]string {
 	return modelDescriptions
+}
+
+func GetOllamaModelAlias(modelName string) string {
+	if alias, ok := ollamaModelAliases[modelName]; ok {
+		return alias
+	}
+
+	if idx := strings.Index(modelName, "-"); idx != -1 {
+		return fmt.Sprintf("%s:%s", modelName[:idx], modelName[idx+1:])
+	}
+
+	return modelName
 }
 
 type ProgressCallback func(downloaded, total int64)
@@ -81,17 +179,29 @@ type ModelInfo struct {
 func (s *Service) GetModelSizeFromServer(modelName string) (int64, error) {
 	logger.Debugf("[LocalGGUF] Getting model size from server for: %s", modelName)
 
-	url, ok := modelURLs[modelName]
+	_, ok := modelURLs[modelName]
 	if !ok {
 		logger.Errorf("[LocalGGUF] Unknown model: %s", modelName)
 		return 0, fmt.Errorf("unknown model: %s", modelName)
 	}
+
+	url := getDownloadURL(modelName)
 
 	logger.Debugf("[LocalGGUF] Sending HEAD request to: %s", url)
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
 		logger.Errorf("[LocalGGUF] Failed to create HEAD request: %v", err)
 		return 0, err
+	}
+
+	// Add User-Agent to avoid 401 from HuggingFace
+	req.Header.Set("User-Agent", "voxflow/1.0")
+
+	// Use HF_TOKEN if available
+	token := getAuthToken()
+	if token != "" {
+		logger.Debugf("[LocalGGUF] Using HF_TOKEN for authentication")
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	client := &http.Client{}
@@ -103,6 +213,24 @@ func (s *Service) GetModelSizeFromServer(modelName string) (int64, error) {
 	defer resp.Body.Close()
 
 	logger.Debugf("[LocalGGUF] HEAD response status: %d", resp.StatusCode)
+
+	// If 401/403, return estimated size and proceed without checking
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		logger.Warnf("[LocalGGUF] Auth required for HEAD, using estimated size")
+		if token == "" {
+			logger.Warnf("[LocalGGUF] Set HF_TOKEN env var to download models: export HF_TOKEN=your_token")
+		}
+		estimatedSize := int64(5 * 1024 * 1024 * 1024) // Default 5GB estimate
+		logger.Infof("[LocalGGUF] Model %s estimated size: %d bytes (auth required)", modelName, estimatedSize)
+		return estimatedSize, nil
+	}
+
+	if resp.StatusCode == http.StatusNotFound && token != "" {
+		logger.Warnf("[LocalGGUF] HEAD returned 404 even with HF_TOKEN. The model might require accepting the HuggingFace license before downloading.")
+		estimatedSize := int64(5 * 1024 * 1024 * 1024)
+		logger.Infof("[LocalGGUF] Model %s estimated size: %d bytes (HEAD 404)", modelName, estimatedSize)
+		return estimatedSize, nil
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Errorf("[LocalGGUF] HEAD request failed with status: %d", resp.StatusCode)
@@ -166,11 +294,13 @@ func (s *Service) DeleteModel(modelName string) error {
 func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string, progress ProgressCallback) error {
 	logger.Debugf("[LocalGGUF] Starting download for model: %s", modelName)
 
-	url, ok := modelURLs[modelName]
+	_, ok := modelURLs[modelName]
 	if !ok {
 		logger.Errorf("[LocalGGUF] Unknown model: %s", modelName)
 		return fmt.Errorf("unknown model: %s", modelName)
 	}
+
+	url := getDownloadURL(modelName)
 
 	logger.Debugf("[LocalGGUF] URL for %s: %s", modelName, url)
 
@@ -208,6 +338,16 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
+	// Add User-Agent to avoid 401 from HuggingFace
+	req.Header.Set("User-Agent", "voxflow/1.0")
+
+	// Use HF_TOKEN if available
+	token := getAuthToken()
+	if token != "" {
+		logger.Debugf("[LocalGGUF] Using HF_TOKEN for download (length %d)", len(token))
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
 	logger.Debugf("[LocalGGUF] Sending HTTP request...")
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -224,6 +364,21 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 	logger.Debugf("[LocalGGUF] Response status: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
+		// If auth required, show helpful message
+		if resp.StatusCode == http.StatusNotFound {
+			if token != "" {
+				repo := getModelRepo(modelName)
+				modelURL := fmt.Sprintf("https://huggingface.co/%s", repo)
+				logger.Errorf("[LocalGGUF] Model %s not accessible (HTTP 404). Please log in to HuggingFace, accept the model license/terms at %s, and ensure your token has read access.", modelName, modelURL)
+			} else {
+				logger.Errorf("[LocalGGUF] Model %s not found (HTTP 404). Please log in or provide a HF_TOKEN with proper access.", modelName)
+			}
+			return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
+		}
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			logger.Errorf("[LocalGGUF] HuggingFace authentication required. Some models need HF_TOKEN set or login. Status: %d", resp.StatusCode)
+			return fmt.Errorf("HuggingFace authentication required (HTTP %d). Some models require a HF_TOKEN or Pro subscription", resp.StatusCode)
+		}
 		logger.Errorf("[LocalGGUF] HTTP error: status %d", resp.StatusCode)
 		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
 	}
@@ -322,15 +477,9 @@ func (s *Service) LoadModel(modelName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	modelsDir, err := GetModelsDir()
+	modelPath, err := s.GetModelPath(modelName)
 	if err != nil {
 		return err
-	}
-
-	modelPath := filepath.Join(modelsDir, fmt.Sprintf("%s.gguf", modelName))
-
-	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-		return fmt.Errorf("model not found: %s. Please download it first", modelName)
 	}
 
 	s.loadedModel = modelName
@@ -344,6 +493,22 @@ func (s *Service) GetLoadedModelPath() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.modelPath
+}
+
+func (s *Service) GetModelPath(modelName string) (string, error) {
+	modelsDir, err := GetModelsDir()
+	if err != nil {
+		return "", err
+	}
+	modelPath := filepath.Join(modelsDir, fmt.Sprintf("%s.gguf", modelName))
+	info, err := os.Stat(modelPath)
+	if err != nil {
+		return "", fmt.Errorf("model not found: %s. Please download it first", modelName)
+	}
+	if info.Size() <= 1024*1024 {
+		return "", fmt.Errorf("model file too small: %s", modelName)
+	}
+	return modelPath, nil
 }
 
 func (s *Service) IsLoaded() bool {
@@ -373,7 +538,7 @@ func CleanupPartialDownloads() error {
 	for _, entry := range entries {
 		if strings.HasSuffix(entry.Name(), ".tmp") {
 			tmpPath := filepath.Join(modelsDir, entry.Name())
-			fmt.Printf("[LocalGGUF] Cleaning up partial download: %s\n", entry.Name())
+			logger.Infof("[LocalGGUF] Cleaning up partial download: %s", entry.Name())
 			os.Remove(tmpPath)
 		}
 	}

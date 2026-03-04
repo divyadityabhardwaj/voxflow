@@ -62,8 +62,6 @@ export function GetLocalModel():Promise<string>;
 
 export function GetLocalModels():Promise<Array<localgguf.ModelInfo>>;
 
-export function GetLocalProvider():Promise<string>;
-
 export function GetOpenRouterModel():Promise<string>;
 
 export function GetOpenRouterModelDescriptions():Promise<Record<string, string>>;
@@ -114,6 +112,8 @@ export function SetGroqAPIKey(arg1:string):Promise<void>;
 
 export function SetGroqModel(arg1:string):Promise<void>;
 
+export function SetHFToken(arg1:string):Promise<void>;
+
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
 export function SetHotkey(arg1:string):Promise<void>;
@@ -121,8 +121,6 @@ export function SetHotkey(arg1:string):Promise<void>;
 export function SetLLMProvider(arg1:string):Promise<void>;
 
 export function SetLocalModel(arg1:string):Promise<void>;
-
-export function SetLocalProvider(arg1:boolean):Promise<void>;
 
 export function SetMode(arg1:string):Promise<void>;
 

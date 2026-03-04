@@ -14,8 +14,10 @@ import (
 	"voxflow/internal/history"
 	"voxflow/internal/hotkey"
 	"voxflow/internal/injection"
+	"voxflow/internal/localclient"
 	"voxflow/internal/localgguf"
 	"voxflow/internal/logger"
+	"voxflow/internal/ollama"
 	"voxflow/internal/openrouter"
 	"voxflow/internal/whisper"
 
@@ -31,6 +33,8 @@ type App struct {
 	audioRecorder           *audio.Recorder
 	whisperService          *whisper.Service
 	localGGUFService        *localgguf.Service
+	localClient             *localclient.Client
+	ollamaService           *ollama.Service
 	geminiClient            *gemini.Client
 	openRouterClient        *openrouter.Client
 	groqClient              *groq.Client
@@ -57,11 +61,18 @@ func NewApp() *App {
 		audioRecorder:    audio.NewRecorder(),
 		whisperService:   whisper.NewService(),
 		localGGUFService: localgguf.NewService(),
+		ollamaService:    ollama.NewService(),
 		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
 		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
 		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
 		cerebrasClient:   cerebras.NewClient(cfg.GetCerebrasAPIKey()),
 	}
+	app.localClient = localclient.NewClient(app.ollamaService.BaseURL())
+
+	if token := cfg.GetHFToken(); token != "" {
+		localgguf.SetAuthToken(token)
+	}
+
 	return app
 }
 
@@ -194,6 +205,13 @@ func (a *App) SetCerebrasModel(model string) error {
 	return a.config.Save()
 }
 
+// SetHFToken sets the HuggingFace token
+func (a *App) SetHFToken(token string) error {
+	a.config.SetHFToken(token)
+	localgguf.SetAuthToken(token)
+	return a.config.Save()
+}
+
 // GetCerebrasModel returns the current Cerebras model
 func (a *App) GetCerebrasModel() string {
 	return a.config.GetCerebrasModel()
@@ -247,6 +265,9 @@ func (a *App) startup(ctx context.Context) {
 	if err := whisper.CleanupPartialDownloads(); err != nil {
 		fmt.Printf("Warning: Failed to cleanup partial downloads: %v\n", err)
 	}
+	if err := localgguf.CleanupPartialDownloads(); err != nil {
+		fmt.Printf("Warning: Failed to cleanup local GGUF partial downloads: %v\n", err)
+	}
 
 	// Check if model is downloaded
 	go a.checkModelStatus()
@@ -274,6 +295,9 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.whisperService != nil {
 		a.whisperService.Close()
+	}
+	if a.ollamaService != nil {
+		a.ollamaService.Stop()
 	}
 	if a.historyService != nil {
 		a.historyService.Close()
@@ -677,6 +701,17 @@ func (a *App) processRecording() {
 		llmStart = time.Now()
 		polishedText, err = a.cerebrasClient.RefineText(rawText, a.config.GetCerebrasModel(), mode)
 		llmDuration = time.Since(llmStart)
+	} else if llmProvider == "local" {
+		llmStart = time.Now()
+		ensureErr := a.ensureLocalModelServer()
+		if ensureErr != nil {
+			err = ensureErr
+			llmDuration = time.Since(llmStart)
+			polishedText = ""
+		} else {
+			polishedText, err = a.localClient.RefineText(rawText, localgguf.GetOllamaModelAlias(a.config.GetLocalModel()), mode)
+			llmDuration = time.Since(llmStart)
+		}
 	} else {
 		llmStart = time.Now()
 		polishedText, err = a.geminiClient.RefineText(rawText, mode)
@@ -723,6 +758,8 @@ func (a *App) processRecording() {
 		llmName = "Groq"
 	} else if llmProvider == "cerebras" {
 		llmName = "Cerebras"
+	} else if llmProvider == "local" {
+		llmName = "Local"
 	}
 	output := fmt.Sprintf(
 		"\nProcessing Complete:\n"+
@@ -816,7 +853,7 @@ func (a *App) GetConfig() map[string]interface{} {
 		"groq_api_key_set":       a.config.GetGroqAPIKey() != "",
 		"cerebras_model":         a.config.GetCerebrasModel(),
 		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
-		"local_provider":         a.config.GetLocalProvider(),
+		"hf_token_set":           a.config.GetHFToken() != "",
 		"local_model":            a.config.GetLocalModel(),
 	}
 }
@@ -983,7 +1020,29 @@ func (a *App) EnsureWhisperCLI() error {
 
 // GetLocalModels returns all available local GGUF models
 func (a *App) GetLocalModels() ([]localgguf.ModelInfo, error) {
-	return a.localGGUFService.GetAllModels()
+	models, err := a.localGGUFService.GetAllModels()
+	if err != nil {
+		return nil, err
+	}
+
+	installed, err := a.ollamaService.ListInstalledModels(context.Background())
+	if err != nil {
+		logger.Warnf("[App] Failed to query Ollama for installed models: %v", err)
+		installed = make(map[string]int64)
+	}
+
+	for i := range models {
+		alias := localgguf.GetOllamaModelAlias(models[i].Name)
+		if size, ok := installed[alias]; ok {
+			models[i].Downloaded = true
+			models[i].Size = size
+		} else {
+			models[i].Downloaded = false
+		}
+		models[i].FilePath = fmt.Sprintf("ollama:%s", alias)
+	}
+
+	return models, nil
 }
 
 // DownloadLocalModel downloads a specific local GGUF model (cancellable)
@@ -1001,11 +1060,29 @@ func (a *App) DownloadLocalModel(modelName string) error {
 	a.localDownloadCancel = cancel
 	a.localDownloadMu.Unlock()
 
-	logger.Debugf("[App] Starting download for model: %s", modelName)
+	// Ensure the Ollama server is running before attempting to pull
+	if err := a.ensureLocalModelServer(); err != nil {
+		logger.Errorf("[App] Failed to start Ollama server for download: %v", err)
+		a.localDownloadMu.Lock()
+		a.localDownloadCancel = nil
+		a.localDownloadMu.Unlock()
 
-	err := a.localGGUFService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
-		progress := float64(downloaded) / float64(total) * 100
-		logger.Debugf("[App] Download progress: %.1f%% (%d/%d bytes)", progress, downloaded, total)
+		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
+			"model": modelName,
+			"error": fmt.Sprintf("Failed to start Ollama server: %v", err),
+		})
+		return err
+	}
+
+	alias := localgguf.GetOllamaModelAlias(modelName)
+	logger.Debugf("[App] Starting Ollama pull for alias: %s", alias)
+
+	err := a.ollamaService.PullModel(ctx, alias, func(downloaded, total int64) {
+		progress := 0.0
+		if total > 0 {
+			progress = float64(downloaded) / float64(total) * 100
+		}
+		logger.Debugf("[App] Download progress: %.1f%% (%d/%d units)", progress, downloaded, total)
 		runtime.EventsEmit(a.ctx, "local-model-download-progress", map[string]interface{}{
 			"model":      modelName,
 			"downloaded": downloaded,
@@ -1019,7 +1096,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 	a.localDownloadMu.Unlock()
 
 	if err != nil {
-		logger.Errorf("[App] Download failed for %s: %v", modelName, err)
+		logger.Errorf("[App] Download failed for %s [%s]: %v", modelName, alias, err)
 		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
 			"model": modelName,
 			"error": err.Error(),
@@ -1052,37 +1129,23 @@ func (a *App) DeleteLocalModel(modelName string) error {
 		return fmt.Errorf("cannot delete the currently active model")
 	}
 
-	err := a.localGGUFService.DeleteModel(modelName)
-	if err != nil {
+	alias := localgguf.GetOllamaModelAlias(modelName)
+	if err := a.ollamaService.RemoveModel(context.Background(), alias); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// SetLocalProvider enables or disables local GGUF provider
-func (a *App) SetLocalProvider(enabled bool) error {
-	if enabled {
-		a.config.SetLocalProvider("local")
-	} else {
-		a.config.SetLocalProvider("")
-	}
-	return a.config.Save()
-}
-
-// GetLocalProvider returns whether local provider is enabled
-func (a *App) GetLocalProvider() string {
-	return a.config.GetLocalProvider()
-}
-
 // SetLocalModel sets the active local GGUF model
 func (a *App) SetLocalModel(modelName string) error {
-	downloaded, err := a.localGGUFService.IsModelDownloaded(modelName)
+	alias := localgguf.GetOllamaModelAlias(modelName)
+	installed, err := a.ollamaService.IsModelInstalled(context.Background(), alias)
 	if err != nil {
 		return err
 	}
-	if !downloaded {
-		return fmt.Errorf("model not downloaded: %s", modelName)
+	if !installed {
+		return fmt.Errorf("model %s is not installed. Please download it first", modelName)
 	}
 
 	a.config.SetLocalModel(modelName)
@@ -1091,7 +1154,7 @@ func (a *App) SetLocalModel(modelName string) error {
 		return err
 	}
 
-	if err := a.localGGUFService.LoadModel(modelName); err != nil {
+	if err := a.ensureLocalModelServer(); err != nil {
 		return err
 	}
 
@@ -1107,6 +1170,12 @@ func (a *App) SetLocalModel(modelName string) error {
 // GetLocalModel returns the currently selected local model
 func (a *App) GetLocalModel() string {
 	return a.config.GetLocalModel()
+}
+
+func (a *App) ensureLocalModelServer() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	return a.ollamaService.EnsureServer(ctx)
 }
 
 // GetHistory returns transcript history

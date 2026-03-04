@@ -118,10 +118,6 @@ export function GetLocalModels() {
   return window['go']['main']['App']['GetLocalModels']();
 }
 
-export function GetLocalProvider() {
-  return window['go']['main']['App']['GetLocalProvider']();
-}
-
 export function GetOpenRouterModel() {
   return window['go']['main']['App']['GetOpenRouterModel']();
 }
@@ -222,6 +218,10 @@ export function SetGroqModel(arg1) {
   return window['go']['main']['App']['SetGroqModel'](arg1);
 }
 
+export function SetHFToken(arg1) {
+  return window['go']['main']['App']['SetHFToken'](arg1);
+}
+
 export function SetHandsFreeHotkey(arg1) {
   return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
 }
@@ -236,10 +236,6 @@ export function SetLLMProvider(arg1) {
 
 export function SetLocalModel(arg1) {
   return window['go']['main']['App']['SetLocalModel'](arg1);
-}
-
-export function SetLocalProvider(arg1) {
-  return window['go']['main']['App']['SetLocalProvider'](arg1);
 }
 
 export function SetMode(arg1) {

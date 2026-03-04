@@ -31,6 +31,19 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
+# Check for Ollama
+if ! command -v ollama &> /dev/null; then
+    echo -e "${YELLOW}⚠️  ollama not found. Installing via Homebrew...${NC}"
+    brew install ollama
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to install ollama${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ ollama installed${NC}"
+else
+    echo -e "${GREEN}✅ ollama is available${NC}"
+fi
+
 # Check if wails is installed
 if ! command -v wails &> /dev/null; then
     echo -e "${YELLOW}⚠️  Wails CLI not found. Installing...${NC}"

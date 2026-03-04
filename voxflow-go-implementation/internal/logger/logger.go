@@ -206,19 +206,19 @@ func (f *fieldsLogger) formatMsg(msg string) string {
 }
 
 func (f *fieldsLogger) Debug(msg string) {
-	Debug(f.formatMsg(msg))
+	Debug("%s", f.formatMsg(msg))
 }
 
 func (f *fieldsLogger) Info(msg string) {
-	Info(f.formatMsg(msg))
+	Info("%s", f.formatMsg(msg))
 }
 
 func (f *fieldsLogger) Warn(msg string) {
-	Warn(f.formatMsg(msg))
+	Warn("%s", f.formatMsg(msg))
 }
 
 func (f *fieldsLogger) Error(msg string) {
-	Error(f.formatMsg(msg))
+	Error("%s", f.formatMsg(msg))
 }
 
 func File(path string, lvl Level) error {

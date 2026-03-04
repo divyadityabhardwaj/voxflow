@@ -14,11 +14,12 @@ Voxflow captures your voice, transcribes it locally using Whisper, refines it wi
 
 ## Prerequisites
 
-- **macOS** (Apple Silicon or Intel)
+- **macOS** (Apple Silicon)
 - **Go 1.21+**
 - **Node.js 18+**
 - **Wails CLI** — `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 - **PortAudio** — `brew install portaudio`
+- **Ollama** — `brew install ollama` (used for local GGUF models; run `ollama serve` or allow Voxflow to start it automatically)
 - **Gemini API Key** — [Get one free](https://makersuite.google.com/app/apikey)
 
 ## Quick Start
@@ -96,5 +97,5 @@ Settings are stored in `~/.voxflow/config.json`:
 | Framework | Wails v2 (Go + Web)           |
 | Frontend  | React + TypeScript + Tailwind |
 | STT       | whisper.cpp (local)           |
-| LLM       | Gemini 1.5 Flash              |
+| LLM       | Gemini / OpenRouter / Local GGUF (llama.cpp) |
 | Database  | SQLite                        |

@@ -29,8 +29,8 @@ type Config struct {
 	GroqModel        string `json:"groq_model"`
 	CerebrasAPIKey   string `json:"cerebras_api_key"`
 	CerebrasModel    string `json:"cerebras_model"`
-	LocalProvider    string `json:"local_provider"` // "local" when local GGUF provider is active
-	LocalModel       string `json:"local_model"`    // Selected local GGUF model name
+	HFToken          string `json:"hf_token"`
+	LocalModel       string `json:"local_model"` // Selected local GGUF model name
 	mu               sync.RWMutex
 }
 
@@ -131,6 +131,9 @@ func (c *Config) Load() error {
 	if c.CerebrasModel == "" {
 		c.CerebrasModel = "llama3.1-8b"
 	}
+	if c.LocalModel == "" {
+		c.LocalModel = "qwen3-0.5b"
+	}
 
 	// Check environment variable first for API key
 	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
@@ -144,6 +147,9 @@ func (c *Config) Load() error {
 	}
 	if apiKey := os.Getenv("CEREBRAS_API_KEY"); apiKey != "" {
 		c.CerebrasAPIKey = apiKey
+	}
+	if token := os.Getenv("HF_TOKEN"); token != "" {
+		c.HFToken = token
 	}
 
 	return nil
@@ -439,27 +445,27 @@ func (c *Config) SetCerebrasModel(model string) {
 	c.CerebrasModel = model
 }
 
-// GetLocalProvider returns the local provider setting
-func (c *Config) GetLocalProvider() string {
+// GetHFToken returns the HuggingFace token
+func (c *Config) GetHFToken() string {
+	if envToken := os.Getenv("HF_TOKEN"); envToken != "" {
+		return envToken
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.LocalProvider
+	return c.HFToken
 }
 
-// SetLocalProvider sets the local provider setting
-func (c *Config) SetLocalProvider(provider string) {
+// SetHFToken sets the HuggingFace token
+func (c *Config) SetHFToken(token string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.LocalProvider = provider
+	c.HFToken = token
 }
 
 // GetLocalModel returns the selected local model
 func (c *Config) GetLocalModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.LocalModel == "" {
-		return "qwen3-0.5b" // Default to smallest Qwen model
-	}
 	return c.LocalModel
 }
 
