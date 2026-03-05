@@ -7,6 +7,8 @@ import {
 } from "../../wailsjs/go/main/App";
 import { useTheme } from "../contexts/ThemeContext";
 
+import { Events } from "../constants/events";
+
 type Status = "Idle" | "Recording" | "Processing";
 
 export default function RecordingIndicator() {
@@ -17,7 +19,7 @@ export default function RecordingIndicator() {
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
 
-    EventsOn("state-changed", (newStatus: string) => {
+    EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
     });
   }, []);

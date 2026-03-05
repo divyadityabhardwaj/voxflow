@@ -39,6 +39,7 @@ import {
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import HotkeyRecorderModal from "./HotkeyRecorderModal";
 import HotkeyInput from "./HotkeyInput"; // Keep if needed or remove if fully replaced
+import { Events } from "../constants/events";
 
 interface Config {
   hands_free_hotkey: string;
@@ -182,13 +183,13 @@ export default function SettingsView() {
 
     // Listen for download progress
     EventsOn(
-      "model-download-progress",
+      Events.ModelDownloadProgress,
       (data: { model: string; progress: number }) => {
         setDownloadProgress(Math.round(data.progress));
       },
     );
 
-    EventsOn("model-download-complete", () => {
+    EventsOn(Events.ModelDownloadComplete, () => {
       setDownloading(null);
       setDownloadProgress(0);
       loadModels();
@@ -196,20 +197,20 @@ export default function SettingsView() {
 
     // Listen for local model download progress
     EventsOn(
-      "local-model-download-progress",
+      Events.LocalModelDownloadProgress,
       (data: { model: string; progress: number }) => {
         setLocalDownloadProgress(Math.round(data.progress));
       },
     );
 
-    EventsOn("local-model-download-complete", () => {
+    EventsOn(Events.LocalModelDownloadComplete, () => {
       setLocalDownloading(null);
       setLocalDownloadProgress(0);
       loadLocalModels();
     });
 
     EventsOn(
-      "local-model-download-error",
+      Events.LocalModelDownloadError,
       (data: { model: string; error: string }) => {
         console.error("Local model download error:", data.error);
         setLocalDownloading(null);

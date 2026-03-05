@@ -1,20 +1,21 @@
 import { useState, useEffect } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { ToggleRecording, GetStatus } from "../../wailsjs/go/main/App";
+import { Events } from "../constants/events";
 
 type Status = "Idle" | "Recording" | "Processing";
 
 export default function MainView() {
   const [status, setStatus] = useState<Status>("Idle");
   const [lastTranscription, setLastTranscription] = useState<string | null>(
-    null
+    null,
   );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
 
-    EventsOn("state-changed", (newStatus: string) => {
+    EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
       if (newStatus === "Recording") {
         setError(null);
@@ -23,13 +24,13 @@ export default function MainView() {
     });
 
     EventsOn(
-      "processing-complete",
+      Events.ProcessingComplete,
       (result: { polished: string; elapsed: number }) => {
         setLastTranscription(result.polished);
-      }
+      },
     );
 
-    EventsOn("error", (err: string) => {
+    EventsOn(Events.Error, (err: string) => {
       setError(err);
     });
   }, []);
@@ -87,8 +88,8 @@ export default function MainView() {
               status === "Idle"
                 ? "Start recording (use your hotkey)"
                 : status === "Recording"
-                ? "Stop recording"
-                : "Processing transcription..."
+                  ? "Stop recording"
+                  : "Processing transcription..."
             }
             className={`
               relative w-12 h-12 rounded-full transition-all duration-300
@@ -97,8 +98,8 @@ export default function MainView() {
                 status === "Idle"
                   ? "bg-[var(--accent)] text-[var(--bg-primary)] hover:scale-105"
                   : status === "Recording"
-                  ? "bg-recording text-white"
-                  : "bg-processing text-white"
+                    ? "bg-recording text-white"
+                    : "bg-processing text-white"
               }
               disabled:cursor-not-allowed
               active:scale-95

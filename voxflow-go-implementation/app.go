@@ -9,6 +9,7 @@ import (
 	"voxflow/internal/audio"
 	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
+	"voxflow/internal/events"
 	"voxflow/internal/gemini"
 	"voxflow/internal/groq"
 	"voxflow/internal/history"
@@ -342,7 +343,7 @@ func (a *App) checkModelStatus() {
 	downloaded, _ := a.whisperService.IsModelDownloaded(modelSize)
 
 	if !downloaded {
-		runtime.EventsEmit(a.ctx, "model-status", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
 			"downloaded": false,
 			"model":      modelSize,
 		})
@@ -352,7 +353,7 @@ func (a *App) checkModelStatus() {
 	// Try to load the model
 	if err := a.whisperService.LoadModel(modelSize); err != nil {
 		fmt.Printf("Failed to load model: %v\n", err)
-		runtime.EventsEmit(a.ctx, "model-status", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
 			"downloaded": true,
 			"loaded":     false,
 			"error":      err.Error(),
@@ -361,7 +362,7 @@ func (a *App) checkModelStatus() {
 	}
 
 	a.modelReady = true
-	runtime.EventsEmit(a.ctx, "model-status", map[string]interface{}{
+	runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
 		"downloaded": true,
 		"loaded":     true,
 		"model":      modelSize,
@@ -386,7 +387,7 @@ func (a *App) DownloadModel() error {
 
 	err := a.whisperService.DownloadModel(modelSize, func(downloaded, total int64) {
 		progress := float64(downloaded) / float64(total) * 100
-		runtime.EventsEmit(a.ctx, "model-download-progress", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.ModelDownloadProgress, map[string]interface{}{
 			"downloaded": downloaded,
 			"total":      total,
 			"progress":   progress,
@@ -394,18 +395,18 @@ func (a *App) DownloadModel() error {
 	})
 
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "model-download-error", err.Error())
+		runtime.EventsEmit(a.ctx, events.ModelDownloadError, err.Error())
 		return err
 	}
 
 	// Load the model after download
 	if err := a.whisperService.LoadModel(modelSize); err != nil {
-		runtime.EventsEmit(a.ctx, "model-load-error", err.Error())
+		runtime.EventsEmit(a.ctx, events.ModelLoadError, err.Error())
 		return err
 	}
 
 	a.modelReady = true
-	runtime.EventsEmit(a.ctx, "model-status", map[string]interface{}{
+	runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
 		"downloaded": true,
 		"loaded":     true,
 		"model":      modelSize,
@@ -417,7 +418,7 @@ func (a *App) DownloadModel() error {
 // onHotkeyPressed is called when the global hotkey is pressed
 func (a *App) onHotkeyPressed(state hotkey.State) {
 	a.state = state
-	runtime.EventsEmit(a.ctx, "state-changed", state.String())
+	runtime.EventsEmit(a.ctx, events.StateChanged, state.String())
 
 	switch state {
 	case hotkey.StateRecording:
@@ -459,7 +460,7 @@ func (a *App) ShowMiniMode() {
 	}
 
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
-	runtime.EventsEmit(a.ctx, "mini-mode", true)
+	runtime.EventsEmit(a.ctx, events.MiniMode, true)
 
 	// Start watching position for changes
 	a.startPositionWatch()
@@ -595,7 +596,7 @@ func (a *App) HideMiniMode() {
 	}
 
 	runtime.WindowSetAlwaysOnTop(a.ctx, false)
-	runtime.EventsEmit(a.ctx, "mini-mode", false)
+	runtime.EventsEmit(a.ctx, events.MiniMode, false)
 
 	// Start watching maximized window position/size
 	a.startMaximizedPositionWatch()
@@ -625,12 +626,12 @@ func (a *App) StartRecording() error {
 	if err := a.audioRecorder.Start(); err != nil {
 		a.state = hotkey.StateIdle
 		a.hotkeyManager.SetState(hotkey.StateIdle)
-		runtime.EventsEmit(a.ctx, "error", err.Error())
+		runtime.EventsEmit(a.ctx, events.Error, err.Error())
 		return err
 	}
 
-	runtime.EventsEmit(a.ctx, "state-changed", "Recording")
-	runtime.EventsEmit(a.ctx, "recording-started", nil)
+	runtime.EventsEmit(a.ctx, events.StateChanged, "Recording")
+	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
 	fmt.Println("Recording started...")
 	return nil
 }
@@ -639,8 +640,8 @@ func (a *App) StartRecording() error {
 func (a *App) StopRecording() {
 	a.state = hotkey.StateProcessing
 	a.hotkeyManager.SetState(hotkey.StateProcessing)
-	runtime.EventsEmit(a.ctx, "state-changed", "Processing")
-	runtime.EventsEmit(a.ctx, "recording-stopped", nil)
+	runtime.EventsEmit(a.ctx, events.StateChanged, "Processing")
+	runtime.EventsEmit(a.ctx, events.RecordingStopped, nil)
 	fmt.Println("Recording stopped, processing...")
 
 	go a.processRecording()
@@ -821,8 +822,8 @@ func (a *App) processRecording() {
 	// Reset state (but DON'T hide mini mode - let user stay in mini mode if they started there)
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
-	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
-	runtime.EventsEmit(a.ctx, "processing-complete", map[string]interface{}{
+	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
+	runtime.EventsEmit(a.ctx, events.ProcessingComplete, map[string]interface{}{
 		"polished": polishedText,
 		"elapsed":  totalProcessingTime.Milliseconds(),
 		"details": map[string]float64{
@@ -835,7 +836,7 @@ func (a *App) processRecording() {
 
 // emitToast sends a toast notification to the frontend
 func (a *App) emitToast(message string, toastType string) {
-	runtime.EventsEmit(a.ctx, "toast", map[string]interface{}{
+	runtime.EventsEmit(a.ctx, events.Toast, map[string]interface{}{
 		"message": message,
 		"type":    toastType,
 	})
@@ -845,7 +846,7 @@ func (a *App) emitToast(message string, toastType string) {
 func (a *App) resetToIdle() {
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
-	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
+	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
 }
 
 // handleError handles errors during processing
@@ -855,12 +856,12 @@ func (a *App) handleError(message string, err error) {
 		errMsg = fmt.Sprintf("%s: %v", message, err)
 	}
 	fmt.Println(errMsg)
-	runtime.EventsEmit(a.ctx, "error", errMsg)
+	runtime.EventsEmit(a.ctx, events.Error, errMsg)
 
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
 	a.HideMiniMode()
-	runtime.EventsEmit(a.ctx, "state-changed", "Idle")
+	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
 }
 
 // ToggleRecording toggles between recording and idle states
@@ -997,7 +998,7 @@ func (a *App) DownloadModelByName(modelName string) error {
 
 	err := a.whisperService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
 		progress := float64(downloaded) / float64(total) * 100
-		runtime.EventsEmit(a.ctx, "model-download-progress", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.ModelDownloadProgress, map[string]interface{}{
 			"model":      modelName,
 			"downloaded": downloaded,
 			"total":      total,
@@ -1011,14 +1012,14 @@ func (a *App) DownloadModelByName(modelName string) error {
 	a.downloadMu.Unlock()
 
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "model-download-error", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.ModelDownloadError, map[string]interface{}{
 			"model": modelName,
 			"error": err.Error(),
 		})
 		return err
 	}
 
-	runtime.EventsEmit(a.ctx, "model-download-complete", modelName)
+	runtime.EventsEmit(a.ctx, events.ModelDownloadComplete, modelName)
 	return nil
 }
 
@@ -1031,7 +1032,7 @@ func (a *App) CancelDownload() {
 		fmt.Println("[App] Cancelling download...")
 		a.downloadCancel()
 		a.downloadCancel = nil
-		runtime.EventsEmit(a.ctx, "model-download-cancelled", nil)
+		runtime.EventsEmit(a.ctx, events.ModelDownloadCancelled, nil)
 	}
 }
 
@@ -1112,7 +1113,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 		a.localDownloadingModel = ""
 		a.localDownloadMu.Unlock()
 
-		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.LocalModelDownloadError, map[string]interface{}{
 			"model": modelName,
 			"error": fmt.Sprintf("Failed to start Ollama server: %v", err),
 		})
@@ -1128,7 +1129,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 			progress = float64(downloaded) / float64(total) * 100
 		}
 		logger.Debugf("[App] Download progress: %.1f%% (%d/%d units)", progress, downloaded, total)
-		runtime.EventsEmit(a.ctx, "local-model-download-progress", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.LocalModelDownloadProgress, map[string]interface{}{
 			"model":      modelName,
 			"downloaded": downloaded,
 			"total":      total,
@@ -1143,7 +1144,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 
 	if err != nil {
 		logger.Errorf("[App] Download failed for %s [%s]: %v", modelName, alias, err)
-		runtime.EventsEmit(a.ctx, "local-model-download-error", map[string]interface{}{
+		runtime.EventsEmit(a.ctx, events.LocalModelDownloadError, map[string]interface{}{
 			"model": modelName,
 			"error": err.Error(),
 		})
@@ -1151,7 +1152,7 @@ func (a *App) DownloadLocalModel(modelName string) error {
 	}
 
 	logger.Infof("[App] Download complete for model: %s", modelName)
-	runtime.EventsEmit(a.ctx, "local-model-download-complete", modelName)
+	runtime.EventsEmit(a.ctx, events.LocalModelDownloadComplete, modelName)
 	return nil
 }
 
@@ -1165,7 +1166,7 @@ func (a *App) CancelLocalModelDownload() {
 		a.localDownloadCancel()
 		a.localDownloadCancel = nil
 		a.localDownloadingModel = ""
-		runtime.EventsEmit(a.ctx, "local-model-download-cancelled", nil)
+		runtime.EventsEmit(a.ctx, events.LocalModelDownloadCancelled, nil)
 	}
 }
 
@@ -1212,7 +1213,7 @@ func (a *App) SetLocalModel(modelName string) error {
 		return err
 	}
 
-	runtime.EventsEmit(a.ctx, "local-model-status", map[string]interface{}{
+	runtime.EventsEmit(a.ctx, events.LocalModelStatus, map[string]interface{}{
 		"downloaded": true,
 		"loaded":     true,
 		"model":      modelName,
@@ -1313,12 +1314,12 @@ func (a *App) CopyToClipboard(text string) error {
 
 // OpenHistoryWindow emits event to open history window
 func (a *App) OpenHistoryWindow() {
-	runtime.EventsEmit(a.ctx, "open-history", nil)
+	runtime.EventsEmit(a.ctx, events.OpenHistory, nil)
 }
 
 // OpenSettings emits event to open settings panel
 func (a *App) OpenSettings() {
-	runtime.EventsEmit(a.ctx, "open-settings", nil)
+	runtime.EventsEmit(a.ctx, events.OpenSettings, nil)
 }
 
 // Quit closes the application

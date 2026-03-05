@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { ToggleRecording, GetStatus } from "../../wailsjs/go/main/App";
+import { Events } from "../constants/events";
 
 type Status = "Idle" | "Recording" | "Processing";
 
@@ -10,7 +11,7 @@ export default function RecordingPill() {
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
 
-    EventsOn("state-changed", (newStatus: string) => {
+    EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
     });
   }, []);

@@ -12,6 +12,8 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
+import { Events } from "../constants/events";
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMiniMode, setIsMiniMode] = useState(false);
@@ -27,7 +29,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for mode changes
     import("../../wailsjs/runtime/runtime").then(({ EventsOn }) => {
-      EventsOn("mini-mode", (isMini: boolean) => {
+      EventsOn(Events.MiniMode, (isMini: boolean) => {
         setIsMiniMode(isMini);
       });
     });

@@ -12,6 +12,7 @@ import { Tooltip } from "./components/Tooltip";
 import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
 import { Logger } from "./utils/logger";
+import { Events } from "./constants/events";
 
 type View = "main" | "history" | "settings";
 
@@ -138,15 +139,15 @@ function AppContent() {
       setIsMiniMode(isMini);
     });
 
-    EventsOn("open-history", () => setCurrentView("history"));
-    EventsOn("open-settings", () => setCurrentView("settings"));
-    EventsOn("mini-mode", (isMini: boolean) => {
+    EventsOn(Events.OpenHistory, () => setCurrentView("history"));
+    EventsOn(Events.OpenSettings, () => setCurrentView("settings"));
+    EventsOn(Events.MiniMode, (isMini: boolean) => {
       setIsMiniMode(isMini);
     });
 
     // Listen for toast events from backend
     EventsOn(
-      "toast",
+      Events.Toast,
       (data: {
         message: string;
         type: "error" | "warning" | "success" | "info";
@@ -156,7 +157,7 @@ function AppContent() {
     );
 
     EventsOn(
-      "model-status",
+      Events.ModelStatus,
       (status: { downloaded: boolean; loaded: boolean }) => {
         if (status.downloaded && status.loaded) {
           setModelReady(true);

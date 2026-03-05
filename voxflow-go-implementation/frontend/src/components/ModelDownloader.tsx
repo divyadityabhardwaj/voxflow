@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { IsModelDownloaded, DownloadModel } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
+import { Events } from "../constants/events";
 
 interface Props {
   onDownloadStart: () => void;
@@ -24,22 +25,22 @@ export default function ModelDownloader({
     });
 
     // Listen for download progress
-    EventsOn("model-download-progress", (data: { progress: number }) => {
+    EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
       setProgress(Math.round(data.progress));
     });
 
-    EventsOn("model-download-error", (err: string) => {
+    EventsOn(Events.ModelDownloadError, (err: string) => {
       setError(err);
       setDownloading(false);
     });
 
     EventsOn(
-      "model-status",
+      Events.ModelStatus,
       (status: { downloaded: boolean; loaded: boolean }) => {
         if (status.downloaded && status.loaded) {
           onDownloadComplete();
         }
-      }
+      },
     );
   }, []);
 
