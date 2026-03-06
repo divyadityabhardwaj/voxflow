@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 	"voxflow/internal/audio"
@@ -51,6 +53,8 @@ type App struct {
 	localDownloadCancel     context.CancelFunc // Cancel function for local model download
 	localDownloadMu         sync.Mutex         // Mutex for local download operations
 	localDownloadingModel   string             // Track which model is currently downloading
+	volumeMu                sync.Mutex         // Guards savedVolume
+	savedVolume             int                // System volume saved before muting; -1 = not muted
 }
 
 // NewApp creates a new App application struct
@@ -68,6 +72,7 @@ func NewApp() *App {
 		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
 		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
 		cerebrasClient:   cerebras.NewClient(cfg.GetCerebrasAPIKey()),
+		savedVolume:      -1, // -1 = not currently muted by VoxFlow
 	}
 	app.localClient = localclient.NewClient(app.ollamaService.BaseURL())
 
@@ -415,6 +420,27 @@ func (a *App) DownloadModel() error {
 	return nil
 }
 
+// captureTargetApp returns the bundle ID of the currently frontmost application.
+// This must be called BEFORE recording starts (i.e., before Voxflow steals focus),
+// so that text can be injected back into the correct app after processing.
+func (a *App) captureTargetApp() string {
+	script := `
+		tell application "System Events"
+			set frontApp to first application process whose frontmost is true
+			return bundle identifier of frontApp
+		end tell
+	`
+	cmd := exec.Command("osascript", "-e", script)
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Printf("[Injection] Failed to capture target app: %v\n", err)
+		return ""
+	}
+	bundleID := strings.TrimSpace(string(out))
+	fmt.Printf("[Injection] Target app bundle ID: %s\n", bundleID)
+	return bundleID
+}
+
 // onHotkeyPressed is called when the global hotkey is pressed
 func (a *App) onHotkeyPressed(state hotkey.State) {
 	a.state = state
@@ -422,6 +448,11 @@ func (a *App) onHotkeyPressed(state hotkey.State) {
 
 	switch state {
 	case hotkey.StateRecording:
+		// Capture the frontmost app bundle ID NOW — before Voxflow grabs focus during processing
+		if a.injectionService != nil {
+			bundleID := a.captureTargetApp()
+			a.injectionService.SetTargetApp(bundleID)
+		}
 		// Only switch to mini mode if user hasn't explicitly maximized the app
 		if !a.userExplicitlyMaximized {
 			a.ShowMiniMode()
@@ -630,6 +661,15 @@ func (a *App) StartRecording() error {
 		return err
 	}
 
+	// Mute all system audio while we record (browsers, games, Spotify, YouTube — everything).
+	// Run in a goroutine so the recording indicator shows immediately.
+	go func() {
+		vol := audio.MuteSystemAudio()
+		a.volumeMu.Lock()
+		a.savedVolume = vol
+		a.volumeMu.Unlock()
+	}()
+
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Recording")
 	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
 	fmt.Println("Recording started...")
@@ -774,17 +814,24 @@ func (a *App) processRecording() {
 		}
 	}
 
-	// Always copy to clipboard first
+	// Always copy to clipboard first, then inject at cursor and resume media
 	if a.injectionService != nil {
 		// Run in goroutine to not block timing log if clipboard is slow (unlikely but safe)
 		go func() {
 			a.injectionService.CopyToClipboard(polishedText)
 			fmt.Printf("Text copied to clipboard\n")
 
-			// Also try to inject at cursor if possible
+			// Inject at cursor using the pre-captured target app bundle ID
 			if err := a.injectionService.Inject(polishedText); err != nil {
 				fmt.Printf("Could not inject text (no active cursor?): %v\n", err)
 			}
+
+			// Restore system audio volume that was muted before recording
+			a.volumeMu.Lock()
+			vol := a.savedVolume
+			a.savedVolume = -1
+			a.volumeMu.Unlock()
+			audio.UnmuteSystemAudio(vol)
 		}()
 	}
 
@@ -847,6 +894,17 @@ func (a *App) resetToIdle() {
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
+
+	// Restore system audio if it was muted by VoxFlow (e.g., when processing fails)
+	a.volumeMu.Lock()
+	vol := a.savedVolume
+	a.savedVolume = -1
+	a.volumeMu.Unlock()
+	if vol >= 0 {
+		go func() {
+			audio.UnmuteSystemAudio(vol)
+		}()
+	}
 }
 
 // handleError handles errors during processing
