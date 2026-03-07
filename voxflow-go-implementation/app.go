@@ -431,9 +431,9 @@ func (a *App) captureTargetApp() string {
 		end tell
 	`
 	cmd := exec.Command("osascript", "-e", script)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("[Injection] Failed to capture target app: %v\n", err)
+		fmt.Printf("[Injection] Failed to capture target app. Error: %v\nAppleScript Output: %s\n", err, string(out))
 		return ""
 	}
 	bundleID := strings.TrimSpace(string(out))
@@ -449,10 +449,7 @@ func (a *App) onHotkeyPressed(state hotkey.State) {
 	switch state {
 	case hotkey.StateRecording:
 		// Capture the frontmost app bundle ID NOW — before Voxflow grabs focus during processing
-		if a.injectionService != nil {
-			bundleID := a.captureTargetApp()
-			a.injectionService.SetTargetApp(bundleID)
-		}
+		// Focus gets taken shortly. We rely on the generic simulator.
 		// Only switch to mini mode if user hasn't explicitly maximized the app
 		if !a.userExplicitlyMaximized {
 			a.ShowMiniMode()
