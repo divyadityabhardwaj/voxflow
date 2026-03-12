@@ -286,6 +286,14 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Printf("Warning: Failed to initialize injection: %v\n", err)
 	} else {
 		a.injectionService = injService
+		// Check and request Accessibility permission needed for CGEventPost (Cmd+V simulation).
+		// This is a one-time prompt — once granted it persists for the app bundle.
+		if !injection.IsAccessibilityGranted() {
+			fmt.Println("[Injection] Accessibility permission not granted — prompting user")
+			injection.PromptAccessibility()
+		} else {
+			fmt.Println("[Injection] Accessibility permission granted")
+		}
 	}
 
 	// Clean up any partial model downloads from previous interrupted sessions
@@ -818,9 +826,10 @@ func (a *App) processRecording() {
 			a.injectionService.CopyToClipboard(polishedText)
 			fmt.Printf("Text copied to clipboard\n")
 
-			// Inject at cursor using the pre-captured target app bundle ID
+			// Inject at cursor using CoreGraphics CGEventPost
 			if err := a.injectionService.Inject(polishedText); err != nil {
 				fmt.Printf("Could not inject text (no active cursor?): %v\n", err)
+				a.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
 			}
 
 			// Restore system audio volume that was muted before recording

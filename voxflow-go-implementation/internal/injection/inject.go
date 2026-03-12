@@ -2,7 +2,6 @@ package injection
 
 import (
 	"fmt"
-	"os/exec"
 	"time"
 
 	"golang.design/x/clipboard"
@@ -39,9 +38,9 @@ func (s *Service) Inject(text string) error {
 	// Small delay to ensure clipboard is updated
 	time.Sleep(50 * time.Millisecond)
 
-	// Simulate Cmd+V using AppleScript (macOS only, but avoids CGO)
-	err := simulatePasteAppleScript()
-	if err != nil {
+	// Simulate Cmd+V using CoreGraphics CGEventPost (requires Accessibility permission
+	// to be granted to this app, NOT to osascript/System Events).
+	if err := simulatePaste(); err != nil {
 		return err
 	}
 
@@ -58,20 +57,7 @@ func (s *Service) Inject(text string) error {
 	return nil
 }
 
-// simulatePasteAppleScript uses AppleScript to simulate Cmd+V
-func simulatePasteAppleScript() error {
-	script := `
-		tell application "System Events"
-			keystroke "v" using command down
-		end tell
-	`
-	cmd := exec.Command("osascript", "-e", script)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("AppleScript error: %v, output: %s", err, string(out))
-	}
-	return nil
-}
+
 
 // CopyToClipboard just copies text to clipboard without pasting
 func (s *Service) CopyToClipboard(text string) error {
