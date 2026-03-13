@@ -167,6 +167,7 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 				m.handsFreeHK = hotkey.New(mods, key)
 				if err := m.handsFreeHK.Register(); err != nil {
 					fmt.Printf("Failed to register initial hands-free: %v\n", err)
+					m.handsFreeHK = nil
 				}
 			}
 		}
@@ -176,6 +177,7 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 				m.pushToTalkHK = hotkey.New(mods, key)
 				if err := m.pushToTalkHK.Register(); err != nil {
 					fmt.Printf("Failed to register initial ptt: %v\n", err)
+					m.pushToTalkHK = nil
 				}
 			}
 		}
@@ -206,24 +208,24 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 
 			case _, ok := <-hfDown:
 				if !ok {
+					m.handsFreeHK = nil
 					continue
 				}
 				m.handleHandsFree()
 
 			case _, ok := <-pttDown:
 				if !ok {
+					m.pushToTalkHK = nil
 					continue
 				}
 				m.handlePushToTalkDown()
 
 			case _, ok := <-pttUp:
 				if !ok {
+					m.pushToTalkHK = nil
 					continue
 				}
 				m.handlePushToTalkUp()
-
-			case <-time.After(100 * time.Millisecond):
-				// Heartbeat to allow reconfigure checks
 			}
 		}
 	})
@@ -251,6 +253,7 @@ func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
 		}
 		m.handsFreeHK = hotkey.New(mods, key)
 		if err := m.handsFreeHK.Register(); err != nil {
+			m.handsFreeHK = nil
 			return fmt.Errorf("failed to register hands-free: %w", err)
 		}
 	}
@@ -268,6 +271,7 @@ func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
 		}
 		m.pushToTalkHK = hotkey.New(mods, key)
 		if err := m.pushToTalkHK.Register(); err != nil {
+			m.pushToTalkHK = nil
 			// Cleanup partial registration
 			if m.handsFreeHK != nil {
 				m.handsFreeHK.Unregister()

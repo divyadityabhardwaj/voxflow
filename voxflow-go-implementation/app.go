@@ -268,9 +268,8 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Initialize audio
-	if err := a.audioRecorder.Initialize(); err != nil {
-		fmt.Printf("Warning: Failed to initialize audio: %v\n", err)
-	}
+	// NOTE: PortAudio init is deferred until first recording start to avoid
+	// background audio threads/polling when the app is idle.
 
 	// Initialize history service
 	histService, err := history.NewService()

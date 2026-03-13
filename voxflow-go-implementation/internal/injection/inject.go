@@ -2,6 +2,7 @@ package injection
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"golang.design/x/clipboard"
@@ -11,22 +12,33 @@ import (
 type Service struct {
 	originalClipboard []byte
 	preserveClipboard bool
+	initOnce          sync.Once
+	initErr           error
 }
 
 // NewService creates a new injection service
 func NewService(preserveClipboard bool) (*Service, error) {
-	// Initialize clipboard
-	if err := clipboard.Init(); err != nil {
-		return nil, fmt.Errorf("failed to initialize clipboard: %w", err)
-	}
-
 	return &Service{
 		preserveClipboard: preserveClipboard,
 	}, nil
 }
 
+func (s *Service) ensureClipboardInit() error {
+	s.initOnce.Do(func() {
+		s.initErr = clipboard.Init()
+	})
+	if s.initErr != nil {
+		return fmt.Errorf("failed to initialize clipboard: %w", s.initErr)
+	}
+	return nil
+}
+
 // Inject injects text into the target application (identified by bundle ID).
 func (s *Service) Inject(text string) error {
+	if err := s.ensureClipboardInit(); err != nil {
+		return err
+	}
+
 	// Optionally save current clipboard content
 	if s.preserveClipboard {
 		s.originalClipboard = clipboard.Read(clipboard.FmtText)
@@ -57,10 +69,11 @@ func (s *Service) Inject(text string) error {
 	return nil
 }
 
-
-
 // CopyToClipboard just copies text to clipboard without pasting
 func (s *Service) CopyToClipboard(text string) error {
+	if err := s.ensureClipboardInit(); err != nil {
+		return err
+	}
 	clipboard.Write(clipboard.FmtText, []byte(text))
 	return nil
 }

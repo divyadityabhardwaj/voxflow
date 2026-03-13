@@ -28,6 +28,9 @@ type Recorder struct {
 	stopChan    chan struct{}
 	stoppedChan chan struct{}
 	sampleRate  float64
+	initOnce    sync.Once
+	initErr     error
+	initialized atomic.Bool
 }
 
 // NewRecorder creates a new audio recorder
@@ -40,18 +43,35 @@ func NewRecorder() *Recorder {
 
 // Initialize initializes PortAudio
 func (r *Recorder) Initialize() error {
-	return portaudio.Initialize()
+	r.initOnce.Do(func() {
+		r.initErr = portaudio.Initialize()
+		if r.initErr == nil {
+			r.initialized.Store(true)
+		}
+	})
+	return r.initErr
 }
 
 // Terminate cleans up PortAudio
 func (r *Recorder) Terminate() error {
-	return portaudio.Terminate()
+	if !r.initialized.Load() {
+		return nil
+	}
+	err := portaudio.Terminate()
+	if err == nil {
+		r.initialized.Store(false)
+	}
+	return err
 }
 
 // Start begins recording audio
 func (r *Recorder) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if err := r.Initialize(); err != nil {
+		return fmt.Errorf("failed to initialize audio: %w", err)
+	}
 
 	if r.recording.Load() {
 		return fmt.Errorf("already recording")
@@ -125,6 +145,7 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 				return
 			}
 			fmt.Printf("Error reading audio: %v\n", err)
+			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 
