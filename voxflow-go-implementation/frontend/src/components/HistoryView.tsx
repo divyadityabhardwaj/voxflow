@@ -288,12 +288,33 @@ export default function HistoryView() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {/* Result */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {selectedTranscript.raw_text && selectedTranscript.raw_text !== selectedTranscript.polished_text && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
+                      Original
+                    </h3>
+                    <button
+                      onClick={() => handleCopy(selectedTranscript.raw_text)}
+                      title="Copy original text to clipboard"
+                      className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="card p-4">
+                    <p className="text-secondary whitespace-pre-wrap leading-relaxed">
+                      {selectedTranscript.raw_text}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
-                    Result
+                    {selectedTranscript.raw_text && selectedTranscript.raw_text !== selectedTranscript.polished_text ? "Polished" : "Result"}
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.polished_text)}

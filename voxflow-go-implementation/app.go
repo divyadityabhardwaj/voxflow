@@ -803,6 +803,12 @@ func (a *App) processRecording() {
 		return
 	}
 
+	// If LLM returned empty, fall back to raw text and warn user
+	if polishedText == "" {
+		polishedText = rawText
+		a.emitToast("LLM refining failed - using raw transcription", "warning")
+	}
+
 	// Calculate speed
 	timeMs := llmDuration.Milliseconds()
 	var tps float64 = 0
