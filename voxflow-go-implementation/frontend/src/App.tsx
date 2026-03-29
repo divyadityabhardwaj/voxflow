@@ -11,7 +11,6 @@ import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { Tooltip } from "./components/Tooltip";
 import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
-import { Logger } from "./utils/logger";
 import { Events } from "./constants/events";
 
 type View = "main" | "history" | "settings";
@@ -134,6 +133,16 @@ function AppContent() {
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
 
+  const setMiniModeTransparency = (enabled: boolean) => {
+    const backgroundColor = enabled ? "transparent" : "";
+    document.documentElement.style.backgroundColor = backgroundColor;
+    document.body.style.backgroundColor = backgroundColor;
+    const root = document.getElementById("root");
+    if (root) {
+      root.style.backgroundColor = backgroundColor;
+    }
+  };
+
   useEffect(() => {
     IsMiniMode().then((isMini) => {
       setIsMiniMode(isMini);
@@ -170,45 +179,10 @@ function AppContent() {
     );
   }, [showToast]);
 
-  // Transparency Watchdog - Force transparency every 100ms in mini-mode
+  // Apply transparency when mini mode changes instead of continuous polling.
   useEffect(() => {
-    const watchdog = setInterval(() => {
-      if (isMiniMode) {
-        let fixed = false;
-        // Aggressively force transparent background
-        if (document.documentElement.style.backgroundColor !== "transparent") {
-          document.documentElement.style.backgroundColor = "transparent";
-          fixed = true;
-        }
-        if (document.body.style.backgroundColor !== "transparent") {
-          document.body.style.backgroundColor = "transparent";
-          fixed = true;
-        }
-        const root = document.getElementById("root");
-        if (root && root.style.backgroundColor !== "transparent") {
-          root.style.backgroundColor = "transparent";
-          fixed = true;
-        }
-
-        if (fixed) {
-          Logger.debug("Watchdog: Forced transparency on elements");
-        }
-      } else {
-        // Reset to allow CSS to take over in full mode
-        if (document.documentElement.style.backgroundColor === "transparent") {
-          document.documentElement.style.backgroundColor = "";
-        }
-        if (document.body.style.backgroundColor === "transparent") {
-          document.body.style.backgroundColor = "";
-        }
-        const root = document.getElementById("root");
-        if (root && root.style.backgroundColor === "transparent") {
-          root.style.backgroundColor = "";
-        }
-      }
-    }, 100);
-
-    return () => clearInterval(watchdog);
+    setMiniModeTransparency(isMiniMode);
+    return () => setMiniModeTransparency(false);
   }, [isMiniMode]);
 
   const handleDownloadStart = () => {

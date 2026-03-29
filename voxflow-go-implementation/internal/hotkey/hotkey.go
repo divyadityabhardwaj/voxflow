@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"golang.design/x/hotkey"
-	"golang.design/x/hotkey/mainthread"
 )
 
 // State represents the current app state
@@ -152,39 +151,50 @@ func (m *Manager) Update(handsFreeStr, pttStr string) error {
 	}
 }
 
-// Start begins listening using mainthread
-// This should only be called ONCE at app startup
+// Start registers hotkeys and begins listening for events.
+//
+// NOTE: We intentionally do NOT use mainthread.Init here.
+// In the Wails app, the Cocoa main loop is already owned by Wails/AppKit.
+// Running another mainthread.Init loop caused repeated AppKit exceptions in
+// the event loop (seen as continuous NSApplication reportException activity),
+// which drove idle CPU close to 100%.
+//
+// This should only be called once at startup (the m.running guard keeps it
+// idempotent if called again).
 func (m *Manager) Start(handsFreeStr, pttStr string) error {
 	m.mu.Lock()
+	if m.running {
+		m.mu.Unlock()
+		return nil
+	}
 	m.running = true
 	m.mu.Unlock()
 
-	go mainthread.Init(func() {
-		// Initial Registration
-		if handsFreeStr != "" {
-			mods, key, err := parseHotkey(handsFreeStr)
-			if err == nil {
-				m.handsFreeHK = hotkey.New(mods, key)
-				if err := m.handsFreeHK.Register(); err != nil {
-					fmt.Printf("Failed to register initial hands-free: %v\n", err)
-					m.handsFreeHK = nil
-				}
+	if handsFreeStr != "" {
+		mods, key, err := parseHotkey(handsFreeStr)
+		if err == nil {
+			m.handsFreeHK = hotkey.New(mods, key)
+			if err := m.handsFreeHK.Register(); err != nil {
+				fmt.Printf("Failed to register initial hands-free: %v\n", err)
+				m.handsFreeHK = nil
 			}
 		}
-		if pttStr != "" {
-			mods, key, err := parseHotkey(pttStr)
-			if err == nil {
-				m.pushToTalkHK = hotkey.New(mods, key)
-				if err := m.pushToTalkHK.Register(); err != nil {
-					fmt.Printf("Failed to register initial ptt: %v\n", err)
-					m.pushToTalkHK = nil
-				}
+	}
+	if pttStr != "" {
+		mods, key, err := parseHotkey(pttStr)
+		if err == nil {
+			m.pushToTalkHK = hotkey.New(mods, key)
+			if err := m.pushToTalkHK.Register(); err != nil {
+				fmt.Printf("Failed to register initial ptt: %v\n", err)
+				m.pushToTalkHK = nil
 			}
 		}
+	}
 
-		// Event Loop - runs FOREVER
+	// Hotkey event handling runs in a regular goroutine and blocks on channel
+	// receives, so it remains idle when no keys are pressed.
+	go func() {
 		for {
-			// Get current hotkey references (no lock needed for reading pointers in this context)
 			hf := m.handsFreeHK
 			ptt := m.pushToTalkHK
 
@@ -201,7 +211,6 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 
 			select {
 			case req := <-m.reconfigCh:
-				// Reconfigure request received
 				err := m.handleReconfigure(req.handsFreeStr, req.pttStr)
 				req.result <- err
 				continue
@@ -228,7 +237,7 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 				m.handlePushToTalkUp()
 			}
 		}
-	})
+	}()
 
 	return nil
 }

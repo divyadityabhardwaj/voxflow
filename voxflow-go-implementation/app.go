@@ -505,13 +505,16 @@ func (a *App) ShowMiniMode() {
 
 // startPositionWatch starts a goroutine to poll and save window position
 func (a *App) startPositionWatch() {
-	// Stop existing watcher if any
 	if a.positionWatchCancel != nil {
 		a.positionWatchCancel()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.positionWatchCancel = cancel
+
+	lastSavedX, lastSavedY := a.config.GetMiniModePosition()
+	dirty := false
+	var lastPersist time.Time
 
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -520,19 +523,23 @@ func (a *App) startPositionWatch() {
 		for {
 			select {
 			case <-ctx.Done():
+				if dirty {
+					a.config.Save()
+				}
 				return
 			case <-ticker.C:
-				// Get current position
 				rx, ry := runtime.WindowGetPosition(a.ctx)
-				// Get saved position
-				cx, cy := a.config.GetMiniModePosition()
 
-				// If changed, save
-				if rx != cx || ry != cy {
+				if rx != lastSavedX || ry != lastSavedY {
+					lastSavedX, lastSavedY = rx, ry
 					a.config.SetMiniModePosition(rx, ry)
-					a.config.Save() // Save to disk to persist across crashes
-					// Avoid spamming logs, but useful for debug
-					// fmt.Printf("[App] Auto-saved position: %d, %d\n", rx, ry)
+					dirty = true
+				}
+
+				if dirty && time.Since(lastPersist) > 5*time.Second {
+					a.config.Save()
+					lastPersist = time.Now()
+					dirty = false
 				}
 			}
 		}
@@ -551,13 +558,17 @@ func (a *App) saveCurrentMiniModePosition() {
 
 // startMaximizedPositionWatch starts a goroutine to poll and save maximized window position and size
 func (a *App) startMaximizedPositionWatch() {
-	// Stop existing watcher if any
 	if a.positionWatchCancel != nil {
 		a.positionWatchCancel()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.positionWatchCancel = cancel
+
+	lastSavedX, lastSavedY := a.config.GetMaximizedWindowPosition()
+	lastSavedW, lastSavedH := a.config.GetMaximizedWindowSize()
+	dirty := false
+	var lastPersist time.Time
 
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -566,21 +577,26 @@ func (a *App) startMaximizedPositionWatch() {
 		for {
 			select {
 			case <-ctx.Done():
+				if dirty {
+					a.config.Save()
+				}
 				return
 			case <-ticker.C:
-				// Get current position
 				rx, ry := runtime.WindowGetPosition(a.ctx)
-				// Get current size - returns (width, height)
 				rw, rh := runtime.WindowGetSize(a.ctx)
-				// Get saved position and size
-				cx, cy := a.config.GetMaximizedWindowPosition()
-				cw, ch := a.config.GetMaximizedWindowSize()
 
-				// If changed, save
-				if rx != cx || ry != cy || rw != cw || rh != ch {
+				if rx != lastSavedX || ry != lastSavedY || rw != lastSavedW || rh != lastSavedH {
+					lastSavedX, lastSavedY = rx, ry
+					lastSavedW, lastSavedH = rw, rh
 					a.config.SetMaximizedWindowPosition(rx, ry)
 					a.config.SetMaximizedWindowSize(rw, rh)
-					a.config.Save() // Save to disk to persist across crashes
+					dirty = true
+				}
+
+				if dirty && time.Since(lastPersist) > 5*time.Second {
+					a.config.Save()
+					lastPersist = time.Now()
+					dirty = false
 				}
 			}
 		}
