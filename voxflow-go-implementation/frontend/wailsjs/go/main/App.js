@@ -262,6 +262,14 @@ export function SetPushToTalkHotkey(arg1) {
   return window['go']['main']['App']['SetPushToTalkHotkey'](arg1);
 }
 
+export function SetStreamingChunkSeconds(arg1) {
+  return window['go']['main']['App']['SetStreamingChunkSeconds'](arg1);
+}
+
+export function SetStreamingWhisper(arg1) {
+  return window['go']['main']['App']['SetStreamingWhisper'](arg1);
+}
+
 export function SetWhisperModel(arg1) {
   return window['go']['main']['App']['SetWhisperModel'](arg1);
 }

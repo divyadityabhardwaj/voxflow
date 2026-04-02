@@ -34,6 +34,8 @@ import {
   CancelLocalModelDownload,
   SetLocalModel,
   GetActiveLocalDownload,
+  SetStreamingWhisper,
+  SetStreamingChunkSeconds,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -58,6 +60,8 @@ interface Config {
   cerebras_api_key_set: boolean;
 
   local_model: string;
+  streaming_whisper?: boolean;
+  streaming_chunk_seconds?: number;
 }
 
 interface ModelInfo {
@@ -1850,6 +1854,67 @@ export default function SettingsView() {
             Download and manage Whisper models. Larger models are more accurate
             but slower.
           </p>
+          {config && (
+            <div className="p-4 rounded-lg border border-dark-800 bg-dark-900/50 mb-4 space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 w-4 h-4 text-accent-600 focus:ring-accent-600 rounded border-dark-600"
+                  checked={config.streaming_whisper ?? true}
+                  onChange={async (e) => {
+                    const next = e.target.checked;
+                    setSaving("streaming");
+                    try {
+                      await SetStreamingWhisper(next);
+                      setConfig((prev) =>
+                        prev ? { ...prev, streaming_whisper: next } : null,
+                      );
+                    } finally {
+                      setSaving(null);
+                    }
+                  }}
+                />
+                <div>
+                  <span className="text-dark-200 font-medium">
+                    Incremental transcription while recording
+                  </span>
+                  <p className="text-xs text-dark-500 mt-1">
+                    Transcribes fixed-length audio chunks while you speak so long
+                    recordings finish sooner after you stop.
+                  </p>
+                </div>
+              </label>
+              <div className="flex flex-wrap items-center gap-2 pl-7">
+                <label className="text-sm text-dark-400">
+                  Chunk length (seconds)
+                </label>
+                <input
+                  type="number"
+                  min={1.5}
+                  max={30}
+                  step={0.5}
+                  className="w-24 px-2 py-1 rounded bg-dark-800 border border-dark-700 text-dark-200 text-sm"
+                  value={config.streaming_chunk_seconds ?? 3}
+                  onChange={async (e) => {
+                    const v = parseFloat(e.target.value);
+                    if (Number.isNaN(v)) return;
+                    setSaving("streaming");
+                    try {
+                      await SetStreamingChunkSeconds(v);
+                      setConfig((prev) =>
+                        prev ? { ...prev, streaming_chunk_seconds: v } : null,
+                      );
+                    } finally {
+                      setSaving(null);
+                    }
+                  }}
+                />
+                {saving === "streaming" && (
+                  <span className="text-xs text-dark-500">Saving…</span>
+                )}
+              </div>
+            </div>
+          )}
           <div className="space-y-3">
             {modelsLoading ? (
               <p className="text-sm text-dark-500 text-center py-4">

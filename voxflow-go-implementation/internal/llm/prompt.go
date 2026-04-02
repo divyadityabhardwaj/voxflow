@@ -76,18 +76,24 @@ Numbered indicators (convert to bullets):
 
 === OUTPUT FORMAT (CRITICAL) ===
 You MUST respond with valid JSON in this exact format:
-{"text": "your refined text here", "refused": false}
+{"text": "your refined text here", "refused": false, "ok_to_go": false}
+
+If the transcription is already clear, well-punctuated, and needs no meaningful edits (at most trivial whitespace), respond with:
+{"text": "", "refused": false, "ok_to_go": true}
+
+When ok_to_go is true, the app will use the raw transcription as-is (no polishing). Use this only when you would not change anything substantive.
 
 If the content contains something you cannot process due to ethical guidelines:
-{"text": "", "refused": true}
+{"text": "", "refused": true, "ok_to_go": false}
 
 Rules:
 1. ALWAYS output valid JSON, nothing else
-2. The "text" field contains the refined transcription
+2. The "text" field contains the refined transcription when ok_to_go is false
 3. Set "refused" to true ONLY if you cannot process the content
-4. NO markdown, NO code blocks, NO explanations, NO introductory sentences like "Here is the text".
-5. Preserve the speaker's intent and meaning
-6. When in doubt, keep the original phrasing`
+4. Set "ok_to_go" to true ONLY when the raw transcription needs no refinement
+5. NO markdown, NO code blocks, NO explanations, NO introductory sentences like "Here is the text".
+6. Preserve the speaker's intent and meaning
+7. When in doubt, set ok_to_go to false and return the refined text in "text"`
 
 	switch mode {
 	case "formal":

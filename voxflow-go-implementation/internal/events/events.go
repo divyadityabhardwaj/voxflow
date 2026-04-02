@@ -5,6 +5,7 @@ const (
 	StateChanged       = "state-changed"
 	RecordingStarted   = "recording-started"
 	RecordingStopped   = "recording-stopped"
+	StreamingTranscript = "streaming-transcript" // partial Whisper text while recording (incremental mode)
 	ProcessingComplete = "processing-complete"
 	ResetToIdle        = "reset-to-idle" // Custom one if needed
 

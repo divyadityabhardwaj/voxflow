@@ -10,6 +10,7 @@ export default function MainView() {
   const [lastTranscription, setLastTranscription] = useState<string | null>(
     null,
   );
+  const [usedRawNoPolish, setUsedRawNoPolish] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,13 +21,19 @@ export default function MainView() {
       if (newStatus === "Recording") {
         setError(null);
         setLastTranscription(null);
+        setUsedRawNoPolish(false);
       }
     });
 
     EventsOn(
       Events.ProcessingComplete,
-      (result: { polished: string; elapsed: number }) => {
+      (result: {
+        polished: string;
+        elapsed: number;
+        used_raw?: boolean;
+      }) => {
         setLastTranscription(result.polished);
+        setUsedRawNoPolish(Boolean(result.used_raw));
       },
     );
 
@@ -168,6 +175,11 @@ export default function MainView() {
             <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider mb-3">
               Result
             </h3>
+            {usedRawNoPolish && (
+              <p className="text-xs text-tertiary mb-2">
+                Shown as transcribed — refinement skipped (already clear).
+              </p>
+            )}
             <p className="text-primary whitespace-pre-wrap leading-relaxed">
               {lastTranscription}
             </p>

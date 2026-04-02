@@ -52,9 +52,10 @@ type usage struct {
 type refineResponse struct {
 	Text    string `json:"text"`
 	Refused bool   `json:"refused"`
+	OkToGo  bool   `json:"ok_to_go"`
 }
 
-func (c *Client) RefineText(rawText string, model string, mode string) (string, int, error) {
+func (c *Client) RefineText(rawText string, model string, mode string) (string, int, bool, error) {
 	systemPrompt := llm.BuildSystemPrompt(mode)
 	req := request{
 		Model: model,
@@ -67,38 +68,38 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(c.baseURL, "/"))
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(data))
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to create request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to send request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to read response: %w", err)
+		return "", 0, false, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("local model error (status %d): %s", resp.StatusCode, string(body))
+		return "", 0, false, fmt.Errorf("local model error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	var localResp response
 	if err := json.Unmarshal(body, &localResp); err != nil {
-		return "", 0, fmt.Errorf("failed to parse response: %w", err)
+		return "", 0, false, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if len(localResp.Choices) == 0 {
-		return "", 0, fmt.Errorf("no response generated")
+		return "", 0, false, fmt.Errorf("no response generated")
 	}
 
 	result := localResp.Choices[0].Message.Content
@@ -121,12 +122,15 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 	var refineResp refineResponse
 	if err := json.Unmarshal([]byte(cleanResult), &refineResp); err == nil {
 		if refineResp.Refused {
-			return rawText, tokenCount, nil
+			return rawText, tokenCount, false, nil
 		}
-		return refineResp.Text, tokenCount, nil
+		if refineResp.OkToGo {
+			return rawText, tokenCount, true, nil
+		}
+		return refineResp.Text, tokenCount, false, nil
 	}
 
-	return cleanResult, tokenCount, nil
+	return cleanResult, tokenCount, false, nil
 }
 
 // CheckModel tests a model and returns latency in milliseconds and tokens per second

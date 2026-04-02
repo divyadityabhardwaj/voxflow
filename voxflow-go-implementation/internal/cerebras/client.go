@@ -88,6 +88,7 @@ type Choice struct {
 type RefineResponse struct {
 	Text    string `json:"text"`
 	Refused bool   `json:"refused"`
+	OkToGo  bool   `json:"ok_to_go"`
 }
 
 // ModelsResponse represents the response from the /models endpoint
@@ -177,9 +178,9 @@ func GetModelDescription(model string) string {
 }
 
 // RefineText sends raw transcription to Cerebras for refinement
-func (c *Client) RefineText(rawText string, model string, mode string) (string, int, error) {
+func (c *Client) RefineText(rawText string, model string, mode string) (string, int, bool, error) {
 	if c.apiKey == "" {
-		return "", 0, fmt.Errorf("API key not set")
+		return "", 0, false, fmt.Errorf("API key not set")
 	}
 
 	systemPrompt := llm.BuildSystemPrompt(mode)
@@ -195,40 +196,40 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/chat/completions", baseAPIURL)
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to create request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to send request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to read response: %w", err)
+		return "", 0, false, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+		return "", 0, false, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var cerebrasResp Response
 	if err := json.Unmarshal(respBody, &cerebrasResp); err != nil {
-		return "", 0, fmt.Errorf("failed to parse response: %w, response: %s", err, string(respBody))
+		return "", 0, false, fmt.Errorf("failed to parse response: %w, response: %s", err, string(respBody))
 	}
 
 	if len(cerebrasResp.Choices) == 0 {
-		return "", 0, fmt.Errorf("no response generated")
+		return "", 0, false, fmt.Errorf("no response generated")
 	}
 
 	result := cerebrasResp.Choices[0].Message.Content
@@ -251,12 +252,15 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 	var refineResp RefineResponse
 	if err := json.Unmarshal([]byte(cleanResult), &refineResp); err == nil {
 		if refineResp.Refused {
-			return rawText, tokenCount, nil
+			return rawText, tokenCount, false, nil
 		}
-		return refineResp.Text, tokenCount, nil
+		if refineResp.OkToGo {
+			return rawText, tokenCount, true, nil
+		}
+		return refineResp.Text, tokenCount, false, nil
 	}
 
-	return cleanResult, tokenCount, nil
+	return cleanResult, tokenCount, false, nil
 }
 
 // CheckModel tests a model and returns latency in milliseconds and tokens per second

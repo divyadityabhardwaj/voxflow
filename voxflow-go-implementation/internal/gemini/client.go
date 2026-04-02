@@ -106,13 +106,15 @@ type APIError struct {
 type RefineResponse struct {
 	Text    string `json:"text"`
 	Refused bool   `json:"refused"`
+	OkToGo  bool   `json:"ok_to_go"`
 }
 
-// RefineText sends raw transcription to Gemini for refinement
-func (c *Client) RefineText(rawText string, mode string) (string, int, error) {
+// RefineText sends raw transcription to Gemini for refinement.
+// If ok_to_go is true, the caller should use rawText (second return is true).
+func (c *Client) RefineText(rawText string, mode string) (string, int, bool, error) {
 	fmt.Printf("[Gemini] Refining text: %s\n", rawText)
 	if c.apiKey == "" {
-		return "", 0, fmt.Errorf("API key not set")
+		return "", 0, false, fmt.Errorf("API key not set")
 	}
 
 	// Build the system prompt based on mode
@@ -136,7 +138,7 @@ func (c *Client) RefineText(rawText string, mode string) (string, int, error) {
 	// Marshal request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Build URL with API key
@@ -145,41 +147,41 @@ func (c *Client) RefineText(rawText string, mode string) (string, int, error) {
 	// Make HTTP request
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to create request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	// Send request
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to send request: %w", err)
+		return "", 0, false, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to read response: %w", err)
+		return "", 0, false, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	// Parse response
 	var geminiResp Response
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
-		return "", 0, fmt.Errorf("failed to parse response: %w", err)
+		return "", 0, false, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// Check for API error
 	if geminiResp.Error != nil {
-		return "", 0, fmt.Errorf("API error: %s (code: %d)", geminiResp.Error.Message, geminiResp.Error.Code)
+		return "", 0, false, fmt.Errorf("API error: %s (code: %d)", geminiResp.Error.Message, geminiResp.Error.Code)
 	}
 
 	// Extract the refined text
 	if len(geminiResp.Candidates) == 0 || geminiResp.Candidates[0].Content == nil {
-		return "", 0, fmt.Errorf("no response generated")
+		return "", 0, false, fmt.Errorf("no response generated")
 	}
 
 	if len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return "", 0, fmt.Errorf("empty response")
+		return "", 0, false, fmt.Errorf("empty response")
 	}
 
 	result := geminiResp.Candidates[0].Content.Parts[0].Text
@@ -211,15 +213,18 @@ func (c *Client) RefineText(rawText string, mode string) (string, int, error) {
 		// Successfully parsed JSON
 		if refineResp.Refused {
 			fmt.Printf("[Gemini] Content was refused, using raw text instead\n")
-			return rawText, tokenCount, nil
+			return rawText, tokenCount, false, nil
+		}
+		if refineResp.OkToGo {
+			return rawText, tokenCount, true, nil
 		}
 		// Return the text (even if empty - that's what Gemini gave us)
-		return refineResp.Text, tokenCount, nil
+		return refineResp.Text, tokenCount, false, nil
 	}
 
 	// If JSON parsing failed, Gemini returned plain text (old behavior)
 	fmt.Printf("[Gemini] Warning: Response was not valid JSON, using as plain text\n")
-	return cleanResult, tokenCount, nil
+	return cleanResult, tokenCount, false, nil
 }
 
 // RetryWithInstruction re-processes text with a custom instruction

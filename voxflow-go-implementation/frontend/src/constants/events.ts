@@ -3,6 +3,7 @@ export const Events = {
   StateChanged: "state-changed",
   RecordingStarted: "recording-started",
   RecordingStopped: "recording-stopped",
+  StreamingTranscript: "streaming-transcript",
   ProcessingComplete: "processing-complete",
 
   // Window Events

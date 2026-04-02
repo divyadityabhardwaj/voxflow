@@ -69,6 +69,12 @@ type App struct {
 
 	miniResizeMu     sync.Mutex
 	miniResizeCancel context.CancelFunc
+
+	// Incremental Whisper during recording (chunked local transcription)
+	streamTranscribeCancel context.CancelFunc
+	streamWG               sync.WaitGroup
+	streamMu               sync.Mutex
+	streamChunkTexts       []string
 }
 
 // NewApp creates a new App application struct
@@ -765,7 +771,69 @@ func (a *App) StartRecording() error {
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Recording")
 	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
 	fmt.Println("Recording started...")
+
+	a.startStreamingWhisperDuringRecording()
 	return nil
+}
+
+// startStreamingWhisperDuringRecording runs periodic Whisper on fixed-duration audio chunks while the mic is open.
+func (a *App) startStreamingWhisperDuringRecording() {
+	if !a.config.GetStreamingWhisper() || !a.modelReady {
+		return
+	}
+	a.streamMu.Lock()
+	a.streamChunkTexts = nil
+	a.streamMu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.streamTranscribeCancel = cancel
+	a.streamWG.Add(1)
+	go func() {
+		defer a.streamWG.Done()
+		sec := a.config.GetStreamingChunkSeconds()
+		if sec < 1.5 {
+			sec = 3
+		}
+		chunkSamples := int(float64(audio.SampleRate) * sec)
+		ticker := time.NewTicker(400 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for {
+					path, ok := a.audioRecorder.TryExtractStreamingChunk(chunkSamples)
+					if !ok {
+						break
+					}
+					text, err := a.whisperService.Transcribe(path)
+					_ = os.Remove(path)
+					if err != nil || strings.TrimSpace(text) == "" {
+						continue
+					}
+					text = strings.TrimSpace(text)
+					a.streamMu.Lock()
+					a.streamChunkTexts = append(a.streamChunkTexts, text)
+					combined := strings.Join(a.streamChunkTexts, " ")
+					a.streamMu.Unlock()
+					runtime.EventsEmit(a.ctx, events.StreamingTranscript, map[string]interface{}{
+						"partial": combined,
+						"chunk":   text,
+					})
+				}
+			}
+		}
+	}()
+}
+
+func (a *App) stopStreamingWhisperAndWait() {
+	if a.streamTranscribeCancel == nil {
+		return
+	}
+	a.streamTranscribeCancel()
+	a.streamTranscribeCancel = nil
+	a.streamWG.Wait()
 }
 
 // StopRecording stops audio capture and begins processing
@@ -776,6 +844,7 @@ func (a *App) StopRecording() {
 	runtime.EventsEmit(a.ctx, events.RecordingStopped, nil)
 	fmt.Println("Recording stopped, processing...")
 
+	a.stopStreamingWhisperAndWait()
 	go a.processRecording()
 }
 
@@ -795,30 +864,84 @@ func (a *App) processRecording() {
 	}
 	defer os.Remove(wavPath) // Clean up temp file
 
-	// Transcribe with Whisper - retry up to 3 times if no audio detected
+	// Transcribe with Whisper: incremental chunks + remainder (streaming), or full-file path
 	var rawText string
 	var whisperDuration time.Duration
 	maxRetries := 3
 
 	whisperStart := time.Now()
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		rawText, err = a.whisperService.Transcribe(wavPath)
-		if err != nil {
-			a.emitToast("Transcription failed: "+err.Error(), "error")
-			a.resetToIdle()
-			return
+	if a.config.GetStreamingWhisper() && a.modelReady {
+		a.streamMu.Lock()
+		chunks := append([]string(nil), a.streamChunkTexts...)
+		a.streamMu.Unlock()
+
+		var assembled strings.Builder
+		for _, c := range chunks {
+			c = strings.TrimSpace(c)
+			if c == "" {
+				continue
+			}
+			if assembled.Len() > 0 {
+				assembled.WriteByte(' ')
+			}
+			assembled.WriteString(c)
 		}
 
-		if rawText != "" {
-			break // Successfully got transcription
+		remPath, remErr := a.audioRecorder.WriteRemainderWav()
+		if remErr != nil {
+			fmt.Printf("[App] remainder WAV: %v\n", remErr)
+		} else if remPath != "" {
+			defer os.Remove(remPath)
+			remText, txErr := a.whisperService.Transcribe(remPath)
+			if txErr != nil {
+				fmt.Printf("[App] remainder transcribe: %v\n", txErr)
+			} else if strings.TrimSpace(remText) != "" {
+				if assembled.Len() > 0 {
+					assembled.WriteByte(' ')
+				}
+				assembled.WriteString(strings.TrimSpace(remText))
+			}
 		}
-
-		if attempt < maxRetries {
-			fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
-			time.Sleep(500 * time.Millisecond)
+		rawText = strings.TrimSpace(assembled.String())
+		if rawText == "" {
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				rawText, err = a.whisperService.Transcribe(wavPath)
+				if err != nil {
+					a.emitToast("Transcription failed: "+err.Error(), "error")
+					a.resetToIdle()
+					return
+				}
+				if rawText != "" {
+					break
+				}
+				if attempt < maxRetries {
+					fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
+					time.Sleep(500 * time.Millisecond)
+				}
+			}
+		}
+	} else {
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			rawText, err = a.whisperService.Transcribe(wavPath)
+			if err != nil {
+				a.emitToast("Transcription failed: "+err.Error(), "error")
+				a.resetToIdle()
+				return
+			}
+			if rawText != "" {
+				break
+			}
+			if attempt < maxRetries {
+				fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
+				time.Sleep(500 * time.Millisecond)
+			}
 		}
 	}
 	whisperDuration = time.Since(whisperStart)
+
+	a.streamMu.Lock()
+	a.streamChunkTexts = nil
+	a.streamMu.Unlock()
 
 	fmt.Printf("\n[App] Whisper raw output (%d chars):\n%s\n", len(rawText), rawText)
 
@@ -843,23 +966,24 @@ func (a *App) processRecording() {
 	var tokenCount int
 	var llmDuration time.Duration
 	var llmStart time.Time
+	var okToGo bool
 
 	var llmModel string
 
 	if llmProvider == "openrouter" {
 		llmModel = a.config.GetOpenRouterModel()
 		llmStart = time.Now()
-		polishedText, tokenCount, err = a.openRouterClient.RefineText(rawText, llmModel, mode)
+		polishedText, tokenCount, okToGo, err = a.openRouterClient.RefineText(rawText, llmModel, mode)
 		llmDuration = time.Since(llmStart)
 	} else if llmProvider == "groq" {
 		llmModel = a.config.GetGroqModel()
 		llmStart = time.Now()
-		polishedText, tokenCount, err = a.groqClient.RefineText(rawText, llmModel, mode)
+		polishedText, tokenCount, okToGo, err = a.groqClient.RefineText(rawText, llmModel, mode)
 		llmDuration = time.Since(llmStart)
 	} else if llmProvider == "cerebras" {
 		llmModel = a.config.GetCerebrasModel()
 		llmStart = time.Now()
-		polishedText, tokenCount, err = a.cerebrasClient.RefineText(rawText, llmModel, mode)
+		polishedText, tokenCount, okToGo, err = a.cerebrasClient.RefineText(rawText, llmModel, mode)
 		llmDuration = time.Since(llmStart)
 	} else if llmProvider == "local" {
 		llmModel = localgguf.GetOllamaModelAlias(a.config.GetLocalModel())
@@ -871,7 +995,7 @@ func (a *App) processRecording() {
 			polishedText = ""
 			tokenCount = 0
 		} else {
-			polishedText, tokenCount, err = a.localClient.RefineText(rawText, llmModel, mode)
+			polishedText, tokenCount, okToGo, err = a.localClient.RefineText(rawText, llmModel, mode)
 			llmDuration = time.Since(llmStart)
 		}
 	} else {
@@ -881,7 +1005,7 @@ func (a *App) processRecording() {
 			llmModel = "gemini-1.5-flash"
 		}
 		llmStart = time.Now()
-		polishedText, tokenCount, err = a.geminiClient.RefineText(rawText, mode)
+		polishedText, tokenCount, okToGo, err = a.geminiClient.RefineText(rawText, mode)
 		llmDuration = time.Since(llmStart)
 	}
 
@@ -891,8 +1015,9 @@ func (a *App) processRecording() {
 		return
 	}
 
-	// If LLM returned empty, fall back to raw text and warn user
-	if polishedText == "" {
+	if okToGo {
+		polishedText = rawText
+	} else if polishedText == "" {
 		polishedText = rawText
 		a.emitToast("LLM refining failed - using raw transcription", "warning")
 	}
@@ -971,6 +1096,8 @@ func (a *App) processRecording() {
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
 	runtime.EventsEmit(a.ctx, events.ProcessingComplete, map[string]interface{}{
 		"polished": polishedText,
+		"raw":      rawText,
+		"used_raw": okToGo,
 		"elapsed":  totalProcessingTime.Milliseconds(),
 		"details": map[string]float64{
 			"audio":   audioDuration.Seconds(),
@@ -1058,6 +1185,9 @@ func (a *App) GetConfig() map[string]interface{} {
 		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
 
 		"local_model": a.config.GetLocalModel(),
+
+		"streaming_whisper":       a.config.GetStreamingWhisper(),
+		"streaming_chunk_seconds": a.config.GetStreamingChunkSeconds(),
 	}
 }
 
@@ -1128,6 +1258,18 @@ func (a *App) SetWhisperModel(model string) error {
 	a.modelReady = false
 	go a.checkModelStatus()
 	return nil
+}
+
+// SetStreamingWhisper enables or disables incremental Whisper during recording.
+func (a *App) SetStreamingWhisper(enabled bool) error {
+	a.config.SetStreamingWhisper(enabled)
+	return a.config.Save()
+}
+
+// SetStreamingChunkSeconds sets the duration of each streaming chunk in seconds.
+func (a *App) SetStreamingChunkSeconds(seconds float64) error {
+	a.config.SetStreamingChunkSeconds(seconds)
+	return a.config.Save()
 }
 
 // SetMode sets the transcription mode (casual/formal)
@@ -1446,7 +1588,7 @@ func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
 	// Use raw text if no instruction, otherwise apply instruction
 	var newPolished string
 	if instruction == "" {
-		newPolished, _, err = a.geminiClient.RefineText(transcript.RawText, a.config.GetMode())
+		newPolished, _, _, err = a.geminiClient.RefineText(transcript.RawText, a.config.GetMode())
 	} else {
 		newPolished, err = a.geminiClient.RetryWithInstruction(transcript.PolishedText, instruction)
 	}
