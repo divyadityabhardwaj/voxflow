@@ -242,6 +242,10 @@ export function SetLocalModel(arg1) {
   return window['go']['main']['App']['SetLocalModel'](arg1);
 }
 
+export function SetMiniModeExpanded(arg1) {
+  return window['go']['main']['App']['SetMiniModeExpanded'](arg1);
+}
+
 export function SetMode(arg1) {
   return window['go']['main']['App']['SetMode'](arg1);
 }

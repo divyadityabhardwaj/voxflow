@@ -125,6 +125,8 @@ export function SetLLMProvider(arg1:string):Promise<void>;
 
 export function SetLocalModel(arg1:string):Promise<void>;
 
+export function SetMiniModeExpanded(arg1:boolean):Promise<void>;
+
 export function SetMode(arg1:string):Promise<void>;
 
 export function SetOpenRouterAPIKey(arg1:string):Promise<void>;

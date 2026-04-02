@@ -27,6 +27,17 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// Mini mode window sizes:
+// - collapsed is the minimal visible pill (record + quit only)
+// - expanded is the full control strip
+// Resizing the native window prevents a large transparent hit area.
+const (
+	miniModeCollapsedW = 110
+	miniModeCollapsedH = 60
+	miniModeExpandedW  = 200
+	miniModeExpandedH  = 60
+)
+
 // App struct holds the application state
 type App struct {
 	ctx                     context.Context
@@ -55,6 +66,9 @@ type App struct {
 	localDownloadingModel   string             // Track which model is currently downloading
 	volumeMu                sync.Mutex         // Guards savedVolume
 	savedVolume             int                // System volume saved before muting; -1 = not muted
+
+	miniResizeMu     sync.Mutex
+	miniResizeCancel context.CancelFunc
 }
 
 // NewApp creates a new App application struct
@@ -466,8 +480,10 @@ func (a *App) onHotkeyPressed(state hotkey.State) {
 		a.StopRecording()
 		// Note: HideMiniMode is called after processing completes in processRecording()
 	case hotkey.StateIdle:
+		// Keep mini mode by default. Only return to full view if the user
+		// explicitly maximized the app.
 		if !a.userExplicitlyMaximized {
-			a.HideMiniMode()
+			a.ShowMiniMode()
 		}
 	}
 }
@@ -483,10 +499,11 @@ func (a *App) ShowMiniMode() {
 	// Re-apply floating behavior (in case coming from full app mode)
 	MakeWindowFloatEverywhere()
 
-	// Resize to small indicator and lock size
-	runtime.WindowSetMinSize(a.ctx, 200, 60)
-	runtime.WindowSetMaxSize(a.ctx, 200, 60)
-	runtime.WindowSetSize(a.ctx, 200, 60)
+	// Set constrained range so the mini window can't grow beyond the expanded strip.
+	// Then SetMiniModeExpanded can smoothly tween width within this range.
+	runtime.WindowSetMinSize(a.ctx, miniModeCollapsedW, miniModeCollapsedH)
+	runtime.WindowSetMaxSize(a.ctx, miniModeExpandedW, miniModeExpandedH)
+	runtime.WindowSetSize(a.ctx, miniModeCollapsedW, miniModeCollapsedH)
 
 	// Restore saved position if available
 	x, y := a.config.GetMiniModePosition()
@@ -501,6 +518,61 @@ func (a *App) ShowMiniMode() {
 	a.startPositionWatch()
 
 	fmt.Println("[App] Switched to mini mode")
+}
+
+// SetMiniModeExpanded resizes the mini-mode window between compact and full control strip.
+func (a *App) SetMiniModeExpanded(expanded bool) {
+	if !a.isMiniMode {
+		return
+	}
+
+	targetW := miniModeCollapsedW
+	if expanded {
+		targetW = miniModeExpandedW
+	}
+
+	// Tween window width for a smoother hover expansion.
+	startW, startH := runtime.WindowGetSize(a.ctx)
+	if startH <= 0 {
+		startH = miniModeExpandedH
+	}
+	if startW == targetW {
+		return
+	}
+
+	a.miniResizeMu.Lock()
+	if a.miniResizeCancel != nil {
+		a.miniResizeCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.miniResizeCancel = cancel
+	a.miniResizeMu.Unlock()
+
+	go func(startW int, targetW int, targetH int, ctx context.Context) {
+		const steps = 10
+		const stepDelay = 12 * time.Millisecond
+
+		for i := 1; i <= steps; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			t := float64(i) / float64(steps)
+			w := int(float64(startW) + (float64(targetW-startW) * t))
+			runtime.WindowSetSize(a.ctx, w, targetH)
+			time.Sleep(stepDelay)
+		}
+
+		// Snap to the exact target to avoid rounding drift.
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			runtime.WindowSetSize(a.ctx, targetW, targetH)
+		}
+	}(startW, targetW, miniModeExpandedH, ctx)
 }
 
 // startPositionWatch starts a goroutine to poll and save window position
@@ -945,7 +1017,9 @@ func (a *App) handleError(message string, err error) {
 
 	a.state = hotkey.StateIdle
 	a.hotkeyManager.SetState(hotkey.StateIdle)
-	a.HideMiniMode()
+	if !a.userExplicitlyMaximized {
+		a.ShowMiniMode()
+	}
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
 }
 
