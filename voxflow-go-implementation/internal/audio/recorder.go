@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -249,6 +250,57 @@ func (r *Recorder) writeSamplesToWav(samples []int16) (string, error) {
 		}
 	}
 	return filepath, nil
+}
+
+// WriteTrimmedWav writes a temp WAV with leading/trailing silence removed.
+// Returns an empty path when no meaningful non-silent segment is detected.
+func (r *Recorder) WriteTrimmedWav(threshold int16, padMs int) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.buffer) == 0 {
+		return "", nil
+	}
+	if threshold < 1 {
+		threshold = 1
+	}
+	if padMs < 0 {
+		padMs = 0
+	}
+
+	start := -1
+	end := -1
+	for i, s := range r.buffer {
+		if int16(math.Abs(float64(s))) >= threshold {
+			start = i
+			break
+		}
+	}
+	if start == -1 {
+		return "", nil
+	}
+	for i := len(r.buffer) - 1; i >= start; i-- {
+		if int16(math.Abs(float64(r.buffer[i]))) >= threshold {
+			end = i
+			break
+		}
+	}
+	if end < start {
+		return "", nil
+	}
+
+	pad := int((float64(padMs) / 1000.0) * r.sampleRate)
+	start -= pad
+	if start < 0 {
+		start = 0
+	}
+	end += pad
+	if end >= len(r.buffer) {
+		end = len(r.buffer) - 1
+	}
+
+	samples := r.buffer[start : end+1]
+	return r.writeSamplesToWav(samples)
 }
 
 // writeWavHeader writes a WAV file header

@@ -15,6 +15,9 @@ type Config struct {
 	PushToTalkHotkey string `json:"push_to_talk_hotkey"` // e.g., "cmd+shift+p"
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
 	WhisperModel     string `json:"whisper_model"`       // tiny, base, small
+	WhisperLanguage  string `json:"whisper_language"`    // fixed language for transcription (en)
+	WhisperThreads   int    `json:"whisper_threads"`     // 0 = auto
+	WhisperProfile   string `json:"whisper_profile"`     // machine+model profile key for autotuned threads
 	Mode             string `json:"mode"`                // casual, formal
 	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
 	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
@@ -68,6 +71,7 @@ func GetInstance() *Config {
 			HandsFreeHotkey:  "cmd+shift+space",
 			PushToTalkHotkey: "cmd+shift+p",
 			WhisperModel:     "base",
+			WhisperLanguage:  "en",
 			Mode:             "casual",
 		}
 		instance.Load()
@@ -112,6 +116,12 @@ func (c *Config) Load() error {
 	}
 	if c.WhisperModel == "" {
 		c.WhisperModel = "base"
+	}
+	if c.WhisperLanguage == "" {
+		c.WhisperLanguage = "en"
+	}
+	if c.WhisperThreads < 0 {
+		c.WhisperThreads = 0
 	}
 	if c.Mode == "" {
 		c.Mode = "casual"
@@ -245,6 +255,60 @@ func (c *Config) SetWhisperModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.WhisperModel = model
+}
+
+// GetWhisperLanguage returns the fixed language used by Whisper.
+func (c *Config) GetWhisperLanguage() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.WhisperLanguage == "" {
+		return "en"
+	}
+	return c.WhisperLanguage
+}
+
+// SetWhisperLanguage sets the fixed language used by Whisper.
+func (c *Config) SetWhisperLanguage(language string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if language == "" {
+		language = "en"
+	}
+	c.WhisperLanguage = language
+}
+
+// GetWhisperThreads returns the configured Whisper thread count (0 = auto).
+func (c *Config) GetWhisperThreads() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.WhisperThreads < 0 {
+		return 0
+	}
+	return c.WhisperThreads
+}
+
+// SetWhisperThreads sets the Whisper thread count (0 = auto).
+func (c *Config) SetWhisperThreads(threads int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if threads < 0 {
+		threads = 0
+	}
+	c.WhisperThreads = threads
+}
+
+// GetWhisperProfile returns the profile key used for thread autotune cache.
+func (c *Config) GetWhisperProfile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.WhisperProfile
+}
+
+// SetWhisperProfile sets the profile key used for thread autotune cache.
+func (c *Config) SetWhisperProfile(profile string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.WhisperProfile = profile
 }
 
 // GetMode returns the transcription mode

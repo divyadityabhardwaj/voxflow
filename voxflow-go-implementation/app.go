@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -93,6 +94,8 @@ func NewApp() *App {
 		savedVolume:      -1, // -1 = not currently muted by VoxFlow
 	}
 	app.localClient = localclient.NewClient(app.ollamaService.BaseURL())
+	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
+	app.whisperService.SetThreads(cfg.GetWhisperThreads())
 
 	return app
 }
@@ -397,6 +400,44 @@ func (a *App) checkModelStatus() {
 		"loaded":     true,
 		"model":      modelSize,
 	})
+
+	go a.optimizeWhisperRuntime()
+}
+
+func (a *App) whisperRuntimeProfileKey() string {
+	return fmt.Sprintf("%s-%s-cpu%d-%s", goruntime.GOOS, goruntime.GOARCH, goruntime.NumCPU(), a.config.GetWhisperModel())
+}
+
+func (a *App) optimizeWhisperRuntime() {
+	language := strings.TrimSpace(a.config.GetWhisperLanguage())
+	if language == "" {
+		language = "en"
+	}
+	a.whisperService.SetLanguage(language)
+
+	profileKey := a.whisperRuntimeProfileKey()
+	threads := a.config.GetWhisperThreads()
+	if threads <= 0 || a.config.GetWhisperProfile() != profileKey {
+		bestThreads, err := a.whisperService.BenchmarkBestThreads()
+		if err != nil {
+			fmt.Printf("[Whisper] Thread autotune skipped: %v\n", err)
+		} else if bestThreads > 0 {
+			threads = bestThreads
+			a.config.SetWhisperThreads(bestThreads)
+			a.config.SetWhisperProfile(profileKey)
+			a.whisperService.SetThreads(bestThreads)
+			if err := a.config.Save(); err != nil {
+				fmt.Printf("[Whisper] Failed to persist thread autotune: %v\n", err)
+			}
+			fmt.Printf("[Whisper] Autotuned threads: %d (%s)\n", bestThreads, profileKey)
+		}
+	} else {
+		a.whisperService.SetThreads(threads)
+	}
+
+	if err := a.whisperService.WarmUp(); err != nil {
+		fmt.Printf("[Whisper] Warm-up skipped: %v\n", err)
+	}
 }
 
 // IsModelReady returns whether the Whisper model is ready
@@ -819,6 +860,14 @@ func (a *App) processRecording() {
 		return
 	}
 	defer os.Remove(wavPath) // Clean up temp file
+	transcribePath := wavPath
+	trimmedPath, trimErr := a.audioRecorder.WriteTrimmedWav(220, 200)
+	if trimErr != nil {
+		fmt.Printf("[App] silence trim failed: %v\n", trimErr)
+	} else if trimmedPath != "" {
+		transcribePath = trimmedPath
+		defer os.Remove(trimmedPath)
+	}
 
 	// Transcribe with Whisper using the full recorded file.
 	var rawText string
@@ -827,7 +876,7 @@ func (a *App) processRecording() {
 
 	whisperStart := time.Now()
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		rawText, err = a.whisperService.Transcribe(wavPath)
+		rawText, err = a.whisperService.Transcribe(transcribePath)
 		if err != nil {
 			a.emitToast("Transcription failed: "+err.Error(), "error")
 			a.resetToIdle()
@@ -1055,6 +1104,8 @@ func (a *App) GetConfig() map[string]interface{} {
 		"hands_free_hotkey":      a.config.GetHandsFreeHotkey(),
 		"push_to_talk_hotkey":    a.config.GetPushToTalkHotkey(),
 		"whisper_model":          a.config.GetWhisperModel(),
+		"whisper_language":       a.config.GetWhisperLanguage(),
+		"whisper_threads":        a.config.GetWhisperThreads(),
 		"gemini_model":           a.config.GetGeminiModel(),
 		"mode":                   a.config.GetMode(),
 		"api_key_set":            a.config.GetGeminiAPIKey() != "",
