@@ -135,10 +135,6 @@ export function SetOpenRouterModel(arg1:string):Promise<void>;
 
 export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 
-export function SetStreamingChunkSeconds(arg1:number):Promise<void>;
-
-export function SetStreamingWhisper(arg1:boolean):Promise<void>;
-
 export function SetWhisperModel(arg1:string):Promise<void>;
 
 export function ShowMiniMode():Promise<void>;

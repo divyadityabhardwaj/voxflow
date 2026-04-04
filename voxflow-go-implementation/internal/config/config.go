@@ -15,10 +15,6 @@ type Config struct {
 	PushToTalkHotkey string `json:"push_to_talk_hotkey"` // e.g., "cmd+shift+p"
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
 	WhisperModel     string `json:"whisper_model"`       // tiny, base, small
-	// StreamingWhisper runs incremental local Whisper on fixed-duration chunks while recording.
-	// Pointer: nil/missing in JSON means default enabled.
-	StreamingWhisper      *bool   `json:"streaming_whisper,omitempty"`
-	StreamingChunkSeconds float64 `json:"streaming_chunk_seconds"` // e.g. 3.0 seconds per chunk
 	Mode             string `json:"mode"`                // casual, formal
 	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
 	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
@@ -69,11 +65,10 @@ func GetConfigPath() (string, error) {
 func GetInstance() *Config {
 	once.Do(func() {
 		instance = &Config{
-			HandsFreeHotkey:       "cmd+shift+space",
-			PushToTalkHotkey:      "cmd+shift+p",
-			WhisperModel:          "base",
-			StreamingChunkSeconds: 3.0,
-			Mode:                  "casual",
+			HandsFreeHotkey:  "cmd+shift+space",
+			PushToTalkHotkey: "cmd+shift+p",
+			WhisperModel:     "base",
+			Mode:             "casual",
 		}
 		instance.Load()
 	})
@@ -120,9 +115,6 @@ func (c *Config) Load() error {
 	}
 	if c.Mode == "" {
 		c.Mode = "casual"
-	}
-	if c.StreamingChunkSeconds <= 0 {
-		c.StreamingChunkSeconds = 3.0
 	}
 	if c.GeminiModel == "" {
 		c.GeminiModel = "gemini-1.5-flash"
@@ -253,46 +245,6 @@ func (c *Config) SetWhisperModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.WhisperModel = model
-}
-
-// GetStreamingWhisper returns whether incremental Whisper chunks are enabled during recording.
-func (c *Config) GetStreamingWhisper() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.StreamingWhisper == nil {
-		return true
-	}
-	return *c.StreamingWhisper
-}
-
-// SetStreamingWhisper enables or disables incremental Whisper during recording.
-func (c *Config) SetStreamingWhisper(v bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.StreamingWhisper = &v
-}
-
-// GetStreamingChunkSeconds returns the duration (seconds) of each streaming chunk.
-func (c *Config) GetStreamingChunkSeconds() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.StreamingChunkSeconds <= 0 {
-		return 3.0
-	}
-	return c.StreamingChunkSeconds
-}
-
-// SetStreamingChunkSeconds sets chunk length in seconds (clamped to a sensible range).
-func (c *Config) SetStreamingChunkSeconds(sec float64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if sec < 1.5 {
-		sec = 1.5
-	}
-	if sec > 30 {
-		sec = 30
-	}
-	c.StreamingChunkSeconds = sec
 }
 
 // GetMode returns the transcription mode

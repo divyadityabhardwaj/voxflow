@@ -22,9 +22,6 @@ const LEAVE_DELAY_MS = 280;
 export default function RecordingIndicator() {
   const [status, setStatus] = useState<Status>("Idle");
   const [hovered, setHovered] = useState(false);
-  const [streamingPartial, setStreamingPartial] = useState<string | null>(
-    null,
-  );
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
 
@@ -38,22 +35,7 @@ export default function RecordingIndicator() {
 
     EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
-      if (newStatus !== "Recording") {
-        setStreamingPartial(null);
-      }
     });
-  }, []);
-
-  useEffect(() => {
-    const unsub = EventsOn(
-      Events.StreamingTranscript,
-      (payload: { partial?: string }) => {
-        if (typeof payload?.partial === "string") {
-          setStreamingPartial(payload.partial);
-        }
-      },
-    );
-    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -210,9 +192,7 @@ export default function RecordingIndicator() {
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={handleRecordClick}
             title={
-              status === "Recording" && streamingPartial
-                ? streamingPartial
-                : status === "Idle"
+              status === "Idle"
                   ? "Start Recording"
                   : "Stop Recording"
             }
@@ -271,38 +251,26 @@ export default function RecordingIndicator() {
           </div>
         </div>
 
-        {/* Middle: Live partial transcript (expanded + streaming) or drag handle */}
+        {/* Middle: Drag handle */}
         <div
           className={`flex-1 h-full flex items-center justify-center px-2 transition-all duration-200 ease-out overflow-hidden min-w-0 ${
             uiExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
-          {status === "Recording" && streamingPartial ? (
-            <div
-              className="min-w-0 w-full px-1 text-[10px] leading-snug line-clamp-2 text-left"
+          <div
+            className="p-2 cursor-move opacity-50 hover:opacity-100 transition-opacity duration-200"
+            style={{ "--wails-draggable": "drag" } as unknown as CSSProperties}
+            title="Drag to move"
+          >
+            <svg
+              className="w-5 h-5 transform rotate-90"
               style={{ color: foregroundColor }}
-              title={streamingPartial}
+              fill="currentColor"
+              viewBox="0 0 24 24"
             >
-              {streamingPartial}
-            </div>
-          ) : (
-            <div
-              className="p-2 cursor-move opacity-50 hover:opacity-100 transition-opacity duration-200"
-              style={
-                { "--wails-draggable": "drag" } as unknown as CSSProperties
-              }
-              title="Drag to move"
-            >
-              <svg
-                className="w-5 h-5 transform rotate-90"
-                style={{ color: foregroundColor }}
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2-.9-2-2-2-2 .9-2 2z" />
-              </svg>
-            </div>
-          )}
+              <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2-.9-2-2-2-2 .9-2 2z" />
+            </svg>
+          </div>
         </div>
 
         {/* Right: Expand (expanded only) + Quit (always) */}

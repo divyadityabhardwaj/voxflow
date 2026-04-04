@@ -23,7 +23,6 @@ const (
 type Recorder struct {
 	stream      *portaudio.Stream
 	buffer      []int16
-	segmentStart int // samples already transcribed in incremental/streaming mode
 	mu          sync.Mutex
 	recording   atomic.Bool
 	stopChan    chan struct{}
@@ -78,9 +77,8 @@ func (r *Recorder) Start() error {
 		return fmt.Errorf("already recording")
 	}
 
-	// Clear the buffer and streaming cursor
+	// Clear the buffer
 	r.buffer = make([]int16, 0)
-	r.segmentStart = 0
 
 	// Create input buffer
 	inputBuffer := make([]int16, FramesPerBuffer)
@@ -225,44 +223,6 @@ func (r *Recorder) saveToWav() (string, error) {
 	}
 
 	return filepath, nil
-}
-
-// TryExtractStreamingChunk copies the next fixed-length segment of recorded samples into a temp WAV
-// and advances the streaming cursor. Returns ("", false) if not enough unprocessed audio yet.
-// Call only while recording is active.
-func (r *Recorder) TryExtractStreamingChunk(chunkSamples int) (string, bool) {
-	if chunkSamples <= 0 {
-		return "", false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.recording.Load() {
-		return "", false
-	}
-	n := len(r.buffer)
-	avail := n - r.segmentStart
-	if avail < chunkSamples {
-		return "", false
-	}
-	slice := r.buffer[r.segmentStart : r.segmentStart+chunkSamples]
-	path, err := r.writeSamplesToWav(slice)
-	if err != nil {
-		fmt.Printf("[Recorder] streaming chunk WAV failed: %v\n", err)
-		return "", false
-	}
-	r.segmentStart += chunkSamples
-	return path, true
-}
-
-// WriteRemainderWav writes any samples after the streaming cursor to a temp WAV (after Stop()).
-func (r *Recorder) WriteRemainderWav() (string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.segmentStart >= len(r.buffer) {
-		return "", nil
-	}
-	samples := r.buffer[r.segmentStart:]
-	return r.writeSamplesToWav(samples)
 }
 
 // writeSamplesToWav writes int16 PCM mono samples to a temp WAV file.

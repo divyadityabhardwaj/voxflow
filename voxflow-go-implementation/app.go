@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,8 @@ const (
 	miniModeExpandedH  = 60
 )
 
+var whisperNoiseMarkerRe = regexp.MustCompile(`(?i)(^|\s)[\[(](audio|music|applause|noise|silence)[\])](\s|$)`)
+
 // App struct holds the application state
 type App struct {
 	ctx                     context.Context
@@ -69,13 +72,6 @@ type App struct {
 
 	miniResizeMu     sync.Mutex
 	miniResizeCancel context.CancelFunc
-
-	// Incremental Whisper during recording (chunked local transcription)
-	streamTranscribeCancel context.CancelFunc
-	streamWG               sync.WaitGroup
-	streamMu               sync.Mutex
-	streamChunkTexts       []string
-	streamCombinedText     string
 }
 
 // NewApp creates a new App application struct
@@ -773,117 +769,17 @@ func (a *App) StartRecording() error {
 	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
 	fmt.Println("Recording started...")
 
-	a.startStreamingWhisperDuringRecording()
 	return nil
 }
 
-// startStreamingWhisperDuringRecording runs periodic Whisper on fixed-duration audio chunks while the mic is open.
-func (a *App) startStreamingWhisperDuringRecording() {
-	if !a.config.GetStreamingWhisper() || !a.modelReady {
-		return
-	}
-	a.streamMu.Lock()
-	a.streamChunkTexts = nil
-	a.streamCombinedText = ""
-	a.streamMu.Unlock()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	a.streamTranscribeCancel = cancel
-	a.streamWG.Add(1)
-	go func() {
-		defer a.streamWG.Done()
-		sec := a.config.GetStreamingChunkSeconds()
-		if sec < 1.5 {
-			sec = 3
-		}
-		chunkSamples := int(float64(audio.SampleRate) * sec)
-		ticker := time.NewTicker(400 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				for {
-					path, ok := a.audioRecorder.TryExtractStreamingChunk(chunkSamples)
-					if !ok {
-						break
-					}
-					a.streamMu.Lock()
-					prompt := capPromptToLastWords(a.streamCombinedText, 50)
-					a.streamMu.Unlock()
-
-					text, err := a.whisperService.TranscribeWithPrompt(path, prompt)
-					_ = os.Remove(path)
-					if err != nil || strings.TrimSpace(text) == "" {
-						continue
-					}
-					text = strings.TrimSpace(text)
-
-					newText := stripPromptPrefix(text, prompt)
-					if newText == "" {
-						continue
-					}
-
-					a.streamMu.Lock()
-					a.streamChunkTexts = append(a.streamChunkTexts, newText)
-					a.streamCombinedText = strings.Join(a.streamChunkTexts, " ")
-					combined := a.streamCombinedText
-					a.streamMu.Unlock()
-					runtime.EventsEmit(a.ctx, events.StreamingTranscript, map[string]interface{}{
-						"partial": combined,
-						"chunk":   newText,
-					})
-				}
-			}
-		}
-	}()
-}
-
-// stripPromptPrefix removes the prompt text from the beginning of the transcription result.
-// Whisper may repeat part of the prompt before adding new text, so we trim any matching prefix.
-func stripPromptPrefix(result, prompt string) string {
-	if prompt == "" {
-		return result
-	}
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		return result
-	}
-	trimmed := result
-	if strings.HasPrefix(strings.ToLower(trimmed), strings.ToLower(prompt)) {
-		trimmed = trimmed[len(prompt):]
-	}
-	trimmed = strings.TrimSpace(trimmed)
-	if trimmed == "" || len(trimmed) < 2 {
-		return ""
-	}
-	return trimmed
-}
-
-// capPromptToLastWords returns at most the last n words of the text.
-// Whisper's --prompt is limited to n_text_ctx/2 tokens; keeping ~50 words
-// (~75 tokens) gives enough context to handle word boundaries without
-// growing indefinitely or exceeding the model's prompt capacity.
-func capPromptToLastWords(text string, n int) string {
+func cleanWhisperText(text string) string {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ""
 	}
-	words := strings.Fields(text)
-	if len(words) <= n {
-		return text
-	}
-	return strings.Join(words[len(words)-n:], " ")
-}
-
-func (a *App) stopStreamingWhisperAndWait() {
-	if a.streamTranscribeCancel == nil {
-		return
-	}
-	a.streamTranscribeCancel()
-	a.streamTranscribeCancel = nil
-	a.streamWG.Wait()
+	text = whisperNoiseMarkerRe.ReplaceAllString(text, " ")
+	text = strings.Join(strings.Fields(text), " ")
+	return strings.TrimSpace(text)
 }
 
 // StopRecording stops audio capture and begins processing
@@ -894,7 +790,6 @@ func (a *App) StopRecording() {
 	runtime.EventsEmit(a.ctx, events.RecordingStopped, nil)
 	fmt.Println("Recording stopped, processing...")
 
-	a.stopStreamingWhisperAndWait()
 	go a.processRecording()
 }
 
@@ -925,84 +820,29 @@ func (a *App) processRecording() {
 	}
 	defer os.Remove(wavPath) // Clean up temp file
 
-	// Transcribe with Whisper: incremental chunks + remainder (streaming), or full-file path
+	// Transcribe with Whisper using the full recorded file.
 	var rawText string
 	var whisperDuration time.Duration
 	maxRetries := 3
 
 	whisperStart := time.Now()
-	if a.config.GetStreamingWhisper() && a.modelReady {
-		a.streamMu.Lock()
-		chunks := append([]string(nil), a.streamChunkTexts...)
-		a.streamMu.Unlock()
-
-		var assembled strings.Builder
-		for _, c := range chunks {
-			c = strings.TrimSpace(c)
-			if c == "" {
-				continue
-			}
-			if assembled.Len() > 0 {
-				assembled.WriteByte(' ')
-			}
-			assembled.WriteString(c)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		rawText, err = a.whisperService.Transcribe(wavPath)
+		if err != nil {
+			a.emitToast("Transcription failed: "+err.Error(), "error")
+			a.resetToIdle()
+			return
 		}
-
-		remPath, remErr := a.audioRecorder.WriteRemainderWav()
-		if remErr != nil {
-			fmt.Printf("[App] remainder WAV: %v\n", remErr)
-		} else if remPath != "" {
-			defer os.Remove(remPath)
-			remText, txErr := a.whisperService.Transcribe(remPath)
-			if txErr != nil {
-				fmt.Printf("[App] remainder transcribe: %v\n", txErr)
-			} else if strings.TrimSpace(remText) != "" {
-				if assembled.Len() > 0 {
-					assembled.WriteByte(' ')
-				}
-				assembled.WriteString(strings.TrimSpace(remText))
-			}
+		if rawText != "" {
+			break
 		}
-		rawText = strings.TrimSpace(assembled.String())
-		if rawText == "" {
-			for attempt := 1; attempt <= maxRetries; attempt++ {
-				rawText, err = a.whisperService.Transcribe(wavPath)
-				if err != nil {
-					a.emitToast("Transcription failed: "+err.Error(), "error")
-					a.resetToIdle()
-					return
-				}
-				if rawText != "" {
-					break
-				}
-				if attempt < maxRetries {
-					fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
-					time.Sleep(500 * time.Millisecond)
-				}
-			}
-		}
-	} else {
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			rawText, err = a.whisperService.Transcribe(wavPath)
-			if err != nil {
-				a.emitToast("Transcription failed: "+err.Error(), "error")
-				a.resetToIdle()
-				return
-			}
-			if rawText != "" {
-				break
-			}
-			if attempt < maxRetries {
-				fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
-				time.Sleep(500 * time.Millisecond)
-			}
+		if attempt < maxRetries {
+			fmt.Printf("[App] No speech detected, retrying (%d/%d)...\n", attempt, maxRetries)
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
+	rawText = cleanWhisperText(rawText)
 	whisperDuration = time.Since(whisperStart)
-
-	a.streamMu.Lock()
-	a.streamChunkTexts = nil
-	a.streamMu.Unlock()
 
 	fmt.Printf("\n[App] Whisper raw output (%d chars):\n%s\n", len(rawText), rawText)
 
@@ -1227,9 +1067,6 @@ func (a *App) GetConfig() map[string]interface{} {
 		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
 
 		"local_model": a.config.GetLocalModel(),
-
-		"streaming_whisper":       a.config.GetStreamingWhisper(),
-		"streaming_chunk_seconds": a.config.GetStreamingChunkSeconds(),
 	}
 }
 
@@ -1300,18 +1137,6 @@ func (a *App) SetWhisperModel(model string) error {
 	a.modelReady = false
 	go a.checkModelStatus()
 	return nil
-}
-
-// SetStreamingWhisper enables or disables incremental Whisper during recording.
-func (a *App) SetStreamingWhisper(enabled bool) error {
-	a.config.SetStreamingWhisper(enabled)
-	return a.config.Save()
-}
-
-// SetStreamingChunkSeconds sets the duration of each streaming chunk in seconds.
-func (a *App) SetStreamingChunkSeconds(seconds float64) error {
-	a.config.SetStreamingChunkSeconds(seconds)
-	return a.config.Save()
 }
 
 // SetMode sets the transcription mode (casual/formal)
