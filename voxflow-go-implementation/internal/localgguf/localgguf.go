@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"voxflow/internal/logger"
 )
@@ -321,7 +322,7 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelName string
 	req.Header.Set("User-Agent", "voxflow/1.0")
 
 	logger.Debugf("[LocalGGUF] Sending HTTP request...")
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.Canceled {

@@ -102,13 +102,6 @@ type APIError struct {
 	Status  string `json:"status"`
 }
 
-// RefineResponse represents the structured output from refinement
-type RefineResponse struct {
-	Text    string `json:"text"`
-	Refused bool   `json:"refused"`
-	OkToGo  bool   `json:"ok_to_go"`
-}
-
 // RefineText sends raw transcription to Gemini for refinement.
 // If ok_to_go is true, the caller should use rawText (second return is true).
 func (c *Client) RefineText(rawText string, mode string) (string, int, bool, error) {
@@ -195,36 +188,13 @@ func (c *Client) RefineText(rawText string, mode string) (string, int, bool, err
 		tokenCount = geminiResp.UsageMetadata.CandidatesTokenCount
 	}
 
-	// Clean up result - remove markdown code blocks if present
-	cleanResult := result
-	if strings.HasPrefix(cleanResult, "```json") {
-		cleanResult = strings.TrimPrefix(cleanResult, "```json")
-		cleanResult = strings.TrimSuffix(strings.TrimSpace(cleanResult), "```")
-		cleanResult = strings.TrimSpace(cleanResult)
-	} else if strings.HasPrefix(cleanResult, "```") {
-		cleanResult = strings.TrimPrefix(cleanResult, "```")
-		cleanResult = strings.TrimSuffix(strings.TrimSpace(cleanResult), "```")
-		cleanResult = strings.TrimSpace(cleanResult)
+	// Parse structured response
+	refined, okToGo, parsed := llm.ParseRefineResponse(result, rawText)
+	if !parsed {
+		fmt.Printf("[Gemini] Warning: Response was not valid JSON, using as plain text\n")
+		return llm.StripCodeFences(result), tokenCount, false, nil
 	}
-
-	// Try to parse as JSON response
-	var refineResp RefineResponse
-	if err := json.Unmarshal([]byte(cleanResult), &refineResp); err == nil {
-		// Successfully parsed JSON
-		if refineResp.Refused {
-			fmt.Printf("[Gemini] Content was refused, using raw text instead\n")
-			return rawText, tokenCount, false, nil
-		}
-		if refineResp.OkToGo {
-			return rawText, tokenCount, true, nil
-		}
-		// Return the text (even if empty - that's what Gemini gave us)
-		return refineResp.Text, tokenCount, false, nil
-	}
-
-	// If JSON parsing failed, Gemini returned plain text (old behavior)
-	fmt.Printf("[Gemini] Warning: Response was not valid JSON, using as plain text\n")
-	return cleanResult, tokenCount, false, nil
+	return refined, tokenCount, okToGo, nil
 }
 
 // RetryWithInstruction re-processes text with a custom instruction

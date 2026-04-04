@@ -96,13 +96,6 @@ type Usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// RefineResponse represents the structured output from refinement
-type RefineResponse struct {
-	Text    string `json:"text"`
-	Refused bool   `json:"refused"`
-	OkToGo  bool   `json:"ok_to_go"`
-}
-
 // API Models Response
 type ModelsResponse struct {
 	Data []Model `json:"data"`
@@ -248,30 +241,12 @@ func (c *Client) RefineText(rawText string, model string, mode string) (string, 
 	// Debug logging (matches Gemini behavior)
 	fmt.Printf("[OpenRouter] Raw output (%d chars), Tokens: %d:\n%s\n", len(result), tokenCount, result)
 
-	cleanResult := result
-	if strings.HasPrefix(cleanResult, "```json") {
-		cleanResult = strings.TrimPrefix(cleanResult, "```json")
-		cleanResult = strings.TrimSuffix(strings.TrimSpace(cleanResult), "```")
-		cleanResult = strings.TrimSpace(cleanResult)
-	} else if strings.HasPrefix(cleanResult, "```") {
-		cleanResult = strings.TrimPrefix(cleanResult, "```")
-		cleanResult = strings.TrimSuffix(strings.TrimSpace(cleanResult), "```")
-		cleanResult = strings.TrimSpace(cleanResult)
+	// Parse structured response
+	refined, okToGo, parsed := llm.ParseRefineResponse(result, rawText)
+	if !parsed {
+		return llm.StripCodeFences(result), tokenCount, false, nil
 	}
-
-	var refineResp RefineResponse
-	if err := json.Unmarshal([]byte(cleanResult), &refineResp); err == nil {
-		if refineResp.Refused {
-			return rawText, tokenCount, false, nil
-		}
-		if refineResp.OkToGo {
-			return rawText, tokenCount, true, nil
-		}
-		// Return the text (even if empty - that's what the API gave us)
-		return refineResp.Text, tokenCount, false, nil
-	}
-
-	return cleanResult, tokenCount, false, nil
+	return refined, tokenCount, okToGo, nil
 }
 
 // CheckModel tests a model and returns latency in milliseconds and tokens per second

@@ -75,12 +75,14 @@ type App struct {
 	streamWG               sync.WaitGroup
 	streamMu               sync.Mutex
 	streamChunkTexts       []string
+	streamCombinedText     string
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
 	cfg := config.GetInstance()
 	app := &App{
+		ctx:              context.Background(),
 		config:           cfg,
 		state:            hotkey.StateIdle,
 		isMiniMode:       true, // Start in mini mode (floating indicator)
@@ -760,13 +762,12 @@ func (a *App) StartRecording() error {
 	}
 
 	// Mute all system audio while we record (browsers, games, Spotify, YouTube — everything).
-	// Run in a goroutine so the recording indicator shows immediately.
-	go func() {
-		vol := audio.MuteSystemAudio()
-		a.volumeMu.Lock()
-		a.savedVolume = vol
-		a.volumeMu.Unlock()
-	}()
+	// Run synchronously so savedVolume is always set before recording can be stopped.
+	// The osascript call takes ~50ms, which is imperceptible.
+	vol := audio.MuteSystemAudio()
+	a.volumeMu.Lock()
+	a.savedVolume = vol
+	a.volumeMu.Unlock()
 
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Recording")
 	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
@@ -783,6 +784,7 @@ func (a *App) startStreamingWhisperDuringRecording() {
 	}
 	a.streamMu.Lock()
 	a.streamChunkTexts = nil
+	a.streamCombinedText = ""
 	a.streamMu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -807,24 +809,72 @@ func (a *App) startStreamingWhisperDuringRecording() {
 					if !ok {
 						break
 					}
-					text, err := a.whisperService.Transcribe(path)
+					a.streamMu.Lock()
+					prompt := capPromptToLastWords(a.streamCombinedText, 50)
+					a.streamMu.Unlock()
+
+					text, err := a.whisperService.TranscribeWithPrompt(path, prompt)
 					_ = os.Remove(path)
 					if err != nil || strings.TrimSpace(text) == "" {
 						continue
 					}
 					text = strings.TrimSpace(text)
+
+					newText := stripPromptPrefix(text, prompt)
+					if newText == "" {
+						continue
+					}
+
 					a.streamMu.Lock()
-					a.streamChunkTexts = append(a.streamChunkTexts, text)
-					combined := strings.Join(a.streamChunkTexts, " ")
+					a.streamChunkTexts = append(a.streamChunkTexts, newText)
+					a.streamCombinedText = strings.Join(a.streamChunkTexts, " ")
+					combined := a.streamCombinedText
 					a.streamMu.Unlock()
 					runtime.EventsEmit(a.ctx, events.StreamingTranscript, map[string]interface{}{
 						"partial": combined,
-						"chunk":   text,
+						"chunk":   newText,
 					})
 				}
 			}
 		}
 	}()
+}
+
+// stripPromptPrefix removes the prompt text from the beginning of the transcription result.
+// Whisper may repeat part of the prompt before adding new text, so we trim any matching prefix.
+func stripPromptPrefix(result, prompt string) string {
+	if prompt == "" {
+		return result
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return result
+	}
+	trimmed := result
+	if strings.HasPrefix(strings.ToLower(trimmed), strings.ToLower(prompt)) {
+		trimmed = trimmed[len(prompt):]
+	}
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" || len(trimmed) < 2 {
+		return ""
+	}
+	return trimmed
+}
+
+// capPromptToLastWords returns at most the last n words of the text.
+// Whisper's --prompt is limited to n_text_ctx/2 tokens; keeping ~50 words
+// (~75 tokens) gives enough context to handle word boundaries without
+// growing indefinitely or exceeding the model's prompt capacity.
+func capPromptToLastWords(text string, n int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	words := strings.Fields(text)
+	if len(words) <= n {
+		return text
+	}
+	return strings.Join(words[len(words)-n:], " ")
 }
 
 func (a *App) stopStreamingWhisperAndWait() {
@@ -850,6 +900,17 @@ func (a *App) StopRecording() {
 
 // processRecording handles the transcription and refinement pipeline
 func (a *App) processRecording() {
+	// Ensure system audio is always restored, even on panic
+	defer func() {
+		a.volumeMu.Lock()
+		vol := a.savedVolume
+		a.savedVolume = -1
+		a.volumeMu.Unlock()
+		if vol >= 0 {
+			audio.UnmuteSystemAudio(vol)
+		}
+	}()
+
 	processingStartTime := time.Now()
 
 	// Capture audio duration before stopping (buffer is still valid after Stop until next Start)
@@ -1037,7 +1098,7 @@ func (a *App) processRecording() {
 		}
 	}
 
-	// Always copy to clipboard first, then inject at cursor and resume media
+	// Always copy to clipboard first, then inject at cursor
 	if a.injectionService != nil {
 		// Run in goroutine to not block timing log if clipboard is slow (unlikely but safe)
 		go func() {
@@ -1049,13 +1110,6 @@ func (a *App) processRecording() {
 				fmt.Printf("Could not inject text (no active cursor?): %v\n", err)
 				a.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
 			}
-
-			// Restore system audio volume that was muted before recording
-			a.volumeMu.Lock()
-			vol := a.savedVolume
-			a.savedVolume = -1
-			a.volumeMu.Unlock()
-			audio.UnmuteSystemAudio(vol)
 		}()
 	}
 
@@ -1131,23 +1185,6 @@ func (a *App) resetToIdle() {
 			audio.UnmuteSystemAudio(vol)
 		}()
 	}
-}
-
-// handleError handles errors during processing
-func (a *App) handleError(message string, err error) {
-	errMsg := message
-	if err != nil {
-		errMsg = fmt.Sprintf("%s: %v", message, err)
-	}
-	fmt.Println(errMsg)
-	runtime.EventsEmit(a.ctx, events.Error, errMsg)
-
-	a.state = hotkey.StateIdle
-	a.hotkeyManager.SetState(hotkey.StateIdle)
-	if !a.userExplicitlyMaximized {
-		a.ShowMiniMode()
-	}
-	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
 }
 
 // ToggleRecording toggles between recording and idle states

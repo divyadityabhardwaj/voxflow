@@ -43,6 +43,7 @@ func NewService() (*Service, error) {
 
 	s := &Service{db: db}
 	if err := s.initDB(); err != nil {
+		db.Close()
 		return nil, err
 	}
 

@@ -1,9 +1,7 @@
 package whisper
 
 import (
-	"bufio"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"net/http"
@@ -326,95 +324,6 @@ func (s *Service) DownloadModel(modelSize string, progress ProgressCallback) err
 	return s.DownloadModelWithContext(context.Background(), modelSize, progress)
 }
 
-// Helper function kept for compatibility
-func (s *Service) downloadModelLegacy(modelSize string, progress ProgressCallback) error {
-	url, ok := modelURLs[modelSize]
-	if !ok {
-		return fmt.Errorf("unknown model size: %s", modelSize)
-	}
-
-	modelsDir, err := GetModelsDir()
-	if err != nil {
-		return err
-	}
-
-	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
-
-	// Check if already exists and has correct size
-	if info, err := os.Stat(modelPath); err == nil {
-		expectedSize := modelSizes[modelSize]
-		// Allow 10% tolerance
-		if info.Size() > int64(float64(expectedSize)*0.9) {
-			return nil // Already downloaded
-		}
-	}
-
-	// Create temporary file
-	tempPath := modelPath + ".tmp"
-	file, err := os.Create(tempPath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer file.Close()
-
-	// Download the model
-	resp, err := http.Get(url)
-	if err != nil {
-		os.Remove(tempPath)
-		return fmt.Errorf("failed to download model: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		os.Remove(tempPath)
-		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
-	}
-
-	totalSize := resp.ContentLength
-	if totalSize <= 0 {
-		totalSize = modelSizes[modelSize]
-	}
-	var downloaded int64
-
-	// Create progress reader
-	reader := &progressReader{
-		reader: resp.Body,
-		onProgress: func(n int64) {
-			downloaded += n
-			if progress != nil {
-				progress(downloaded, totalSize)
-			}
-		},
-	}
-
-	// Copy with progress
-	bytesWritten, err := io.Copy(file, reader)
-	if err != nil {
-		file.Close()
-		os.Remove(tempPath)
-		return fmt.Errorf("failed to save model: %w", err)
-	}
-
-	file.Close()
-
-	// Verify downloaded size matches expected size (within 5% tolerance)
-	expectedSize := modelSizes[modelSize]
-	minSize := int64(float64(expectedSize) * 0.95)
-	if bytesWritten < minSize {
-		os.Remove(tempPath)
-		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
-	}
-
-	// Rename temp file to final name (atomic operation)
-	if err := os.Rename(tempPath, modelPath); err != nil {
-		os.Remove(tempPath)
-		return fmt.Errorf("failed to finalize model file: %w", err)
-	}
-
-	fmt.Printf("[Whisper] Model %s downloaded successfully (%d bytes)\n", modelSize, bytesWritten)
-	return nil
-}
-
 // CleanupPartialDownloads removes any stale .tmp files from failed downloads
 func CleanupPartialDownloads() error {
 	modelsDir, err := GetModelsDir()
@@ -463,6 +372,12 @@ func (s *Service) LoadModel(modelSize string) error {
 
 // Transcribe transcribes the given WAV file using whisper.cpp CLI
 func (s *Service) Transcribe(wavPath string) (string, error) {
+	return s.TranscribeWithPrompt(wavPath, "")
+}
+
+// TranscribeWithPrompt transcribes the given WAV file using an optional initial prompt
+// to provide context for the model (helps with streaming/chunked transcription).
+func (s *Service) TranscribeWithPrompt(wavPath, prompt string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -470,14 +385,11 @@ func (s *Service) Transcribe(wavPath string) (string, error) {
 		return "", fmt.Errorf("model not loaded")
 	}
 
-	// First, try to use whisper.cpp binary if available
 	whisperBin := s.findWhisperBinary()
-	if whisperBin != "" {
-		return s.transcribeWithCLI(whisperBin, wavPath)
+	if whisperBin == "" {
+		return "", fmt.Errorf("whisper CLI binary not found. Please install whisper.cpp or provide the binary at ~/.voxflow/bin/whisper-cli")
 	}
-
-	// Fall back to using go-whisper (if we can build it)
-	return s.transcribeWithGoWhisper(wavPath)
+	return s.transcribeWithCLI(whisperBin, wavPath, prompt)
 }
 
 // findWhisperBinary looks for whisper.cpp binary
@@ -517,19 +429,24 @@ func (s *Service) findWhisperBinary() string {
 }
 
 // transcribeWithCLI uses the whisper.cpp CLI
-func (s *Service) transcribeWithCLI(whisperBin, wavPath string) (string, error) {
+func (s *Service) transcribeWithCLI(whisperBin, wavPath, prompt string) (string, error) {
 	// Create a temp file for output
 	outputPath := wavPath + ".txt"
 	defer os.Remove(outputPath)
 
 	// Run whisper CLI
-	cmd := exec.Command(whisperBin,
+	args := []string{
 		"-m", s.modelPath,
 		"-f", wavPath,
 		"-otxt",
 		"--no-timestamps",
 		"-of", strings.TrimSuffix(outputPath, ".txt"),
-	)
+	}
+	if prompt != "" {
+		args = append(args, "--prompt", prompt)
+	}
+
+	cmd := exec.Command(whisperBin, args...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -544,21 +461,6 @@ func (s *Service) transcribeWithCLI(whisperBin, wavPath string) (string, error) 
 	}
 
 	return strings.TrimSpace(string(content)), nil
-}
-
-// transcribeWithGoWhisper uses the Go whisper bindings
-// This is a fallback that requires building whisper.cpp
-func (s *Service) transcribeWithGoWhisper(wavPath string) (string, error) {
-	// Read WAV file and convert to samples
-	samples, err := readWavFile(wavPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read WAV file: %w", err)
-	}
-
-	// For now, return a message indicating CLI is needed
-	// In production, we would use the whisper.cpp Go bindings here
-	_ = samples
-	return "", fmt.Errorf("whisper CLI binary not found. Please install whisper.cpp or provide the binary at ~/.voxflow/bin/whisper-cli")
 }
 
 // Close closes the service
@@ -588,52 +490,4 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 		pr.onProgress(int64(n))
 	}
 	return n, err
-}
-
-// readWavFile reads a WAV file and returns the samples as float32
-func readWavFile(path string) ([]float32, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	// Read and parse RIFF header
-	reader := bufio.NewReader(file)
-
-	// Skip to data chunk
-	header := make([]byte, 44)
-	if _, err := io.ReadFull(reader, header); err != nil {
-		return nil, fmt.Errorf("failed to read WAV header: %w", err)
-	}
-
-	// Verify RIFF header
-	if string(header[0:4]) != "RIFF" || string(header[8:12]) != "WAVE" {
-		return nil, fmt.Errorf("invalid WAV file format")
-	}
-
-	// Get audio format info from header
-	// Assuming standard 16-bit PCM WAV
-
-	// Read all remaining data as samples
-	var samples []float32
-	buf := make([]byte, 4096)
-
-	for {
-		n, err := reader.Read(buf)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		// Convert bytes to int16 samples, then to float32
-		for i := 0; i < n-1; i += 2 {
-			sample := int16(binary.LittleEndian.Uint16(buf[i : i+2]))
-			samples = append(samples, float32(sample)/32768.0)
-		}
-	}
-
-	return samples, nil
 }
