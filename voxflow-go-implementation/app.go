@@ -1091,8 +1091,11 @@ func (a *App) processRecording() {
 	}
 
 	// Save to history (only polished text is shown, but we still save raw for potential future use)
+	var historyDuration time.Duration
 	if a.historyService != nil {
+		historyStart := time.Now()
 		_, err := a.historyService.Save("", rawText, polishedText, mode, llmProvider, llmModel, timeMs, tps)
+		historyDuration = time.Since(historyStart)
 		if err != nil {
 			fmt.Printf("Failed to save to history: %v\n", err)
 		}
@@ -1133,12 +1136,14 @@ func (a *App) processRecording() {
 			"Audio captured:        %.2fs\n"+
 			"Whisper transcription: %.2fs\n"+
 			"%s refinement:     %.2fs\n"+
+			"History DB write:      %.2fs\n"+
 			"Tokens per second:     %.1f t/s\n"+
 			"Total processing:      %.2fs\n",
 		audioDuration.Seconds(),
 		whisperDuration.Seconds(),
 		llmName,
 		llmDuration.Seconds(),
+		historyDuration.Seconds(),
 		tps,
 		totalProcessingTime.Seconds(),
 	)
