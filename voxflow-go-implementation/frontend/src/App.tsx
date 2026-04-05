@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import "./style.css";
 import MainView from "./components/MainView";
 import HistoryView from "./components/HistoryView";
@@ -134,12 +134,18 @@ function AppContent() {
   const { showToast } = useToast();
 
   const setMiniModeTransparency = (enabled: boolean) => {
-    const backgroundColor = enabled ? "transparent" : "";
-    document.documentElement.style.backgroundColor = backgroundColor;
-    document.body.style.backgroundColor = backgroundColor;
-    const root = document.getElementById("root");
-    if (root) {
-      root.style.backgroundColor = backgroundColor;
+    if (enabled) {
+      // Mini mode: transparent window
+      document.documentElement.style.backgroundColor = "transparent";
+      document.body.style.backgroundColor = "transparent";
+      const root = document.getElementById("root");
+      if (root) root.style.backgroundColor = "transparent";
+    } else {
+      // Full app mode: let CSS handle the background (light/dark)
+      document.documentElement.style.backgroundColor = "";
+      document.body.style.backgroundColor = "";
+      const root = document.getElementById("root");
+      if (root) root.style.backgroundColor = "";
     }
   };
 
@@ -210,7 +216,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen flex bg-primary">
+    <div className="min-h-screen flex bg-background">
       {/* Recording pill - shows at top when recording in full app mode */}
       <RecordingPill />
 
@@ -219,39 +225,8 @@ function AppContent() {
         {/* Draggable Titlebar Area */}
         <Tooltip content="Move" position="bottom">
           <div
-            className="w-full h-10 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-bg-secondary hover:bg-bg-tertiary transition-colors border-b border-border"
-            onMouseDown={(e) => {
-              // Only allow dragging with left mouse button
-              if (e.button !== 0) return;
-
-              e.preventDefault();
-              const startX = e.screenX;
-              const startY = e.screenY;
-
-              // Get current position
-              import("../wailsjs/runtime/runtime").then(
-                ({ WindowGetPosition, WindowSetPosition }) => {
-                  WindowGetPosition().then((pos) => {
-                    const startWinX = pos.x;
-                    const startWinY = pos.y;
-
-                    const onMouseMove = (ev: MouseEvent) => {
-                      const newX = startWinX + (ev.screenX - startX);
-                      const newY = startWinY + (ev.screenY - startY);
-                      WindowSetPosition(newX, newY);
-                    };
-
-                    const onMouseUp = () => {
-                      window.removeEventListener("mousemove", onMouseMove);
-                      window.removeEventListener("mouseup", onMouseUp);
-                    };
-
-                    window.addEventListener("mousemove", onMouseMove);
-                    window.addEventListener("mouseup", onMouseUp);
-                  });
-                },
-              );
-            }}
+            className="w-full h-10 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-background hover:bg-secondary transition-colors border-b-2 border-border"
+            style={{ "--wails-draggable": "drag" } as unknown as CSSProperties}
           >
             {/* Grip dots - macOS style */}
             <div className="flex flex-col gap-[3px] opacity-40 group-hover:opacity-70 transition-opacity">
@@ -330,7 +305,7 @@ function AppContent() {
             </button>
           </Tooltip>
 
-          <div className="h-px w-8 bg-secondary/20 my-1" />
+          <div className="h-px w-8 bg-border/40 my-1" />
 
           <Tooltip content="Quit" position="right">
             <button

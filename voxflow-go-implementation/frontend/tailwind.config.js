@@ -5,17 +5,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Using CSS variables for theme support
-        primary: "var(--bg-primary)",
-        secondary: "var(--bg-secondary)",
-        tertiary: "var(--bg-tertiary)",
-        elevated: "var(--bg-elevated)",
+        background: "var(--background)",
+        text: "var(--text)",
+        primary: "var(--primary)",
+        secondary: "var(--secondary)",
         accent: {
           DEFAULT: "var(--accent)",
           hover: "var(--accent-hover)",
           soft: "var(--accent-soft)",
         },
-        // Status colors
         recording: {
           DEFAULT: "var(--recording)",
           bg: "var(--recording-bg)",
@@ -28,16 +26,10 @@ export default {
           DEFAULT: "var(--idle)",
           bg: "var(--idle-bg)",
         },
-        // Text colors
-        txt: {
-          primary: "var(--text-primary)",
-          secondary: "var(--text-secondary)",
-          tertiary: "var(--text-tertiary)",
-        },
-        // Border
         border: {
           DEFAULT: "var(--border)",
           hover: "var(--border-hover)",
+          strong: "var(--border-strong)",
         },
       },
       fontFamily: {
@@ -48,6 +40,9 @@ export default {
         'soft-sm': 'var(--shadow-sm)',
         'soft-md': 'var(--shadow-md)',
         'soft-lg': 'var(--shadow-lg)',
+        'cartoon': '6px 6px 0px var(--primary)',
+        'cartoon-sm': '3px 3px 0px var(--primary)',
+        'cartoon-hover': '3px 3px 0px var(--primary)',
       },
       borderRadius: {
         'sm': 'var(--radius-sm)',
@@ -60,6 +55,11 @@ export default {
         "pulse-soft": "pulse-soft 2s ease-in-out infinite",
         "recording-ring": "recording-ring 1.5s ease-out infinite",
         "spin-slow": "spin-slow 2s linear infinite",
+        "wave": "wave 0.8s ease-in-out infinite",
+        "slide-up-fade": "slide-up-fade 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        "scale-in": "scale-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "bounce-in": "bounce-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "float": "float 3s ease-in-out infinite",
       },
       spacing: {
         'sidebar': '64px',

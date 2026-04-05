@@ -22,14 +22,13 @@ export default function RecordingPill() {
     }
   };
 
-  // Only show when recording
   if (status !== "Recording") {
     return null;
   }
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-full shadow-lg">
+      <div className="flex items-center gap-3 px-4 py-2 bg-background border border-border rounded-2xl shadow-soft-md">
         {/* Wavy animation bars */}
         <div className="flex items-center gap-0.5 h-5">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -45,15 +44,15 @@ export default function RecordingPill() {
         </div>
 
         {/* Recording text */}
-        <span className="text-sm text-secondary font-medium">Recording</span>
+        <span className="text-sm text-text font-bold">Recording</span>
 
-        {/* Stop button (red dot) */}
+        {/* Stop button */}
         <button
           onClick={handleStop}
-          className="w-5 h-5 bg-recording rounded-full hover:scale-110 transition-transform flex items-center justify-center group"
+          className="w-5 h-5 bg-recording rounded-md hover:scale-110 transition-transform flex items-center justify-center group"
           title="Stop recording"
         >
-          <div className="w-2 h-2 bg-white rounded-sm group-hover:scale-110 transition-transform" />
+          <div className="w-2 h-1.5 bg-white rounded-sm group-hover:scale-110 transition-transform" />
         </button>
       </div>
     </div>

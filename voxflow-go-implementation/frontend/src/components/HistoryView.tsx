@@ -119,44 +119,17 @@ export default function HistoryView() {
   return (
     <div className="flex h-screen animate-fade-in">
       {/* Sidebar list */}
-      <div className="w-80 border-r border-[var(--border)] flex flex-col bg-secondary">
+      <div className="w-80 border-r-2 border-border flex flex-col bg-background">
         {/* Header */}
-        <div className="p-4 border-b border-[var(--border)]">
-          <h2 className="font-serif text-xl font-medium text-primary mb-3">
+        <div className="p-4 border-b-2 border-border flex items-center justify-between">
+          <h2 className="font-serif text-lg font-bold text-text">
             History
           </h2>
-          {/* Search */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search transcripts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input w-full pl-9 text-sm"
-            />
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-        </div>
-
-        {/* Clear All button */}
-        {transcripts.length > 0 && (
-          <div className="px-4 py-2 border-b border-[var(--border)]">
+          {transcripts.length > 0 && (
             <button
               onClick={handleClearAll}
-              title="Delete all transcription history permanently"
-              className="w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 rounded-xl transition-colors flex items-center justify-center gap-2"
+              title="Delete all transcripts"
+              className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"
@@ -171,15 +144,40 @@ export default function HistoryView() {
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                 />
               </svg>
-              Clear All
             </button>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="px-4 py-3 border-b-2 border-border">
+          <div className="relative">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              placeholder=""
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input w-full pl-10 text-sm"
+            />
           </div>
-        )}
+        </div>
 
         {/* Transcript list */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-tertiary">Loading...</div>
+            <div className="p-4 text-center text-tertiary font-medium">Loading...</div>
           ) : transcripts.length === 0 ? (
             <div className="p-8 text-center text-tertiary">
               <svg
@@ -195,7 +193,7 @@ export default function HistoryView() {
                   d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
                 />
               </svg>
-              <p className="text-sm">
+              <p className="text-sm font-medium">
                 {searchQuery ? "No results found" : "No transcripts yet"}
               </p>
             </div>
@@ -205,16 +203,16 @@ export default function HistoryView() {
                 <button
                   key={t.id}
                   onClick={() => setSelectedId(t.id)}
-                  className={`w-full p-4 text-left transition-all border-b border-[var(--border)] ${
+                  className={`w-full p-4 text-left transition-all border-b-2 border-border ${
                     selectedId === t.id
-                      ? "bg-[var(--accent)]/5 border-l-2 border-l-[var(--accent)]"
-                      : "hover:bg-tertiary border-l-2 border-l-transparent"
+                      ? "bg-accent-soft border-l-4 border-l-primary"
+                      : "hover:bg-secondary border-l-4 border-l-transparent"
                   }`}
                 >
-                  <p className="text-xs text-tertiary mb-1">
+                  <p className="text-xs text-tertiary mb-1 font-medium">
                     {formatDate(t.timestamp)}
                   </p>
-                  <p className="text-sm text-primary line-clamp-2">
+                  <p className="text-sm text-text font-medium line-clamp-2">
                     {truncate(t.polished_text || t.raw_text, 80)}
                   </p>
                 </button>
@@ -225,16 +223,16 @@ export default function HistoryView() {
       </div>
 
       {/* Detail pane */}
-      <div className="flex-1 flex flex-col bg-primary">
+      <div className="flex-1 flex flex-col bg-background">
         {selectedTranscript ? (
           <>
             {/* Header */}
-            <div className="p-6 border-b border-[var(--border)] flex items-center justify-between">
+            <div className="p-5 border-b-2 border-border flex items-center justify-between">
               <div>
-                <p className="text-xs text-tertiary">
+                <p className="text-xs text-tertiary font-medium">
                   {formatDate(selectedTranscript.timestamp)}
                 </p>
-                <p className="text-sm text-secondary mt-1">
+                <p className="text-sm text-secondary mt-1 font-medium">
                   Mode:{" "}
                   <span className="capitalize">
                     {selectedTranscript.mode || "casual"}
@@ -244,7 +242,7 @@ export default function HistoryView() {
                   <p className="text-sm text-tertiary mt-2 flex items-center gap-2">
                     <span
                       title="AI Model used"
-                      className="px-2 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-xs font-medium"
+                      className="px-2 py-0.5 rounded-lg bg-accent-soft text-primary text-xs font-bold"
                     >
                       {" "}
                       {selectedTranscript.llm_provider === "local"
@@ -257,7 +255,7 @@ export default function HistoryView() {
                       selectedTranscript.tokens_per_second > 0 && (
                         <span
                           title="Generation speed"
-                          className="px-2 py-0.5 rounded-md bg-green-500/10 text-green-500 text-xs font-medium"
+                          className="px-2 py-0.5 rounded-lg bg-green-500/10 text-green-500 text-xs font-bold"
                         >
                           ⚡ {selectedTranscript.tokens_per_second.toFixed(1)}{" "}
                           t/s
@@ -292,19 +290,19 @@ export default function HistoryView() {
               {selectedTranscript.raw_text && selectedTranscript.raw_text !== selectedTranscript.polished_text && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
+                    <h3 className="text-xs font-black text-text uppercase tracking-tighter">
                       Original
                     </h3>
                     <button
                       onClick={() => handleCopy(selectedTranscript.raw_text)}
                       title="Copy original text to clipboard"
-                      className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
+                      className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
                     >
                       Copy
                     </button>
                   </div>
                   <div className="card p-4">
-                    <p className="text-secondary whitespace-pre-wrap leading-relaxed">
+                    <p className="text-secondary whitespace-pre-wrap leading-relaxed font-medium">
                       {selectedTranscript.raw_text}
                     </p>
                   </div>
@@ -313,19 +311,19 @@ export default function HistoryView() {
 
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider">
+                  <h3 className="text-xs font-black text-text uppercase tracking-tighter">
                     {selectedTranscript.raw_text && selectedTranscript.raw_text !== selectedTranscript.polished_text ? "Polished" : "Result"}
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.polished_text)}
                     title="Copy polished text to clipboard"
-                    className="text-xs text-tertiary hover:text-[var(--accent)] transition-colors"
+                    className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
                   >
                     Copy
                   </button>
                 </div>
                 <div className="card p-4">
-                  <p className="text-primary whitespace-pre-wrap leading-relaxed">
+                  <p className="text-text whitespace-pre-wrap leading-relaxed font-medium">
                     {selectedTranscript.polished_text}
                   </p>
                 </div>
@@ -348,7 +346,7 @@ export default function HistoryView() {
                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 />
               </svg>
-              <p>Select a transcript to view details</p>
+              <p className="font-medium">Select a transcript to view details</p>
             </div>
           </div>
         )}

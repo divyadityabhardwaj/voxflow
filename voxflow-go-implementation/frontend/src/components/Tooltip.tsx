@@ -77,7 +77,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
       </div>
       {isVisible && (
         <div
-          className="fixed z-[100] px-3 py-1.5 bg-bg-tertiary text-primary text-xs rounded-lg shadow-lg border border-border pointer-events-none whitespace-nowrap"
+          className="fixed z-[100] px-3 py-1.5 bg-background text-text text-xs font-bold rounded-lg shadow-soft-md border border-border pointer-events-none whitespace-nowrap"
           style={{
             left: coords.x,
             top: coords.y,

@@ -9,7 +9,6 @@ interface HotkeyRecorderModalProps {
 
 const MODIFIERS = new Set(["cmd", "ctrl", "alt", "shift", "win", "super"]);
 
-// Detect platform for display purposes
 const isMac =
   typeof navigator !== "undefined" &&
   navigator.platform.toLowerCase().includes("mac");
@@ -22,16 +21,12 @@ export default function HotkeyRecorderModal({
 }: HotkeyRecorderModalProps) {
   const [currentKeys, setCurrentKeys] = useState<Set<string>>(new Set());
   const [displayKeys, setDisplayKeys] = useState<string[]>([]);
-  // Ref to keep track of keys synchronously for the event handler
   const keysRef = useRef<Set<string>>(new Set());
-
-  // We keep track if the user has actively pressed a new combo to replace the initial one
   const [hasStartedRecording, setHasStartedRecording] = useState(false);
 
-  // Validation: must have at least one modifier AND exactly one non-modifier
   const validation = useMemo(() => {
     if (displayKeys.length === 0) {
-      return { isValid: true, message: "" }; // No input yet, no error
+      return { isValid: true, message: "" };
     }
 
     const modifierKeys = displayKeys.filter((k) => MODIFIERS.has(k));
@@ -61,7 +56,6 @@ export default function HotkeyRecorderModal({
     return { isValid: true, message: "" };
   }, [displayKeys]);
 
-  // Initialize display keys from initialValue
   useEffect(() => {
     if (isOpen) {
       setCurrentKeys(new Set());
@@ -77,7 +71,6 @@ export default function HotkeyRecorderModal({
   }, [isOpen, initialValue]);
 
   const mapKey = (key: string, code: string): string => {
-    // Normalization map
     const codeMap: Record<string, string> = {
       Space: "space",
       Enter: "enter",
@@ -94,31 +87,25 @@ export default function HotkeyRecorderModal({
     if (codeMap[code]) return codeMap[code];
     if (codeMap[key]) return codeMap[key];
 
-    // Modifiers
     const lowerKey = key.toLowerCase();
     if (lowerKey === "meta" || lowerKey === "os") return "cmd";
     if (lowerKey === "control") return "ctrl";
     if (lowerKey === "alt") return "alt";
     if (lowerKey === "shift") return "shift";
 
-    // Single characters
     if (key.length === 1) return lowerKey;
 
-    // Fallback for function keys etc
     return lowerKey;
   };
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Prevent default browser actions for common shortcuts while recording
       e.preventDefault();
       e.stopPropagation();
 
       const key = mapKey(e.key, e.code);
 
-      // Save on Enter/Return (only if valid)
       if (key === "enter" || key === "return") {
-        // Use displayKeys and check validation
         if (displayKeys.length > 0 && validation.isValid) {
           onSave(displayKeys.join("+"));
           onClose();
@@ -126,23 +113,18 @@ export default function HotkeyRecorderModal({
         return;
       }
 
-      // Cancel on Escape
       if (key === "escape") {
         onClose();
         return;
       }
 
-      // Add key to set (limit 3)
-      // Only add if we haven't reached the limit or if it's already there
       if (keysRef.current.size < 3 || keysRef.current.has(key)) {
         keysRef.current.add(key);
       }
 
-      // Update state for re-render
       const newSet = new Set(keysRef.current);
       setCurrentKeys(newSet);
 
-      // Update display keys based on this new set
       const sorted = Array.from(newSet).sort((a, b) => {
         const order = { cmd: 1, ctrl: 2, alt: 3, shift: 4 };
         const orderA = order[a as keyof typeof order] || 99;
@@ -164,9 +146,6 @@ export default function HotkeyRecorderModal({
 
     keysRef.current.delete(key);
     setCurrentKeys(new Set(keysRef.current));
-    // Note: We DO NOT update displayKeys here.
-    // We want the last pressed combination to remain visible
-    // so the user can see what they are about to save.
   }, []);
 
   useEffect(() => {
@@ -183,25 +162,25 @@ export default function HotkeyRecorderModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-dark-900 border border-dark-700 rounded-xl p-8 w-full max-w-md shadow-2xl transform transition-all">
-        <div className="text-center space-y-6">
-          <h3 className="text-xl font-semibold text-dark-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-background border-2 border-border rounded-[1.5rem] p-6 w-full max-w-md shadow-soft-lg animate-scale-in">
+        <div className="text-center space-y-5">
+          <h3 className="text-xl font-bold text-text">
             Record Shortcut
           </h3>
 
           <div
-            className={`py-8 flex items-center justify-center min-h-[120px] bg-dark-800 rounded-lg border-2 border-dashed ${
+            className={`py-6 flex items-center justify-center min-h-[100px] bg-secondary rounded-xl border-2 border-dashed ${
               !validation.isValid && displayKeys.length > 0
                 ? "border-red-500"
-                : "border-dark-600"
+                : "border-border"
             }`}
           >
             {displayKeys.length > 0 ? (
               <div className="flex flex-wrap gap-2 justify-center">
                 {displayKeys.map((k, i) => (
                   <div key={i} className="flex items-center">
-                    <kbd className="px-3 py-1.5 bg-dark-700 border-b-4 border-dark-600 rounded-lg text-lg font-mono text-accent-400 min-w-[3rem] text-center shadow-sm">
+                    <kbd className="px-3 py-1.5 bg-background border-2 border-border rounded-lg text-lg font-mono font-bold text-primary">
                       {k === "cmd" || k === "win" || k === "super"
                         ? isMac
                           ? "⌘"
@@ -221,7 +200,7 @@ export default function HotkeyRecorderModal({
                         : k.toUpperCase()}
                     </kbd>
                     {i < displayKeys.length - 1 && (
-                      <span className="mx-2 text-dark-500 text-xl font-bold">
+                      <span className="mx-2 text-text font-bold">
                         +
                       </span>
                     )}
@@ -229,26 +208,25 @@ export default function HotkeyRecorderModal({
                 ))}
               </div>
             ) : (
-              <p className="text-dark-500 italic">Press keys...</p>
+              <p className="text-tertiary italic font-medium">Press keys...</p>
             )}
           </div>
 
-          {/* Validation warning */}
           {!validation.isValid && displayKeys.length > 0 && (
-            <div className="p-3 bg-red-900/20 border border-red-700 rounded-lg">
-              <p className="text-sm text-red-400">{validation.message}</p>
+            <div className="p-3 bg-red-500/10 border border-red-500 rounded-xl">
+              <p className="text-sm font-bold text-red-500">{validation.message}</p>
             </div>
           )}
 
           <div className="space-y-2">
-            <p className="text-sm text-dark-300">
+            <p className="text-sm text-secondary font-medium">
               Press the desired key combination (max 3 keys).
             </p>
-            <p className="text-xs text-accent-400 font-medium">
+            <p className="text-xs text-primary font-bold">
               Press{" "}
-              <kbd className="font-mono bg-dark-800 px-1 rounded">Enter</kbd> to
+              <kbd className="font-mono bg-secondary px-2 py-0.5 rounded-lg border border-border">Enter</kbd> to
               save •{" "}
-              <kbd className="font-mono bg-dark-800 px-1 rounded">Esc</kbd> to
+              <kbd className="font-mono bg-secondary px-2 py-0.5 rounded-lg border border-border">Esc</kbd> to
               cancel
             </p>
           </div>

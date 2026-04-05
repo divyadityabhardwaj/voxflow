@@ -54,12 +54,12 @@ export default function MainView() {
     <div className="flex flex-col items-center justify-center min-h-screen p-8 animate-fade-in">
       {/* Heading */}
       <div className="text-center mb-10">
-        <h1 className="font-serif text-3xl font-medium text-primary mb-3">
+        <h1 className="font-serif text-3xl font-black text-text mb-3 uppercase tracking-tighter">
           {status === "Idle" && "For quick thoughts you want to capture"}
           {status === "Recording" && "Listening..."}
           {status === "Processing" && "Processing your thoughts"}
         </h1>
-        <p className="text-secondary text-sm">
+        <p className="text-secondary text-sm font-medium">
           {status === "Idle" &&
             "Press the button or use your hotkey to start recording"}
           {status === "Recording" &&
@@ -73,14 +73,14 @@ export default function MainView() {
       <div className="w-full max-w-xl mb-10">
         <div
           className={`
-            card-elevated p-6 flex items-center gap-4 transition-all duration-300
-            ${status === "Recording" ? "ring-2 ring-recording/30" : ""}
-            ${status === "Processing" ? "ring-2 ring-processing/30" : ""}
+            card-elevated p-5 flex items-center gap-4 transition-all duration-300
+            ${status === "Recording" ? "border-recording" : ""}
+            ${status === "Processing" ? "border-processing" : ""}
           `}
         >
           {/* Text area */}
           <div className="flex-1">
-            <p className="text-tertiary text-sm">
+            <p className="text-tertiary text-sm font-medium">
               {status === "Idle" && "Take a quick note with your voice..."}
               {status === "Recording" && "Recording in progress..."}
               {status === "Processing" && "Transcribing..."}
@@ -99,27 +99,27 @@ export default function MainView() {
                   : "Processing transcription..."
             }
             className={`
-              relative w-12 h-12 rounded-full transition-all duration-300
+              relative w-12 h-12 rounded-2xl transition-all duration-300
               flex items-center justify-center
               ${
                 status === "Idle"
-                  ? "bg-[var(--accent)] text-[var(--bg-primary)] hover:scale-105"
+                  ? "bg-primary text-white hover:shadow-cartoon-sm hover:-translate-y-1"
                   : status === "Recording"
                     ? "bg-recording text-white"
                     : "bg-processing text-white"
               }
-              disabled:cursor-not-allowed
-              active:scale-95
+              disabled:cursor-not-allowed disabled:opacity-50
+              active:translate-y-0 active:shadow-none
             `}
           >
             {/* Recording ring animation */}
             {status === "Recording" && (
-              <span className="absolute inset-0 rounded-full bg-recording/50 animate-recording-ring" />
+              <span className="absolute inset-0 rounded-2xl bg-recording/40 animate-recording-ring" />
             )}
 
             {/* Processing spinner */}
             {status === "Processing" && (
-              <span className="absolute inset-0 rounded-full border-2 border-white/20 border-t-white animate-spin-slow" />
+              <span className="absolute inset-0 rounded-2xl border-2 border-white/20 border-t-white animate-spin-slow" />
             )}
 
             {/* Icon */}
@@ -163,8 +163,8 @@ export default function MainView() {
 
       {/* Error display */}
       {error && (
-        <div className="w-full max-w-xl mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <p className="text-sm text-red-500">{error}</p>
+        <div className="w-full max-w-xl mb-6 p-4 bg-red-500/10 border-2 border-red-500 rounded-[1.5rem]">
+          <p className="text-sm font-bold text-red-500">{error}</p>
         </div>
       )}
 
@@ -172,15 +172,18 @@ export default function MainView() {
       {lastTranscription && (
         <div className="w-full max-w-xl animate-fade-in">
           <div className="card p-6">
-            <h3 className="text-xs font-medium text-tertiary uppercase tracking-wider mb-3">
-              Result
-            </h3>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-xs font-black text-text uppercase tracking-tighter">
+                Result
+              </h3>
+              <span className="brutal-badge">Done</span>
+            </div>
             {usedRawNoPolish && (
-              <p className="text-xs text-tertiary mb-2">
+              <p className="text-xs text-tertiary mb-2 font-medium">
                 Shown as transcribed — refinement skipped (already clear).
               </p>
             )}
-            <p className="text-primary whitespace-pre-wrap leading-relaxed">
+            <p className="text-text whitespace-pre-wrap leading-relaxed font-medium">
               {lastTranscription}
             </p>
           </div>
@@ -191,13 +194,15 @@ export default function MainView() {
       {!lastTranscription && status === "Idle" && (
         <div className="w-full max-w-xl">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-medium text-tertiary uppercase tracking-wider">
+            <h2 className="text-xs font-black text-text uppercase tracking-tighter">
               Recent
             </h2>
           </div>
-          <p className="text-sm text-tertiary text-center py-8">
-            Your recent recordings will appear here
-          </p>
+          <div className="card p-8 text-center">
+            <p className="text-sm text-tertiary font-medium">
+              Your recent recordings will appear here
+            </p>
+          </div>
         </div>
       )}
     </div>

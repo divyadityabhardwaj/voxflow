@@ -849,25 +849,26 @@ func (a *App) processRecording() {
 
 	processingStartTime := time.Now()
 
+	var stopAndWavDuration time.Duration
+	var cleanTextDuration time.Duration
+	wavBytes := int64(0)
+
 	// Capture audio duration before stopping (buffer is still valid after Stop until next Start)
 	audioDuration := a.audioRecorder.GetDuration()
 
 	// Stop recording and get WAV file
+	stopAndWavStart := time.Now()
 	wavPath, err := a.audioRecorder.Stop()
+	stopAndWavDuration = time.Since(stopAndWavStart)
 	if err != nil {
 		a.emitToast("Failed to stop recording: "+err.Error(), "error")
 		a.resetToIdle()
 		return
 	}
-	defer os.Remove(wavPath) // Clean up temp file
-	transcribePath := wavPath
-	trimmedPath, trimErr := a.audioRecorder.WriteTrimmedWav(220, 200)
-	if trimErr != nil {
-		fmt.Printf("[App] silence trim failed: %v\n", trimErr)
-	} else if trimmedPath != "" {
-		transcribePath = trimmedPath
-		defer os.Remove(trimmedPath)
+	if info, statErr := os.Stat(wavPath); statErr == nil {
+		wavBytes = info.Size()
 	}
+	defer os.Remove(wavPath) // Clean up temp file
 
 	// Transcribe with Whisper using the full recorded file.
 	var rawText string
@@ -876,7 +877,7 @@ func (a *App) processRecording() {
 
 	whisperStart := time.Now()
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		rawText, err = a.whisperService.Transcribe(transcribePath)
+		rawText, err = a.whisperService.Transcribe(wavPath)
 		if err != nil {
 			a.emitToast("Transcription failed: "+err.Error(), "error")
 			a.resetToIdle()
@@ -890,7 +891,9 @@ func (a *App) processRecording() {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+	cleanStart := time.Now()
 	rawText = cleanWhisperText(rawText)
+	cleanTextDuration = time.Since(cleanStart)
 	whisperDuration = time.Since(whisperStart)
 
 	fmt.Printf("\n[App] Whisper raw output (%d chars):\n%s\n", len(rawText), rawText)
@@ -1020,21 +1023,38 @@ func (a *App) processRecording() {
 	} else if llmProvider == "local" {
 		llmName = "Local"
 	}
+	// Count words in polished text
+	wordCount := 0
+	if len(strings.Fields(polishedText)) > 0 {
+		wordCount = len(strings.Fields(polishedText))
+	}
+	// Calculate effective WPM (words per minute from start of recording to text ready)
+	totalTimeFromStart := audioDuration + totalProcessingTime
+	effectiveWPM := float64(wordCount) / totalTimeFromStart.Minutes()
+
 	output := fmt.Sprintf(
 		"\nProcessing Complete:\n"+
 			"Audio captured:        %.2fs\n"+
+			"Stop + WAV write:      %.2fs\n"+
+			"WAV file size:         %.2f MB\n"+
 			"Whisper transcription: %.2fs\n"+
+			"Whisper text cleanup:  %.2fs\n"+
 			"%s refinement:     %.2fs\n"+
 			"History DB write:      %.2fs\n"+
 			"Tokens per second:     %.1f t/s\n"+
-			"Total processing:      %.2fs\n",
+			"Total processing:      %.2fs\n"+
+			"Effective WPM:        %.0f\n",
 		audioDuration.Seconds(),
+		stopAndWavDuration.Seconds(),
+		float64(wavBytes)/(1024.0*1024.0),
 		whisperDuration.Seconds(),
+		cleanTextDuration.Seconds(),
 		llmName,
 		llmDuration.Seconds(),
 		historyDuration.Seconds(),
 		tps,
 		totalProcessingTime.Seconds(),
+		effectiveWPM,
 	)
 	fmt.Println(output)
 
@@ -1048,9 +1068,13 @@ func (a *App) processRecording() {
 		"used_raw": okToGo,
 		"elapsed":  totalProcessingTime.Milliseconds(),
 		"details": map[string]float64{
-			"audio":   audioDuration.Seconds(),
-			"whisper": whisperDuration.Seconds(),
-			"llm":     llmDuration.Seconds(),
+			"audio":      audioDuration.Seconds(),
+			"stop_wav":   stopAndWavDuration.Seconds(),
+			"whisper":    whisperDuration.Seconds(),
+			"clean_text": cleanTextDuration.Seconds(),
+			"llm":        llmDuration.Seconds(),
+			"history":    historyDuration.Seconds(),
+			"wav_mb":     float64(wavBytes) / (1024.0 * 1024.0),
 		},
 	})
 }

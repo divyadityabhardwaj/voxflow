@@ -813,24 +813,24 @@ export default function SettingsView() {
   if (!config) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <p className="text-tertiary">Loading settings...</p>
+        <p className="text-tertiary font-bold uppercase tracking-tighter">Loading settings...</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-2xl mx-auto p-8 overflow-y-auto h-screen animate-fade-in">
-      <h2 className="font-serif text-2xl font-medium text-primary mb-8">
+      <h2 className="font-black text-3xl uppercase tracking-tighter text-primary mb-8">
         Settings
       </h2>
 
       <div className="space-y-8">
         {/* Whisper CLI Status */}
         {!whisperReady && (
-          <section className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-            <p className="text-sm text-amber-600 dark:text-amber-400">
+          <section className="p-4 bg-amber-500/10 border-4 border-amber-500 rounded-[2rem]">
+            <p className="text-sm text-amber-500 font-bold">
               ⚠️ Whisper CLI not found. Please install via:{" "}
-              <code className="bg-tertiary px-2 py-0.5 rounded font-mono text-xs">
+              <code className="bg-secondary px-2 py-0.5 rounded font-mono text-xs border-2 border-border">
                 brew install whisper-cpp
               </code>
             </p>
@@ -838,11 +838,11 @@ export default function SettingsView() {
         )}
 
         {/* LLM Provider Selection */}
-        <section className="card p-6">
-          <h3 className="font-serif text-lg font-medium text-primary mb-4">
+        <section className="card p-6 brutal-card">
+          <h3 className="font-black text-xl uppercase tracking-tighter text-primary mb-4">
             LLM Provider
           </h3>
-          <p className="text-sm text-dark-500 mb-4">
+          <p className="text-sm text-tertiary mb-4 font-bold">
             Choose which LLM provider to use for text refinement.
           </p>
 
@@ -853,14 +853,14 @@ export default function SettingsView() {
                 !saving && setIsProviderDropdownOpen(!isProviderDropdownOpen)
               }
               disabled={saving === "llmProvider"}
-              className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                       text-dark-200 flex items-center justify-between
-                       focus:outline-none focus:ring-2 focus:ring-accent-600
-                       disabled:opacity-50 text-left capitalize"
+              className="w-full px-4 py-2.5 bg-secondary border-4 border-border rounded-[2rem]
+                       text-text flex items-center justify-between
+                       focus:outline-none focus:border-primary focus:shadow-[4px_4px_0px_var(--primary)]
+                       disabled:opacity-50 text-left capitalize font-bold"
             >
               <span>{config.llm_provider || "gemini"}</span>
               <svg
-                className={`w-4 h-4 text-dark-500 transition-transform ${isProviderDropdownOpen ? "rotate-180" : ""}`}
+                className={`w-4 h-4 text-tertiary transition-transform ${isProviderDropdownOpen ? "rotate-180" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -875,7 +875,7 @@ export default function SettingsView() {
             </button>
 
             {isProviderDropdownOpen && (
-              <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
+              <div className="absolute z-20 w-full mt-1 bg-secondary border-4 border-border rounded-[2rem] shadow-[8px_8px_0px_var(--primary)] overflow-hidden">
                 {[
                   {
                     id: "gemini",
@@ -909,14 +909,14 @@ export default function SettingsView() {
                       handleLLMProviderChange(prov.id);
                       setIsProviderDropdownOpen(false);
                     }}
-                    className={`flex flex-col px-4 py-3 cursor-pointer transition-colors ${
+                    className={`flex flex-col px-4 py-3 cursor-pointer transition-colors font-bold ${
                       (config.llm_provider || "gemini") === prov.id
-                        ? "bg-accent-600/10 text-accent-400"
-                        : "text-txt-primary hover:bg-tertiary"
+                        ? "bg-primary/10 text-primary"
+                        : "text-tertiary hover:bg-secondary"
                     }`}
                   >
                     <span className="font-medium capitalize">{prov.label}</span>
-                    <span className="text-xs text-dark-500 mt-1">
+                    <span className="text-xs text-tertiary mt-1 font-bold">
                       {prov.sub}
                     </span>
                   </div>
@@ -926,31 +926,31 @@ export default function SettingsView() {
           </div>
 
           {config.llm_provider === "local" && (
-            <div className="pt-6 border-t border-dark-700">
-              <h4 className="font-medium text-dark-200 mb-4">
+            <div className="pt-6 border-t-4 border-border">
+              <h4 className="font-black text-lg uppercase tracking-tighter text-text mb-4">
                 Local Model (GGUF)
               </h4>
-              <p className="text-sm text-dark-500 mb-4">
+              <p className="text-sm text-tertiary mb-4 font-bold">
                 Select and download models for local inference via Ollama. Runs
                 entirely on your device.
               </p>
               <div className="space-y-3">
                 {localModelsLoading ? (
-                  <p className="text-sm text-dark-500 text-center py-4">
+                  <p className="text-sm text-tertiary text-center py-4 font-bold">
                     Loading models...
                   </p>
                 ) : localModels.length === 0 ? (
-                  <p className="text-sm text-dark-500 text-center py-4">
+                  <p className="text-sm text-tertiary text-center py-4 font-bold">
                     No models available
                   </p>
                 ) : (
                   localModels.map((model) => (
                     <div
                       key={model.name}
-                      className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                      className={`flex items-center justify-between p-4 rounded-[2rem] border-4 transition-colors ${
                         config.local_model === model.name
-                          ? "bg-accent-600/10 border-accent-600"
-                          : "border-dark-800 hover:bg-dark-800/50"
+                          ? "bg-primary/10 border-primary"
+                          : "border-border hover:bg-secondary"
                       }`}
                     >
                       <div className="flex items-center gap-4">
@@ -963,18 +963,18 @@ export default function SettingsView() {
                             handleLocalModelSelect(model.name)
                           }
                           disabled={!model.downloaded}
-                          className="w-4 h-4 text-accent-600 focus:ring-accent-600"
+                          className="w-4 h-4 text-primary focus:ring-primary"
                         />
                         <div>
-                          <p className="text-dark-200 font-medium">
+                          <p className="text-text font-bold">
                             {model.name}
                             {config.local_model === model.name && (
-                              <span className="ml-2 text-xs text-accent-400">
+                              <span className="ml-2 text-xs text-primary font-black uppercase">
                                 (Active)
                               </span>
                             )}
                           </p>
-                          <p className="text-sm text-dark-500">
+                          <p className="text-sm text-tertiary font-bold">
                             {model.description}
                             {model.size > 0 && ` • ${formatSize(model.size)}`}
                           </p>
@@ -984,7 +984,7 @@ export default function SettingsView() {
                       <div className="flex items-center gap-2">
                         {model.downloaded ? (
                           <>
-                            <span className="text-xs text-idle">
+                            <span className="text-xs text-emerald-500 font-bold">
                               ✓ Downloaded
                               {modelStatuses[model.name]?.working && (
                                 <span className="ml-1">
@@ -994,13 +994,13 @@ export default function SettingsView() {
                                 </span>
                               )}
                               {checkingModel === model.name && (
-                                <span className="ml-1 text-dark-500 animate-pulse">
+                                <span className="ml-1 text-tertiary animate-pulse font-bold">
                                   (Checking...)
                                 </span>
                               )}
                               {modelStatuses[model.name]?.working === false &&
                                 !checkingModel && (
-                                  <span className="ml-1 text-red-500">
+                                  <span className="ml-1 text-red-500 font-bold">
                                     (Error)
                                   </span>
                                 )}
@@ -1011,7 +1011,7 @@ export default function SettingsView() {
                                 checkLocalModelStatus(model.name);
                               }}
                               disabled={!!checkingModel}
-                              className="text-[10px] text-accent-400 hover:text-accent-300 disabled:opacity-50 ml-1"
+                              className="text-[10px] text-primary hover:text-primary/80 disabled:opacity-50 ml-1 font-bold uppercase"
                             >
                               Check
                             </button>
@@ -1020,7 +1020,7 @@ export default function SettingsView() {
                                 onClick={() =>
                                   handleDeleteLocalModel(model.name)
                                 }
-                                className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                                className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-[2rem] transition-colors border-2 border-transparent hover:border-red-400"
                                 title="Delete model"
                               >
                                 <svg
@@ -1041,18 +1041,18 @@ export default function SettingsView() {
                           </>
                         ) : localDownloading === model.name ? (
                           <div className="flex items-center gap-2">
-                            <div className="w-16 h-2 bg-dark-700 rounded-full overflow-hidden">
+                            <div className="w-16 h-2 bg-secondary rounded-full overflow-hidden border-2 border-border">
                               <div
-                                className="h-full bg-accent-500 transition-all duration-300"
+                                className="h-full bg-primary transition-all duration-300"
                                 style={{ width: `${localDownloadProgress}%` }}
                               />
                             </div>
-                            <span className="text-xs text-dark-400 w-8">
+                            <span className="text-xs text-tertiary w-8 font-bold">
                               {localDownloadProgress}%
                             </span>
                             <button
                               onClick={handleCancelLocalDownload}
-                              className="p-1 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                              className="p-1 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-[2rem] transition-colors border-2 border-transparent hover:border-red-400"
                               title="Cancel download"
                             >
                               <svg
@@ -1074,7 +1074,7 @@ export default function SettingsView() {
                           <button
                             onClick={() => handleDownloadLocalModel(model.name)}
                             disabled={!!localDownloading}
-                            className="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                            className="px-3 py-1.5 text-xs bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-[2rem] border-4 border-primary/80 transition-colors font-bold uppercase tracking-tighter"
                           >
                             Download
                           </button>
@@ -1089,15 +1089,15 @@ export default function SettingsView() {
 
           {/* Gemini API Key Section */}
           {(config.llm_provider === "gemini" || !config.llm_provider) && (
-            <div className="pt-6 border-t border-dark-700">
-              <h4 className="font-medium text-dark-200 mb-4">Gemini API Key</h4>
-              <p className="text-sm text-dark-500 mb-4">
+            <div className="pt-6 border-t-4 border-border">
+              <h4 className="font-black text-lg uppercase tracking-tighter text-text mb-4">Gemini API Key</h4>
+              <p className="text-sm text-tertiary mb-4 font-bold">
                 Get your API key from{" "}
                 <a
                   href="https://makersuite.google.com/app/apikey"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-400 hover:underline"
+                  className="text-primary hover:underline font-bold"
                 >
                   Google AI Studio
                 </a>
@@ -1113,12 +1113,12 @@ export default function SettingsView() {
                     }
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                             text-dark-200 placeholder-dark-500
-                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                    className="w-full px-4 py-2.5 bg-secondary border-4 border-border rounded-[2rem]
+                             text-text placeholder-tertiary
+                             focus:outline-none focus:border-primary focus:shadow-[4px_4px_0px_var(--primary)] font-bold"
                   />
                   {config.api_key_set && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-500 font-bold">
                       ✓ Set
                     </span>
                   )}
@@ -1126,8 +1126,8 @@ export default function SettingsView() {
                 <button
                   onClick={handleSaveApiKey}
                   disabled={!apiKey.trim() || saving === "apiKey"}
-                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
-                           text-white rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50
+                           text-white rounded-[2rem] border-4 border-primary/80 transition-colors font-bold uppercase tracking-tighter"
                 >
                   {saving === "apiKey"
                     ? "Saving..."
@@ -1141,13 +1141,13 @@ export default function SettingsView() {
               {config.api_key_set && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-medium text-dark-200">Gemini Model</h4>
+                    <h4 className="font-black text-lg uppercase tracking-tighter text-text">Gemini Model</h4>
                   </div>
 
                   {geminiModelsLoading ? (
-                    <p className="text-sm text-dark-500">Loading models...</p>
+                    <p className="text-sm text-tertiary font-bold">Loading models...</p>
                   ) : geminiModelsError ? (
-                    <div className="text-sm text-red-400">
+                    <div className="text-sm text-red-500 font-bold">
                       {geminiModelsError}
                       <button
                         onClick={loadGeminiModels}
@@ -1165,15 +1165,15 @@ export default function SettingsView() {
                             setIsGeminiDropdownOpen(!isGeminiDropdownOpen)
                           }
                           disabled={saving === "gemini_model"}
-                          className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                                   text-dark-200 flex items-center justify-between
-                                   focus:outline-none focus:ring-2 focus:ring-accent-600
-                                   disabled:opacity-50 text-left"
+                          className="w-full px-4 py-2.5 bg-secondary border-4 border-border rounded-[2rem]
+                                   text-text flex items-center justify-between
+                                   focus:outline-none focus:border-primary focus:shadow-[4px_4px_0px_var(--primary)]
+                                   disabled:opacity-50 text-left font-bold"
                         >
                           <span>
                             {config.gemini_model}
                             {modelStatuses[config.gemini_model]?.working && (
-                              <span className="text-idle ml-2 text-xs">
+                              <span className="text-emerald-500 ml-2 text-xs font-bold">
                                 ✓ {modelStatuses[config.gemini_model]?.latency}
                                 ms
                                 {" | "}
@@ -1185,13 +1185,13 @@ export default function SettingsView() {
                             )}
                             {modelStatuses[config.gemini_model]?.working ===
                               false && (
-                              <span className="text-red-400 ml-2 text-xs">
+                              <span className="text-red-500 ml-2 text-xs font-bold">
                                 ✗ Error
                               </span>
                             )}
                           </span>
                           <svg
-                            className={`w-4 h-4 text-dark-500 transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`}
+                            className={`w-4 h-4 text-tertiary transition-transform ${isGeminiDropdownOpen ? "rotate-180" : ""}`}
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -1206,7 +1206,7 @@ export default function SettingsView() {
                         </button>
 
                         {isGeminiDropdownOpen && (
-                          <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
                             {geminiModels.map((model) => (
                               <div
                                 key={model}
@@ -1216,20 +1216,20 @@ export default function SettingsView() {
                                 }}
                                 className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
                                   config.gemini_model === model
-                                    ? "bg-accent-600/10 text-accent-400"
-                                    : "text-txt-primary hover:bg-tertiary"
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-text hover:bg-secondary"
                                 }`}
                               >
                                 <span className="font-medium">{model}</span>
                                 <span className="text-xs flex items-center gap-2">
                                   {checkingModel === model && (
-                                    <span className="text-dark-500 animate-pulse">
+                                    <span className="text-tertiary animate-pulse">
                                       Checking...
                                     </span>
                                   )}
                                   {!checkingModel &&
                                     modelStatuses[model]?.working && (
-                                      <span className="text-idle font-medium">
+                                      <span className="text-green-500 font-medium">
                                         ✓ {modelStatuses[model]?.latency}ms
                                         {modelStatuses[model]?.tps !==
                                           undefined &&
@@ -1238,7 +1238,7 @@ export default function SettingsView() {
                                     )}
                                   {!checkingModel &&
                                     modelStatuses[model]?.working === false && (
-                                      <span className="text-red-400 font-medium">
+                                      <span className="text-red-500 font-medium">
                                         ✗ Error
                                       </span>
                                     )}
@@ -1248,7 +1248,7 @@ export default function SettingsView() {
                                       checkGeminiModelStatus(model);
                                     }}
                                     disabled={!!checkingModel}
-                                    className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                                    className="text-primary hover:text-primary disabled:opacity-50"
                                   >
                                     Check
                                   </button>
@@ -1258,7 +1258,7 @@ export default function SettingsView() {
                           </div>
                         )}
                       </div>
-                      <p className="text-xs text-dark-500 mt-2">
+                      <p className="text-xs text-tertiary mt-2">
                         Select the Gemini model to use for transcription
                         refinement.
                       </p>
@@ -1271,17 +1271,17 @@ export default function SettingsView() {
 
           {/* OpenRouter Section */}
           {config.llm_provider === "openrouter" && (
-            <div className="pt-6 border-t border-dark-700">
-              <h4 className="font-medium text-dark-200 mb-4">
+            <div className="pt-6 border-t border-border">
+              <h4 className="font-medium text-text mb-4">
                 OpenRouter API Key
               </h4>
-              <p className="text-sm text-dark-500 mb-4">
+              <p className="text-sm text-tertiary mb-4">
                 Get your API key from{" "}
                 <a
                   href="https://openrouter.ai/settings"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-400 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   OpenRouter Settings
                 </a>
@@ -1297,12 +1297,12 @@ export default function SettingsView() {
                     }
                     value={openRouterApiKey}
                     onChange={(e) => setOpenRouterApiKey(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                             text-dark-200 placeholder-dark-500
-                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                    className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl
+                             text-text placeholder:text-tertiary
+                             focus:outline-none focus:ring-2 focus:border-primary"
                   />
                   {config.openrouter_api_key_set && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-green-500">
                       ✓ Set
                     </span>
                   )}
@@ -1312,8 +1312,8 @@ export default function SettingsView() {
                   disabled={
                     !openRouterApiKey.trim() || saving === "openRouterApiKey"
                   }
-                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
-                           text-white rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-primary hover:bg-primary disabled:opacity-50
+                           text-white rounded-xl transition-colors"
                 >
                   {saving === "openRouterApiKey"
                     ? "Saving..."
@@ -1326,7 +1326,7 @@ export default function SettingsView() {
               {/* OpenRouter Models */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-medium text-dark-200">
+                  <h4 className="font-medium text-text">
                     OpenRouter Free Models
                   </h4>
                 </div>
@@ -1339,15 +1339,15 @@ export default function SettingsView() {
                         setIsOpenRouterDropdownOpen(!isOpenRouterDropdownOpen)
                       }
                       disabled={saving === "openrouter_model"}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                                 text-dark-200 flex items-center justify-between
-                                 focus:outline-none focus:ring-2 focus:ring-accent-600
+                      className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl
+                                 text-text flex items-center justify-between
+                                 focus:outline-none focus:ring-2 focus:border-primary
                                  disabled:opacity-50 text-left"
                     >
                       <span>
                         {config.openrouter_model}
                         {modelStatuses[config.openrouter_model]?.working && (
-                          <span className="text-idle ml-2 text-xs">
+                          <span className="text-green-500 ml-2 text-xs">
                             ✓ {modelStatuses[config.openrouter_model]?.latency}
                             ms
                             {" | "}
@@ -1359,13 +1359,13 @@ export default function SettingsView() {
                         )}
                         {modelStatuses[config.openrouter_model]?.working ===
                           false && (
-                          <span className="text-red-400 ml-2 text-xs">
+                          <span className="text-red-500 ml-2 text-xs">
                             ✗ Error
                           </span>
                         )}
                       </span>
                       <svg
-                        className={`w-4 h-4 text-dark-500 transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`}
+                        className={`w-4 h-4 text-tertiary transition-transform ${isOpenRouterDropdownOpen ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1380,7 +1380,7 @@ export default function SettingsView() {
                     </button>
 
                     {isOpenRouterDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
                         {openRouterModels.map((model) => (
                           <div
                             key={model}
@@ -1390,8 +1390,8 @@ export default function SettingsView() {
                             }}
                             className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
                               config.openrouter_model === model
-                                ? "bg-accent-600/10 text-accent-400"
-                                : "text-txt-primary hover:bg-tertiary"
+                                ? "bg-primary/10 text-primary"
+                                : "text-text hover:bg-secondary"
                             }`}
                           >
                             <span className="font-medium text-sm">
@@ -1399,19 +1399,19 @@ export default function SettingsView() {
                             </span>
                             <span className="text-xs flex items-center gap-2">
                               {checkingModel === model && (
-                                <span className="text-dark-500 animate-pulse">
+                                <span className="text-tertiary animate-pulse">
                                   Checking...
                                 </span>
                               )}
                               {!checkingModel &&
                                 modelStatuses[model]?.working && (
-                                  <span className="text-idle font-medium">
+                                  <span className="text-green-500 font-medium">
                                     ✓ {modelStatuses[model]?.latency}ms
                                   </span>
                                 )}
                               {!checkingModel &&
                                 modelStatuses[model]?.working === false && (
-                                  <span className="text-red-400 font-medium">
+                                  <span className="text-red-500 font-medium">
                                     ✗ Error
                                   </span>
                                 )}
@@ -1421,7 +1421,7 @@ export default function SettingsView() {
                                   checkOpenRouterModelStatus(model);
                                 }}
                                 disabled={!!checkingModel}
-                                className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                                className="text-primary hover:text-primary disabled:opacity-50"
                               >
                                 Check
                               </button>
@@ -1431,7 +1431,7 @@ export default function SettingsView() {
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-dark-500 mt-2">
+                  <p className="text-xs text-tertiary mt-2">
                     Select a free OpenRouter model.
                   </p>
                 </div>
@@ -1441,15 +1441,15 @@ export default function SettingsView() {
 
           {/* Groq Section */}
           {config.llm_provider === "groq" && (
-            <div className="pt-6 border-t border-dark-700">
-              <h4 className="font-medium text-dark-200 mb-4">Groq API Key</h4>
-              <p className="text-sm text-dark-500 mb-4">
+            <div className="pt-6 border-t border-border">
+              <h4 className="font-medium text-text mb-4">Groq API Key</h4>
+              <p className="text-sm text-tertiary mb-4">
                 Get your API key from{" "}
                 <a
                   href="https://console.groq.com/keys"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-400 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   Groq Console
                 </a>
@@ -1465,12 +1465,12 @@ export default function SettingsView() {
                     }
                     value={groqApiKey}
                     onChange={(e) => setGroqApiKey(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                             text-dark-200 placeholder-dark-500
-                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                    className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl
+                             text-text placeholder:text-tertiary
+                             focus:outline-none focus:ring-2 focus:border-primary"
                   />
                   {config.groq_api_key_set && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-green-500">
                       ✓ Set
                     </span>
                   )}
@@ -1478,8 +1478,8 @@ export default function SettingsView() {
                 <button
                   onClick={handleSaveGroqApiKey}
                   disabled={!groqApiKey.trim() || saving === "groqApiKey"}
-                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
-                           text-white rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-primary hover:bg-primary disabled:opacity-50
+                           text-white rounded-xl transition-colors"
                 >
                   {saving === "groqApiKey"
                     ? "Saving..."
@@ -1492,7 +1492,7 @@ export default function SettingsView() {
               {/* Groq Models */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-medium text-dark-200">Groq Models</h4>
+                  <h4 className="font-medium text-text">Groq Models</h4>
                 </div>
 
                 <div className="space-y-2">
@@ -1502,15 +1502,15 @@ export default function SettingsView() {
                         !saving && setIsGroqDropdownOpen(!isGroqDropdownOpen)
                       }
                       disabled={saving === "groq_model"}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                                 text-dark-200 flex items-center justify-between
-                                 focus:outline-none focus:ring-2 focus:ring-accent-600
+                      className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl
+                                 text-text flex items-center justify-between
+                                 focus:outline-none focus:ring-2 focus:border-primary
                                  disabled:opacity-50 text-left"
                     >
                       <span>
                         {config.groq_model}
                         {modelStatuses[config.groq_model]?.working && (
-                          <span className="text-idle ml-2 text-xs">
+                          <span className="text-green-500 ml-2 text-xs">
                             ✓ {modelStatuses[config.groq_model]?.latency}ms
                             {" | "}
                             {modelStatuses[config.groq_model]?.tps?.toFixed(
@@ -1521,13 +1521,13 @@ export default function SettingsView() {
                         )}
                         {modelStatuses[config.groq_model]?.working ===
                           false && (
-                          <span className="text-red-400 ml-2 text-xs">
+                          <span className="text-red-500 ml-2 text-xs">
                             ✗ Error
                           </span>
                         )}
                       </span>
                       <svg
-                        className={`w-4 h-4 text-dark-500 transition-transform ${isGroqDropdownOpen ? "rotate-180" : ""}`}
+                        className={`w-4 h-4 text-tertiary transition-transform ${isGroqDropdownOpen ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1542,7 +1542,7 @@ export default function SettingsView() {
                     </button>
 
                     {isGroqDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
                         {groqModels.map((model) => (
                           <div
                             key={model}
@@ -1552,20 +1552,20 @@ export default function SettingsView() {
                             }}
                             className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
                               config.groq_model === model
-                                ? "bg-accent-600/10 text-accent-400"
-                                : "text-txt-primary hover:bg-tertiary"
+                                ? "bg-primary/10 text-primary"
+                                : "text-text hover:bg-secondary"
                             }`}
                           >
                             <span className="font-medium text-sm">{model}</span>
                             <span className="text-xs flex items-center gap-2">
                               {checkingModel === model && (
-                                <span className="text-dark-500 animate-pulse">
+                                <span className="text-tertiary animate-pulse">
                                   Checking...
                                 </span>
                               )}
                               {!checkingModel &&
                                 modelStatuses[model]?.working && (
-                                  <span className="text-idle font-medium">
+                                  <span className="text-green-500 font-medium">
                                     ✓ {modelStatuses[model]?.latency}ms
                                     {" | "}
                                     {modelStatuses[model]?.tps?.toFixed(1)} t/s
@@ -1573,7 +1573,7 @@ export default function SettingsView() {
                                 )}
                               {!checkingModel &&
                                 modelStatuses[model]?.working === false && (
-                                  <span className="text-red-400 font-medium">
+                                  <span className="text-red-500 font-medium">
                                     ✗ Error
                                   </span>
                                 )}
@@ -1583,7 +1583,7 @@ export default function SettingsView() {
                                   checkGroqModelStatus(model);
                                 }}
                                 disabled={!!checkingModel}
-                                className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                                className="text-primary hover:text-primary disabled:opacity-50"
                               >
                                 Check
                               </button>
@@ -1593,7 +1593,7 @@ export default function SettingsView() {
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-dark-500 mt-2">
+                  <p className="text-xs text-tertiary mt-2">
                     Select a Groq model for ultra-fast LPU inference
                     constraints.
                   </p>
@@ -1604,17 +1604,17 @@ export default function SettingsView() {
 
           {/* Cerebras Section */}
           {config.llm_provider === "cerebras" && (
-            <div className="pt-6 border-t border-dark-700">
-              <h4 className="font-medium text-dark-200 mb-4">
+            <div className="pt-6 border-t border-border">
+              <h4 className="font-medium text-text mb-4">
                 Cerebras API Key
               </h4>
-              <p className="text-sm text-dark-500 mb-4">
+              <p className="text-sm text-tertiary mb-4">
                 Get your API key from{" "}
                 <a
                   href="https://cloud.cerebras.ai"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-accent-400 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   Cerebras Cloud
                 </a>
@@ -1630,12 +1630,12 @@ export default function SettingsView() {
                     }
                     value={cerebrasApiKey}
                     onChange={(e) => setCerebrasApiKey(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                             text-dark-200 placeholder-dark-500
-                             focus:outline-none focus:ring-2 focus:ring-accent-600"
+                    className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl
+                             text-text placeholder:text-tertiary
+                             focus:outline-none focus:ring-2 focus:border-primary"
                   />
                   {config.cerebras_api_key_set && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-idle">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-green-500">
                       ✓ Set
                     </span>
                   )}
@@ -1645,8 +1645,8 @@ export default function SettingsView() {
                   disabled={
                     !cerebrasApiKey.trim() || saving === "cerebrasApiKey"
                   }
-                  className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 disabled:opacity-50
-                           text-white rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-primary hover:bg-primary disabled:opacity-50
+                           text-white rounded-xl transition-colors"
                 >
                   {saving === "cerebrasApiKey"
                     ? "Saving..."
@@ -1659,7 +1659,7 @@ export default function SettingsView() {
               {/* Cerebras Models */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-medium text-dark-200">Cerebras Models</h4>
+                  <h4 className="font-medium text-text">Cerebras Models</h4>
                 </div>
 
                 <div className="space-y-2">
@@ -1670,28 +1670,28 @@ export default function SettingsView() {
                         setIsCerebrasDropdownOpen(!isCerebrasDropdownOpen)
                       }
                       disabled={saving === "cerebras_model"}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                                 text-dark-200 flex items-center justify-between
-                                 focus:outline-none focus:ring-2 focus:ring-accent-600
+                      className="w-full px-4 py-2.5 bg-secondary border border-border rounded-xl
+                                 text-text flex items-center justify-between
+                                 focus:outline-none focus:ring-2 focus:border-primary
                                  disabled:opacity-50 text-left"
                     >
                       <span>
                         {config.cerebras_model}
                         {modelStatuses[config.cerebras_model]?.working && (
-                          <span className="text-idle ml-2 text-xs">
+                          <span className="text-green-500 ml-2 text-xs">
                             ✓ {modelStatuses[config.cerebras_model]?.latency}
                             ms
                           </span>
                         )}
                         {modelStatuses[config.cerebras_model]?.working ===
                           false && (
-                          <span className="text-red-400 ml-2 text-xs">
+                          <span className="text-red-500 ml-2 text-xs">
                             ✗ Error
                           </span>
                         )}
                       </span>
                       <svg
-                        className={`w-4 h-4 text-dark-500 transition-transform ${isCerebrasDropdownOpen ? "rotate-180" : ""}`}
+                        className={`w-4 h-4 text-tertiary transition-transform ${isCerebrasDropdownOpen ? "rotate-180" : ""}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1706,7 +1706,7 @@ export default function SettingsView() {
                     </button>
 
                     {isCerebrasDropdownOpen && (
-                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      <div className="absolute z-20 w-full mt-1 bg-secondary border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto">
                         {cerebrasModels.map((model) => (
                           <div
                             key={model}
@@ -1716,26 +1716,26 @@ export default function SettingsView() {
                             }}
                             className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
                               config.cerebras_model === model
-                                ? "bg-accent-600/10 text-accent-400"
-                                : "text-txt-primary hover:bg-tertiary"
+                                ? "bg-primary/10 text-primary"
+                                : "text-text hover:bg-secondary"
                             }`}
                           >
                             <span className="font-medium text-sm">{model}</span>
                             <span className="text-xs flex items-center gap-2">
                               {checkingModel === model && (
-                                <span className="text-dark-500 animate-pulse">
+                                <span className="text-tertiary animate-pulse">
                                   Checking...
                                 </span>
                               )}
                               {!checkingModel &&
                                 modelStatuses[model]?.working && (
-                                  <span className="text-idle font-medium">
+                                  <span className="text-green-500 font-medium">
                                     ✓ {modelStatuses[model]?.latency}ms
                                   </span>
                                 )}
                               {!checkingModel &&
                                 modelStatuses[model]?.working === false && (
-                                  <span className="text-red-400 font-medium">
+                                  <span className="text-red-500 font-medium">
                                     ✗ Error
                                   </span>
                                 )}
@@ -1745,7 +1745,7 @@ export default function SettingsView() {
                                   checkCerebrasModelStatus(model);
                                 }}
                                 disabled={!!checkingModel}
-                                className="text-accent-400 hover:text-accent-300 disabled:opacity-50"
+                                className="text-primary hover:text-primary disabled:opacity-50"
                               >
                                 Check
                               </button>
@@ -1755,7 +1755,7 @@ export default function SettingsView() {
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-dark-500 mt-2">
+                  <p className="text-xs text-tertiary mt-2">
                     Select a Cerebras model to leverage wafer-scale high-speed
                     inference.
                   </p>
@@ -1779,25 +1779,25 @@ export default function SettingsView() {
                 onClick={() =>
                   openHotkeyModal("ptt", config.push_to_talk_hotkey)
                 }
-                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
+                className="flex-1 px-4 py-2.5 bg-secondary border border-border rounded-xl
+                         text-text cursor-pointer hover:border-border transition-colors
                          flex items-center justify-between group"
               >
                 <span className="font-mono">
                   {formatHotkey(config.push_to_talk_hotkey || "None")}
                 </span>
-                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
+                <span className="text-xs text-tertiary group-hover:text-primary transition-colors">
                   Click to edit
                 </span>
               </div>
 
               {saving === "ptt" && (
-                <span className="flex items-center text-sm text-dark-500">
+                <span className="flex items-center text-sm text-tertiary">
                   Saving...
                 </span>
               )}
               {success === "ptt" && (
-                <span className="flex items-center text-sm text-idle">
+                <span className="flex items-center text-sm text-green-500">
                   ✓ Saved
                 </span>
               )}
@@ -1816,25 +1816,25 @@ export default function SettingsView() {
                 onClick={() =>
                   openHotkeyModal("handsFree", config.hands_free_hotkey)
                 }
-                className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg
-                         text-dark-200 cursor-pointer hover:border-dark-600 transition-colors
+                className="flex-1 px-4 py-2.5 bg-secondary border border-border rounded-xl
+                         text-text cursor-pointer hover:border-border transition-colors
                          flex items-center justify-between group"
               >
                 <span className="font-mono">
                   {formatHotkey(config.hands_free_hotkey || "None")}
                 </span>
-                <span className="text-xs text-dark-500 group-hover:text-accent-400 transition-colors">
+                <span className="text-xs text-tertiary group-hover:text-primary transition-colors">
                   Click to edit
                 </span>
               </div>
 
               {saving === "handsFree" && (
-                <span className="flex items-center text-sm text-dark-500">
+                <span className="flex items-center text-sm text-tertiary">
                   Saving...
                 </span>
               )}
               {success === "handsFree" && (
-                <span className="flex items-center text-sm text-idle">
+                <span className="flex items-center text-sm text-green-500">
                   ✓ Saved
                 </span>
               )}
@@ -1842,43 +1842,43 @@ export default function SettingsView() {
           </div>
         </section>
 
-        <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
-          <h3 className="text-lg font-medium text-dark-200 mb-4">
+        <section className="card p-6 brutal-card">
+          <h3 className="text-lg font-medium text-text mb-4">
             Speech Recognition Models
           </h3>
-          <p className="text-sm text-dark-500 mb-4">
+          <p className="text-sm text-tertiary mb-4">
             Download and manage Whisper models. Larger models are more accurate
             but slower.
           </p>
           <div className="space-y-3">
             {modelsLoading ? (
-              <p className="text-sm text-dark-500 text-center py-4">
+              <p className="text-sm text-tertiary text-center py-4">
                 Loading models...
               </p>
             ) : modelsError ? (
-              <div className="p-3 bg-red-900/20 border border-red-800 rounded-lg">
-                <p className="text-sm text-red-400">
+              <div className="p-3 bg-red-500/10 border border-red-500 rounded-xl">
+                <p className="text-sm text-red-500">
                   Failed to load models: {modelsError}
                 </p>
                 <button
                   onClick={loadModels}
-                  className="text-xs text-accent-400 mt-2 hover:underline"
+                  className="text-xs text-primary mt-2 hover:underline"
                 >
                   Retry
                 </button>
               </div>
             ) : models.length === 0 ? (
-              <p className="text-sm text-dark-500 text-center py-4">
+              <p className="text-sm text-tertiary text-center py-4">
                 No models available
               </p>
             ) : (
               models.map((model) => (
                 <div
                   key={model.name}
-                  className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${
                     config.whisper_model === model.name
-                      ? "bg-accent-600/10 border-accent-600"
-                      : "border-dark-800 hover:bg-dark-800/50"
+                      ? "bg-primary/10 border-primary"
+                      : "border-border hover:bg-secondary/50"
                   }`}
                 >
                   <div className="flex items-center gap-4">
@@ -1891,18 +1891,18 @@ export default function SettingsView() {
                         model.downloaded && handleModelSelect(model.name)
                       }
                       disabled={!model.downloaded || saving === "model"}
-                      className="w-4 h-4 text-accent-600 focus:ring-accent-600"
+                      className="w-4 h-4 text-primary focus:border-primary"
                     />
                     <div>
-                      <p className="text-dark-200 capitalize font-medium">
+                      <p className="text-text capitalize font-medium">
                         {model.name}
                         {config.whisper_model === model.name && (
-                          <span className="ml-2 text-xs text-accent-400">
+                          <span className="ml-2 text-xs text-primary">
                             (Active)
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-dark-500">
+                      <p className="text-sm text-tertiary">
                         {model.description} • {formatSize(model.size)}
                       </p>
                     </div>
@@ -1911,13 +1911,13 @@ export default function SettingsView() {
                   <div className="flex items-center gap-2">
                     {model.downloaded ? (
                       <>
-                        <span className="text-xs text-idle">✓ Downloaded</span>
+                        <span className="text-xs text-green-500">✓ Downloaded</span>
                         {config.whisper_model !== model.name && (
                           <button
                             onClick={() => {
                               startDeleteModel(model.name);
                             }}
-                            className="p-1.5 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                            className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
                             title="Delete model"
                           >
                             <svg
@@ -1938,18 +1938,18 @@ export default function SettingsView() {
                       </>
                     ) : downloading === model.name ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 bg-dark-700 rounded-full overflow-hidden">
+                        <div className="w-16 h-2 bg-tertiary rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-accent-500 transition-all duration-300"
+                            className="h-full bg-primary transition-all duration-300"
                             style={{ width: `${downloadProgress}%` }}
                           />
                         </div>
-                        <span className="text-xs text-dark-400 w-8">
+                        <span className="text-xs text-secondary w-8">
                           {downloadProgress}%
                         </span>
                         <button
                           onClick={handleCancelDownload}
-                          className="p-1 text-dark-500 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors"
+                          className="p-1 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
                           title="Cancel download"
                         >
                           <svg
@@ -1971,7 +1971,7 @@ export default function SettingsView() {
                       <button
                         onClick={() => handleDownloadModel(model.name)}
                         title={`Download ${model.name} model (${Math.round(model.size / 1024 / 1024)}MB)`}
-                        className="px-3 py-1.5 text-xs bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
+                        className="px-3 py-1.5 text-xs bg-primary hover:bg-primary text-white rounded-xl transition-colors"
                       >
                         Download
                       </button>
@@ -1984,11 +1984,11 @@ export default function SettingsView() {
         </section>
 
         {/* Mode */}
-        <section className="p-6 bg-dark-900 rounded-xl border border-dark-800">
-          <h3 className="text-lg font-medium text-dark-200 mb-4">
+        <section className="card p-6 brutal-card">
+          <h3 className="text-lg font-medium text-text mb-4">
             Transcription Mode
           </h3>
-          <p className="text-sm text-dark-500 mb-4">
+          <p className="text-sm text-tertiary mb-4">
             Choose how Gemini should refine your transcriptions.
           </p>
           <div className="flex gap-4">
@@ -1996,14 +1996,14 @@ export default function SettingsView() {
               onClick={() => handleModeChange("casual")}
               disabled={saving === "mode"}
               title="Use casual, conversational tone for transcriptions"
-              className={`flex-1 p-4 rounded-lg border transition-colors ${
+              className={`flex-1 p-4 rounded-xl border transition-colors ${
                 config.mode === "casual"
-                  ? "bg-accent-600/10 border-accent-600"
-                  : "border-dark-800 hover:bg-dark-800"
+                  ? "bg-primary/10 border-primary"
+                  : "border-border hover:bg-secondary"
               }`}
             >
-              <p className="font-medium text-dark-200">Casual</p>
-              <p className="text-sm text-dark-500 mt-1">
+              <p className="font-medium text-text">Casual</p>
+              <p className="text-sm text-tertiary mt-1">
                 Conversational, natural
               </p>
             </button>
@@ -2011,14 +2011,14 @@ export default function SettingsView() {
               onClick={() => handleModeChange("formal")}
               disabled={saving === "mode"}
               title="Use professional, polished tone for transcriptions"
-              className={`flex-1 p-4 rounded-lg border transition-colors ${
+              className={`flex-1 p-4 rounded-xl border transition-colors ${
                 config.mode === "formal"
-                  ? "bg-accent-600/10 border-accent-600"
-                  : "border-dark-800 hover:bg-dark-800"
+                  ? "bg-primary/10 border-primary"
+                  : "border-border hover:bg-secondary"
               }`}
             >
-              <p className="font-medium text-dark-200">Formal</p>
-              <p className="text-sm text-dark-500 mt-1">
+              <p className="font-medium text-text">Formal</p>
+              <p className="text-sm text-tertiary mt-1">
                 Professional, polished
               </p>
             </button>
@@ -2029,13 +2029,13 @@ export default function SettingsView() {
       {/* Delete Confirmation Modal */}
       {modelToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-dark-900 border border-dark-700 rounded-xl p-6 w-full max-w-sm shadow-xl transform transition-all scale-100 opacity-100">
-            <h3 className="text-lg font-medium text-dark-100 mb-2">
+          <div className="bg-background border border-border rounded-[2rem] p-6 w-full max-w-sm shadow-xl transform transition-all scale-100 opacity-100">
+            <h3 className="text-lg font-medium text-text mb-2">
               Delete Model?
             </h3>
-            <p className="text-dark-400 text-sm mb-6">
+            <p className="text-secondary text-sm mb-6">
               Are you sure you want to delete the{" "}
-              <span className="text-dark-200 font-semibold">
+              <span className="text-text font-semibold">
                 {modelToDelete}
               </span>{" "}
               model? You will need to download it again to use it.
@@ -2043,13 +2043,13 @@ export default function SettingsView() {
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setModelToDelete(null)}
-                className="px-4 py-2 text-sm text-dark-300 hover:text-dark-100 transition-colors"
+                className="px-4 py-2 text-sm text-secondary hover:text-text transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDeleteModel}
-                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors font-medium"
+                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors font-medium"
               >
                 Delete
               </button>

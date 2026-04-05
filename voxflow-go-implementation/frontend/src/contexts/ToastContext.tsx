@@ -18,16 +18,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMiniMode, setIsMiniMode] = useState(false);
 
-  // Use a ref to track if we've initialized listeners to prevent duplicate registration
-  // in strict mode dev environments, though typically useEffect dependency array handles this.
-
   React.useEffect(() => {
-    // Check initial state
     import("../../wailsjs/go/main/App").then(({ IsMiniMode }) => {
       IsMiniMode().then(setIsMiniMode);
     });
 
-    // Listen for mode changes
     import("../../wailsjs/runtime/runtime").then(({ EventsOn }) => {
       EventsOn(Events.MiniMode, (isMini: boolean) => {
         setIsMiniMode(isMini);
@@ -39,13 +34,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const showToast = useCallback(
     (message: string, type: Toast["type"] = "error") => {
-      // Deduplicate: Don't show if same message already exists
       setToasts((prev) => {
         if (prev.some((t) => t.message === message)) {
           return prev;
         }
 
-        // Mini-mode text shortening
         let finalMessage = message;
         if (isMiniMode && message.includes("No speech detected")) {
           finalMessage = "No Speech Detected";
@@ -54,7 +47,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         const id = nextId++;
         const newToasts = [...prev, { id, message: finalMessage, type }];
 
-        // Auto-dismiss
         setTimeout(() => {
           setToasts((current) => current.filter((t) => t.id !== id));
         }, 3000);
@@ -78,46 +70,33 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none p-1">
           {toasts.length > 0 && (
             <div
-              key={toasts[toasts.length - 1].id} // Only show latest
+              key={toasts[toasts.length - 1].id}
               className={`
-                 pointer-events-auto rounded-full px-4 py-1 shadow-2xl animate-scale-in
-                 flex items-center gap-2 max-w-[95%]
-                 border border-white/10 backdrop-blur-md
+                 pointer-events-auto rounded-xl px-4 py-2 shadow-soft-md animate-scale-in
+                 flex items-center gap-2 max-w-[95%] border
                  ${
                    toasts[toasts.length - 1].type === "error"
-                     ? "bg-red-500/20 text-red-100 border-red-500/30"
+                     ? "bg-red-500/20 text-white border-red-500/40"
                      : ""
                  }
                  ${
                    toasts[toasts.length - 1].type === "warning"
-                     ? "bg-amber-500/20 text-amber-100 border-amber-500/30"
+                     ? "bg-amber-500/20 text-white border-amber-500/40"
                      : ""
                  }
                  ${
                    toasts[toasts.length - 1].type === "success"
-                     ? "bg-emerald-500/20 text-emerald-100 border-emerald-500/30"
+                     ? "bg-emerald-500/20 text-white border-emerald-500/40"
                      : ""
                  }
                  ${
                    toasts[toasts.length - 1].type === "info"
-                     ? "bg-blue-500/20 text-blue-100 border-blue-500/30"
+                     ? "bg-blue-500/20 text-white border-blue-500/40"
                      : ""
                  }
                `}
-              style={{
-                background:
-                  toasts[toasts.length - 1].type === "error"
-                    ? "rgba(220, 38, 38, 0.25)"
-                    : toasts[toasts.length - 1].type === "warning"
-                      ? "rgba(245, 158, 11, 0.25)"
-                      : toasts[toasts.length - 1].type === "success"
-                        ? "rgba(16, 185, 129, 0.25)"
-                        : "rgba(59, 130, 246, 0.25)",
-                boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.3)",
-              }}
               onClick={() => dismissToast(toasts[toasts.length - 1].id)}
             >
-              {/* Icon */}
               <div className="flex-shrink-0">
                 {toasts[toasts.length - 1].type === "warning" && (
                   <svg
@@ -181,7 +160,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 )}
               </div>
 
-              <p className="text-[10px] font-bold leading-tight text-center drop-shadow-sm">
+              <p className="text-xs font-bold leading-tight text-center">
                 {toasts[toasts.length - 1].message}
               </p>
 
@@ -210,18 +189,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toast.id}
               className={`
-                pointer-events-auto max-w-sm p-4 rounded-xl shadow-lg
-                animate-fade-in backdrop-blur-md
-                ${toast.type === "error" ? "bg-red-500/90 text-white" : ""}
-                ${toast.type === "warning" ? "bg-amber-500/90 text-white" : ""}
+                pointer-events-auto max-w-sm p-4 rounded-xl shadow-soft-md animate-scale-in border
+                ${toast.type === "error" ? "bg-red-500/10 text-text border-red-500/30" : ""}
+                ${toast.type === "warning" ? "bg-amber-500/10 text-text border-amber-500/30" : ""}
                 ${
-                  toast.type === "success" ? "bg-emerald-500/90 text-white" : ""
+                  toast.type === "success" ? "bg-emerald-500/10 text-text border-emerald-500/30" : ""
                 }
-                ${toast.type === "info" ? "bg-blue-500/90 text-white" : ""}
+                ${toast.type === "info" ? "bg-blue-500/10 text-text border-blue-500/30" : ""}
               `}
             >
               <div className="flex items-start gap-3">
-                {/* Icon */}
                 <div className="flex-shrink-0">
                   {toast.type === "error" && (
                     <svg
@@ -285,10 +262,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
 
-                {/* Message */}
-                <p className="text-sm font-medium flex-1">{toast.message}</p>
+                <p className="text-sm font-bold flex-1">{toast.message}</p>
 
-                {/* Dismiss button */}
                 <button
                   onClick={() => dismissToast(toast.id)}
                   className="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"

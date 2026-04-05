@@ -17,14 +17,12 @@ export default function ModelDownloader({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if already downloaded
     IsModelDownloaded().then((downloaded) => {
       if (downloaded) {
         onDownloadComplete();
       }
     });
 
-    // Listen for download progress
     EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
       setProgress(Math.round(data.progress));
     });
@@ -58,10 +56,10 @@ export default function ModelDownloader({
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 flex items-center justify-center p-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-8">
       <div className="max-w-md w-full text-center">
         {/* Logo/Icon */}
-        <div className="w-20 h-20 mx-auto mb-8 rounded-2xl bg-gradient-to-br from-accent-500 to-accent-700 flex items-center justify-center shadow-lg shadow-accent-900/50">
+        <div className="w-20 h-20 mx-auto mb-8 rounded-2xl bg-primary flex items-center justify-center shadow-soft-md">
           <svg
             className="w-10 h-10 text-white"
             fill="currentColor"
@@ -72,20 +70,20 @@ export default function ModelDownloader({
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-dark-100 mb-2">
+        <h1 className="text-2xl font-bold text-text mb-2">
           Welcome to voxflow
         </h1>
-        <p className="text-dark-400 mb-8">
+        <p className="text-secondary font-medium mb-8">
           AI-powered voice dictation that runs locally on your device.
         </p>
 
         {!downloading && !error && (
           <>
-            <div className="p-4 bg-dark-900 rounded-xl border border-dark-800 mb-6 text-left">
-              <h3 className="text-sm font-medium text-dark-200 mb-2">
+            <div className="p-4 bg-secondary rounded-xl border border-border mb-6 text-left">
+              <h3 className="text-sm font-bold text-text mb-2">
                 Before you start
               </h3>
-              <p className="text-sm text-dark-500">
+              <p className="text-sm text-secondary font-medium">
                 voxflow needs to download a speech recognition model (~142 MB
                 for Base model). The model runs completely offline on your
                 device for maximum privacy.
@@ -94,8 +92,7 @@ export default function ModelDownloader({
 
             <button
               onClick={handleDownload}
-              className="w-full py-3 px-6 bg-accent-600 hover:bg-accent-500 text-white 
-                       font-medium rounded-xl transition-colors shadow-lg shadow-accent-900/30"
+              className="btn-primary w-full"
             >
               Download Model & Get Started
             </button>
@@ -104,23 +101,22 @@ export default function ModelDownloader({
 
         {downloading && (
           <div className="space-y-4">
-            <div className="p-4 bg-dark-900 rounded-xl border border-dark-800">
-              <p className="text-sm text-dark-400 mb-3">
+            <div className="p-4 bg-secondary rounded-xl border border-border">
+              <p className="text-sm text-secondary font-medium mb-3">
                 Downloading Whisper model...
               </p>
 
               {/* Progress bar */}
-              <div className="h-2 bg-dark-800 rounded-full overflow-hidden">
+              <div className="progress-bar">
                 <div
-                  className="h-full bg-gradient-to-r from-accent-600 to-accent-400 transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
 
-              <p className="text-sm text-dark-500 mt-2">{progress}%</p>
+              <p className="text-sm text-tertiary font-bold mt-2">{progress}%</p>
             </div>
 
-            <p className="text-xs text-dark-600">
+            <p className="text-xs text-tertiary font-medium">
               This may take a few minutes depending on your connection.
             </p>
           </div>
@@ -128,14 +124,13 @@ export default function ModelDownloader({
 
         {error && (
           <div className="space-y-4">
-            <div className="p-4 bg-red-900/20 border border-red-800 rounded-xl">
-              <p className="text-sm text-red-400">{error}</p>
+            <div className="p-4 bg-red-500/10 border border-red-500 rounded-xl">
+              <p className="text-sm font-bold text-red-500">{error}</p>
             </div>
 
             <button
               onClick={handleDownload}
-              className="w-full py-3 px-6 bg-dark-800 hover:bg-dark-700 text-dark-200 
-                       font-medium rounded-xl transition-colors"
+              className="btn-secondary w-full"
             >
               Retry Download
             </button>

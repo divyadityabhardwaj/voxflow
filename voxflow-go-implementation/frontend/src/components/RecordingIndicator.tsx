@@ -25,8 +25,6 @@ export default function RecordingIndicator() {
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
 
-  // Keep the mini window compact while recording/processing.
-  // Hover reveals the extra controls (drag + expand).
   const uiExpanded = hovered;
   const showStatusLabel = status !== "Idle";
 
@@ -99,12 +97,12 @@ export default function RecordingIndicator() {
 
   const statusBorder =
     status === "Recording"
-      ? "1px solid var(--recording)"
+      ? "4px solid var(--recording)"
       : status === "Processing"
-        ? "1px solid var(--processing)"
+        ? "4px solid var(--processing)"
         : isDark
-          ? "1px solid rgba(255, 255, 255, 0.10)"
-          : "1px solid rgba(0, 0, 0, 0.08)";
+          ? "4px solid rgba(255, 255, 255, 0.10)"
+          : "4px solid rgba(0, 0, 0, 0.08)";
 
   const statusGlow =
     status === "Recording"
@@ -157,7 +155,6 @@ export default function RecordingIndicator() {
           }}
         />
       ))}
-      {/* Keep loader/animation subtle (not flashy). */}
       <style>{`
         @keyframes wave { 0%, 100% { height: 4px; } 50% { height: 18px; } }
         @keyframes waveCompact { 0%, 100% { height: 3px; } 50% { height: 12px; } }
@@ -180,12 +177,11 @@ export default function RecordingIndicator() {
             WebkitBackdropFilter: "blur(12px)",
             border: statusBorder,
             boxShadow: statusGlow,
-            // Let Wails treat this as draggable; internal buttons override to no-drag.
             "--wails-draggable": "drag",
           } as unknown as CSSProperties
         }
       >
-        {/* Left: Record button + label (expanded only) */}
+        {/* Left: Record button + label */}
         <div className="flex items-center gap-2 min-w-0">
           <div
             className="flex-none w-10 h-10 flex items-center justify-center cursor-pointer no-drag"
@@ -234,7 +230,7 @@ export default function RecordingIndicator() {
           >
             {status === "Recording" && (
               <div
-                className="text-[11px] font-medium whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[11px] font-black uppercase tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--recording)" }}
               >
                 Recording
@@ -242,7 +238,7 @@ export default function RecordingIndicator() {
             )}
             {status === "Processing" && (
               <div
-                className="text-[11px] font-medium whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[11px] font-black uppercase tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--processing)" }}
               >
                 Processing
@@ -273,7 +269,7 @@ export default function RecordingIndicator() {
           </div>
         </div>
 
-        {/* Right: Expand (expanded only) + Quit (always) */}
+        {/* Right: Expand + Quit */}
         <div className="flex-none flex items-center gap-2">
           <div
             className={`transition-all duration-200 ease-out overflow-hidden ${

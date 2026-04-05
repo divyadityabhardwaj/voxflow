@@ -24,24 +24,24 @@ export default function ConfirmModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-dark-900 border border-dark-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
-        <h3 className="text-lg font-semibold text-dark-100 mb-2">{title}</h3>
-        <p className="text-sm text-dark-400 mb-6">{message}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-background border-2 border-border rounded-[1.5rem] p-5 w-full max-w-md shadow-soft-lg animate-scale-in">
+        <h3 className="text-lg font-bold text-text mb-2">{title}</h3>
+        <p className="text-sm text-secondary font-medium mb-5">{message}</p>
 
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm text-dark-300 hover:text-dark-100 hover:bg-dark-800 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-bold text-text hover:bg-secondary rounded-xl transition-colors"
           >
             {cancelText}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+            className={`px-4 py-2 text-sm font-bold rounded-xl transition-all ${
               isDestructive
-                ? "bg-red-600 hover:bg-red-500 text-white"
-                : "bg-accent-600 hover:bg-accent-500 text-white"
+                ? "bg-red-500 hover:bg-red-400 text-white"
+                : "bg-primary hover:bg-accent-hover text-white"
             }`}
           >
             {confirmText}
