@@ -8,7 +8,7 @@ VoxFlow is a macOS-optimized voice-to-text tool that captures your voice, transc
 
 1.  **Global Capture**: A system-wide hotkey (`Cmd+Shift+V`) triggers the recording state.
 2.  **Audio Processing**: The app captures system audio via PortAudio and saves it as a high-fidelity WAV file.
-3.  **Local Transcription**: The audio is processed locally using `whisper.cpp`. No voice data leaves your machine.
+3.  **Local Transcription**: The audio is processed locally using `whisper.cpp` with streaming transcription, chunk processing, and real-time updates. No voice data leaves your machine.
 4.  **AI refinement**: The raw text is sent to an LLM (Gemini, Groq, OpenRouter, or Local GGUF) for punctuation, filler removal, and style formatting.
 5.  **Smart Injection**: The polished text is automatically injected into the active application's cursor position using AppleScript.
 
@@ -37,7 +37,7 @@ VoxFlow is a macOS-optimized voice-to-text tool that captures your voice, transc
 
 - **Framework**: [Wails v2](https://wails.io/) (Go backend, Web frontend)
 - **Frontend**: React + TypeScript + Tailwind CSS
-- **STT Engine**: [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (Local, high-performance C++)
+- **STT Engine**: [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (Local, high-performance C++ with streaming transcription, thread autotuning, and silence trimming)
 - **Refinement**: Google Gemini, Groq, OpenRouter, Cerebras, or local LLMs (Ollama/GGUF)
 - **Database**: SQLite (via `modernc.org/sqlite`)
 - **Injection**: AppleScript (for seamless system-level pasting)

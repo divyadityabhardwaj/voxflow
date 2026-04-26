@@ -30,9 +30,10 @@ VoxFlow acts as a system-level overlay. It works inside any application where yo
 
 ### 3. Key Productivity Features
 
-- **Styles & Tones**: Transform speech into specific formats (formal email, casual text, or structured lists).
+- **Streaming Transcription**: Real-time transcription with chunk processing and live feedback during recording.
 - **History Vault**: Access and search through past transcriptions with raw and polished views.
-- **Whisper Mode**: Highly sensitive local transcription that picks up quiet whispering for shared spaces.
+- **Optimized Performance**: Whisper thread autotuning, warm-up, and silence trimming for improved transcription accuracy and speed.
+- **Modernized Design**: Clean, compact UI with improved drag-handle implementation and intuitive controls.
 
 ## Troubleshooting
 
