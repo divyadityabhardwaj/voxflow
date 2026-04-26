@@ -19,6 +19,7 @@ interface Transcript {
   llm_model?: string;
   translation_time_ms?: number;
   tokens_per_second?: number;
+  words_per_second?: number;
 }
 
 export default function HistoryView() {
@@ -122,9 +123,7 @@ export default function HistoryView() {
       <div className="w-80 border-r-2 border-border flex flex-col bg-background">
         {/* Header */}
         <div className="p-4 border-b-2 border-border flex items-center justify-between">
-          <h2 className="font-serif text-lg font-bold text-text">
-            History
-          </h2>
+          <h2 className="font-serif text-lg font-bold text-text">History</h2>
           {transcripts.length > 0 && (
             <button
               onClick={handleClearAll}
@@ -177,7 +176,9 @@ export default function HistoryView() {
         {/* Transcript list */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-tertiary font-medium">Loading...</div>
+            <div className="p-4 text-center text-tertiary font-medium">
+              Loading...
+            </div>
           ) : transcripts.length === 0 ? (
             <div className="p-8 text-center text-tertiary">
               <svg
@@ -261,6 +262,18 @@ export default function HistoryView() {
                           t/s
                         </span>
                       )}
+                    {selectedTranscript.words_per_second !== undefined &&
+                      selectedTranscript.words_per_second > 0 && (
+                        <span
+                          title="End-to-end transcription speed"
+                          className="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-bold"
+                        >
+                          {(selectedTranscript.words_per_second * 60).toFixed(
+                            0,
+                          )}{" "}
+                          WPM
+                        </span>
+                      )}
                   </p>
                 )}
               </div>
@@ -287,32 +300,38 @@ export default function HistoryView() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {selectedTranscript.raw_text && selectedTranscript.raw_text !== selectedTranscript.polished_text && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-black text-text uppercase tracking-tighter">
-                      Original
-                    </h3>
-                    <button
-                      onClick={() => handleCopy(selectedTranscript.raw_text)}
-                      title="Copy original text to clipboard"
-                      className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
-                    >
-                      Copy
-                    </button>
+              {selectedTranscript.raw_text &&
+                selectedTranscript.raw_text !==
+                  selectedTranscript.polished_text && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs font-black text-text uppercase tracking-tighter">
+                        Original
+                      </h3>
+                      <button
+                        onClick={() => handleCopy(selectedTranscript.raw_text)}
+                        title="Copy original text to clipboard"
+                        className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div className="card p-4">
+                      <p className="text-secondary whitespace-pre-wrap leading-relaxed font-medium">
+                        {selectedTranscript.raw_text}
+                      </p>
+                    </div>
                   </div>
-                  <div className="card p-4">
-                    <p className="text-secondary whitespace-pre-wrap leading-relaxed font-medium">
-                      {selectedTranscript.raw_text}
-                    </p>
-                  </div>
-                </div>
-              )}
+                )}
 
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-black text-text uppercase tracking-tighter">
-                    {selectedTranscript.raw_text && selectedTranscript.raw_text !== selectedTranscript.polished_text ? "Polished" : "Result"}
+                    {selectedTranscript.raw_text &&
+                    selectedTranscript.raw_text !==
+                      selectedTranscript.polished_text
+                      ? "Polished"
+                      : "Result"}
                   </h3>
                   <button
                     onClick={() => handleCopy(selectedTranscript.polished_text)}

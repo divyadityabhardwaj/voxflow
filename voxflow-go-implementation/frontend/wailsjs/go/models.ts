@@ -12,6 +12,7 @@ export namespace history {
 	    llm_model: string;
 	    translation_time_ms: number;
 	    tokens_per_second: number;
+	    words_per_second: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Transcript(source);
@@ -29,6 +30,7 @@ export namespace history {
 	        this.llm_model = source["llm_model"];
 	        this.translation_time_ms = source["translation_time_ms"];
 	        this.tokens_per_second = source["tokens_per_second"];
+	        this.words_per_second = source["words_per_second"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

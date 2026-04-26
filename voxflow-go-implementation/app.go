@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	goruntime "runtime"
 	"strings"
 	"sync"
@@ -31,16 +32,21 @@ import (
 
 // Mini mode window sizes:
 // - collapsed is the minimal visible pill (record + quit only)
-// - expanded is the full control strip
+// - expanded is the hover-reveal control strip
 // Resizing the native window prevents a large transparent hit area.
 const (
-	miniModeCollapsedW = 110
-	miniModeCollapsedH = 60
-	miniModeExpandedW  = 200
-	miniModeExpandedH  = 60
+	miniModeCollapsedW = 84
+	miniModeCollapsedH = 44
+	miniModeExpandedW  = 140
+	miniModeExpandedH  = 44
 )
 
 var whisperNoiseMarkerRe = regexp.MustCompile(`(?i)(^|\s)[\[(](audio|music|applause|noise|silence)[\])](\s|$)`)
+
+type streamChunk struct {
+	Start time.Duration
+	Text  string
+}
 
 // App struct holds the application state
 type App struct {
@@ -73,6 +79,11 @@ type App struct {
 
 	miniResizeMu     sync.Mutex
 	miniResizeCancel context.CancelFunc
+
+	// Streaming transcription state
+	streamTextMu sync.Mutex
+	streamText   string        // Accumulated streaming text
+	streamChunks []streamChunk // Individual chunk results for merging
 }
 
 // NewApp creates a new App application struct
@@ -798,6 +809,9 @@ func (a *App) StartRecording() error {
 		return err
 	}
 
+	// Start streaming transcription (chunks processed in background)
+	a.StartStreamingTranscription()
+
 	// Mute all system audio while we record (browsers, games, Spotify, YouTube — everything).
 	// Run synchronously so savedVolume is always set before recording can be stopped.
 	// The osascript call takes ~50ms, which is imperceptible.
@@ -834,6 +848,87 @@ func (a *App) StopRecording() {
 	go a.processRecording()
 }
 
+// StartStreamingTranscription sets up chunk-based transcription during recording
+func (a *App) StartStreamingTranscription() {
+	a.streamTextMu.Lock()
+	a.streamText = ""
+	a.streamChunks = make([]streamChunk, 0)
+	a.streamTextMu.Unlock()
+
+	// Set up chunk callback for streaming transcription
+	a.audioRecorder.SetChunkCallback(func(samples []int16, startTime time.Duration, isFinal bool) {
+		if len(samples) < 1600 { // Less than 100ms of audio, skip
+			return
+		}
+
+		text, err := a.whisperService.TranscribeSamples(samples)
+		if err != nil || text == "" {
+			return
+		}
+
+		// Clean the text
+		text = cleanWhisperText(text)
+
+		// Emit for real-time display (frontend can show partial results)
+		a.streamTextMu.Lock()
+		a.streamChunks = append(a.streamChunks, streamChunk{Start: startTime, Text: text})
+		a.streamText = mergeStreamingChunks(a.streamChunks)
+		currentText := a.streamText
+		a.streamTextMu.Unlock()
+
+		// Emit partial result to frontend
+		runtime.EventsEmit(a.ctx, events.PartialTranscript, map[string]interface{}{
+			"text":      currentText,
+			"timestamp": time.Now().Unix(),
+		})
+	})
+}
+
+// mergeStreamingChunks combines chunks, removing overlapping/duplicate words
+func mergeStreamingChunks(chunks []streamChunk) string {
+	if len(chunks) == 0 {
+		return ""
+	}
+
+	ordered := make([]streamChunk, len(chunks))
+	copy(ordered, chunks)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return ordered[i].Start < ordered[j].Start
+	})
+
+	if len(ordered) == 1 {
+		return ordered[0].Text
+	}
+
+	// Simple merging: just concatenate with space
+	// More sophisticated merging could use word-level deduplication
+	// but Whisper's word-level timestamps would be needed for that
+	result := ordered[0].Text
+	for i := 1; i < len(ordered); i++ {
+		current := ordered[i].Text
+		if result != "" && current != "" {
+			// Check if last word of result equals first word of next chunk
+			resultWords := strings.Fields(result)
+			nextWords := strings.Fields(current)
+			if len(resultWords) > 0 && len(nextWords) > 0 {
+				lastWord := resultWords[len(resultWords)-1]
+				firstWord := nextWords[0]
+				if strings.ToLower(lastWord) == strings.ToLower(firstWord) {
+					// Skip the first word (it's a duplicate from overlap)
+					result += " " + strings.Join(nextWords[1:], " ")
+				} else {
+					result += " " + current
+				}
+			} else {
+				result += " " + current
+			}
+		} else if current != "" {
+			result += current
+		}
+	}
+	return strings.TrimSpace(result)
+}
+
 // processRecording handles the transcription and refinement pipeline
 func (a *App) processRecording() {
 	// Ensure system audio is always restored, even on panic
@@ -848,6 +943,16 @@ func (a *App) processRecording() {
 	}()
 
 	processingStartTime := time.Now()
+
+	// Get streaming text that was accumulated (for logging/display)
+	a.streamTextMu.Lock()
+	streamText := a.streamText
+	streamChunkCount := len(a.streamChunks)
+	a.streamTextMu.Unlock()
+
+	if streamChunkCount > 0 {
+		fmt.Printf("[App] Streaming transcription: %d chunks processed, %d chars accumulated\n", streamChunkCount, len(streamText))
+	}
 
 	var stopAndWavDuration time.Duration
 	var cleanTextDuration time.Duration
@@ -865,12 +970,14 @@ func (a *App) processRecording() {
 		a.resetToIdle()
 		return
 	}
+	defer a.audioRecorder.ClearChunkCallback()
 	if info, statErr := os.Stat(wavPath); statErr == nil {
 		wavBytes = info.Size()
 	}
 	defer os.Remove(wavPath) // Clean up temp file
 
-	// Transcribe with Whisper using the full recorded file.
+	// Final flush: transcribe full audio for accuracy
+	// (Streaming was running in parallel for real-time feel)
 	var rawText string
 	var whisperDuration time.Duration
 	maxRetries := 3
@@ -982,11 +1089,25 @@ func (a *App) processRecording() {
 		tps = float64(tokenCount) / (float64(timeMs) / 1000.0)
 	}
 
+	// Count words and calculate overall transcription speed.
+	wordCount := 0
+	if len(strings.Fields(polishedText)) > 0 {
+		wordCount = len(strings.Fields(polishedText))
+	}
+	totalProcessingTime := time.Since(processingStartTime)
+	totalTimeFromStart := audioDuration + totalProcessingTime
+	effectiveWPM := 0.0
+	effectiveWPS := 0.0
+	if totalTimeFromStart > 0 {
+		effectiveWPM = float64(wordCount) / totalTimeFromStart.Minutes()
+		effectiveWPS = float64(wordCount) / totalTimeFromStart.Seconds()
+	}
+
 	// Save to history (only polished text is shown, but we still save raw for potential future use)
 	var historyDuration time.Duration
 	if a.historyService != nil {
 		historyStart := time.Now()
-		_, err := a.historyService.Save("", rawText, polishedText, mode, llmProvider, llmModel, timeMs, tps)
+		_, err := a.historyService.Save("", rawText, polishedText, mode, llmProvider, llmModel, timeMs, tps, effectiveWPS)
 		historyDuration = time.Since(historyStart)
 		if err != nil {
 			fmt.Printf("Failed to save to history: %v\n", err)
@@ -1010,8 +1131,6 @@ func (a *App) processRecording() {
 
 	fmt.Printf("\n[App] LLM refined output (%d chars):\n%s\n", len(polishedText), polishedText)
 
-	totalProcessingTime := time.Since(processingStartTime)
-
 	// Create formatted output string
 	llmName := "Gemini"
 	if llmProvider == "openrouter" {
@@ -1023,14 +1142,6 @@ func (a *App) processRecording() {
 	} else if llmProvider == "local" {
 		llmName = "Local"
 	}
-	// Count words in polished text
-	wordCount := 0
-	if len(strings.Fields(polishedText)) > 0 {
-		wordCount = len(strings.Fields(polishedText))
-	}
-	// Calculate effective WPM (words per minute from start of recording to text ready)
-	totalTimeFromStart := audioDuration + totalProcessingTime
-	effectiveWPM := float64(wordCount) / totalTimeFromStart.Minutes()
 
 	output := fmt.Sprintf(
 		"\nProcessing Complete:\n"+
@@ -1042,6 +1153,7 @@ func (a *App) processRecording() {
 			"%s refinement:     %.2fs\n"+
 			"History DB write:      %.2fs\n"+
 			"Tokens per second:     %.1f t/s\n"+
+			"Words per second:      %.2f w/s\n"+
 			"Total processing:      %.2fs\n"+
 			"Effective WPM:        %.0f\n",
 		audioDuration.Seconds(),
@@ -1053,6 +1165,7 @@ func (a *App) processRecording() {
 		llmDuration.Seconds(),
 		historyDuration.Seconds(),
 		tps,
+		effectiveWPS,
 		totalProcessingTime.Seconds(),
 		effectiveWPM,
 	)
@@ -1063,10 +1176,11 @@ func (a *App) processRecording() {
 	a.hotkeyManager.SetState(hotkey.StateIdle)
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Idle")
 	runtime.EventsEmit(a.ctx, events.ProcessingComplete, map[string]interface{}{
-		"polished": polishedText,
-		"raw":      rawText,
-		"used_raw": okToGo,
-		"elapsed":  totalProcessingTime.Milliseconds(),
+		"polished":         polishedText,
+		"raw":              rawText,
+		"used_raw":         okToGo,
+		"elapsed":          totalProcessingTime.Milliseconds(),
+		"words_per_second": effectiveWPS,
 		"details": map[string]float64{
 			"audio":      audioDuration.Seconds(),
 			"stop_wav":   stopAndWavDuration.Seconds(),

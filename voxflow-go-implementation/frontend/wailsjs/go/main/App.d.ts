@@ -141,6 +141,8 @@ export function ShowMiniMode():Promise<void>;
 
 export function StartRecording():Promise<void>;
 
+export function StartStreamingTranscription():Promise<void>;
+
 export function StopRecording():Promise<void>;
 
 export function ToggleFullscreen():Promise<void>;

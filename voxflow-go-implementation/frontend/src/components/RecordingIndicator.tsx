@@ -26,7 +26,7 @@ export default function RecordingIndicator() {
   const { theme } = useTheme();
 
   const uiExpanded = hovered;
-  const showStatusLabel = status !== "Idle";
+  const showStatusLabel = status !== "Idle" && uiExpanded;
 
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
@@ -97,12 +97,12 @@ export default function RecordingIndicator() {
 
   const statusBorder =
     status === "Recording"
-      ? "4px solid var(--recording)"
+      ? "2px solid var(--recording)"
       : status === "Processing"
-        ? "4px solid var(--processing)"
+        ? "2px solid var(--processing)"
         : isDark
-          ? "4px solid rgba(255, 255, 255, 0.10)"
-          : "4px solid rgba(0, 0, 0, 0.08)";
+          ? "2px solid rgba(255, 255, 255, 0.08)"
+          : "2px solid rgba(0, 0, 0, 0.06)";
 
   const statusGlow =
     status === "Recording"
@@ -135,7 +135,7 @@ export default function RecordingIndicator() {
     compact?: boolean;
   }) => (
     <div
-      className={`flex items-center justify-center ${compact ? "gap-1 h-4" : "gap-[3px] h-5"}`}
+      className={`flex items-center justify-center ${compact ? "gap-[2px] h-3" : "gap-[3px] h-5"}`}
     >
       {[1, 2, 3, 4, 5].map((i) => (
         <div
@@ -144,20 +144,20 @@ export default function RecordingIndicator() {
           style={{
             background: active ? "#ffffff" : isDark ? "#e5e7eb" : "#111827",
             opacity: active ? 1 : 0.45,
-            height: active ? undefined : compact ? "3px" : "4px",
+            height: active ? undefined : compact ? "2px" : "4px",
             animation: active
               ? `${compact ? "waveCompact" : "wave"} ${
-                  compact ? "0.85s" : "1s"
+                  compact ? "0.8s" : "1s"
                 } ease-in-out infinite`
               : "none",
             animationDelay: `${i * 0.08}s`,
-            minHeight: compact ? "3px" : "4px",
+            minHeight: compact ? "2px" : "4px",
           }}
         />
       ))}
       <style>{`
         @keyframes wave { 0%, 100% { height: 4px; } 50% { height: 18px; } }
-        @keyframes waveCompact { 0%, 100% { height: 3px; } 50% { height: 12px; } }
+        @keyframes waveCompact { 0%, 100% { height: 2px; } 50% { height: 9px; } }
       `}</style>
     </div>
   );
@@ -169,12 +169,12 @@ export default function RecordingIndicator() {
       onMouseLeave={handlePointerLeave}
     >
       <div
-        className="w-full h-full flex flex-row items-center justify-between px-3 rounded-full transition-[box-shadow] duration-200 ease-out"
+        className="w-full h-full flex flex-row items-center justify-between px-1 rounded-full transition-[box-shadow] duration-150 ease-out"
         style={
           {
             background: statusBg,
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
             border: statusBorder,
             boxShadow: statusGlow,
             "--wails-draggable": "drag",
@@ -182,21 +182,17 @@ export default function RecordingIndicator() {
         }
       >
         {/* Left: Record button + label */}
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1 min-w-0">
           <div
-            className="flex-none w-10 h-10 flex items-center justify-center cursor-pointer no-drag"
+            className="flex-none w-7 h-7 flex items-center justify-center cursor-pointer no-drag"
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={handleRecordClick}
-            title={
-              status === "Idle"
-                  ? "Start Recording"
-                  : "Stop Recording"
-            }
+            title={status === "Idle" ? "Start Recording" : "Stop Recording"}
           >
-            <div className="rounded-full w-10 h-10 flex items-center justify-center transition-all duration-200">
+            <div className="rounded-full w-7 h-7 flex items-center justify-center transition-all duration-200">
               {status === "Processing" ? (
                 <svg
-                  className="w-5 h-5 animate-spin"
+                  className="w-3.5 h-3.5 animate-spin"
                   style={{ color: foregroundColor }}
                   fill="none"
                   viewBox="0 0 24 24"
@@ -216,7 +212,10 @@ export default function RecordingIndicator() {
                   ></path>
                 </svg>
               ) : (
-                <Waveform active={status === "Recording"} compact={!uiExpanded} />
+                <Waveform
+                  active={status === "Recording"}
+                  compact={!uiExpanded}
+                />
               )}
             </div>
           </div>
@@ -226,11 +225,11 @@ export default function RecordingIndicator() {
               showStatusLabel ? "opacity-100" : "opacity-0"
             }`}
             aria-hidden={!showStatusLabel}
-            style={{ maxWidth: uiExpanded ? 150 : 70 }}
+            style={{ maxWidth: uiExpanded ? 100 : 0 }}
           >
             {status === "Recording" && (
               <div
-                className="text-[11px] font-black uppercase tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--recording)" }}
               >
                 Recording
@@ -238,7 +237,7 @@ export default function RecordingIndicator() {
             )}
             {status === "Processing" && (
               <div
-                className="text-[11px] font-black uppercase tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--processing)" }}
               >
                 Processing
@@ -249,17 +248,17 @@ export default function RecordingIndicator() {
 
         {/* Middle: Drag handle */}
         <div
-          className={`flex-1 h-full flex items-center justify-center px-2 transition-all duration-200 ease-out overflow-hidden min-w-0 ${
+          className={`flex-1 h-full flex items-center justify-center px-0.5 transition-all duration-200 ease-out overflow-hidden min-w-0 ${
             uiExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
           <div
-            className="p-2 cursor-move opacity-50 hover:opacity-100 transition-opacity duration-200"
+            className="p-1 cursor-move opacity-50 hover:opacity-100 transition-opacity duration-200"
             style={{ "--wails-draggable": "drag" } as unknown as CSSProperties}
             title="Drag to move"
           >
             <svg
-              className="w-5 h-5 transform rotate-90"
+              className="w-3.5 h-3.5 transform rotate-90"
               style={{ color: foregroundColor }}
               fill="currentColor"
               viewBox="0 0 24 24"
@@ -270,20 +269,20 @@ export default function RecordingIndicator() {
         </div>
 
         {/* Right: Expand + Quit */}
-        <div className="flex-none flex items-center gap-2">
+        <div className="flex-none flex items-center gap-1">
           <div
             className={`transition-all duration-200 ease-out overflow-hidden ${
-              uiExpanded ? "opacity-100 w-8" : "opacity-0 w-0"
+              uiExpanded ? "opacity-100 w-[22px]" : "opacity-0 w-0"
             }`}
           >
             <div
-              className={`w-8 h-8 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
+              className={`w-[22px] h-[22px] flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
               style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
               onClick={handleExpandClick}
               title="Expand"
             >
               <svg
-                className="w-4 h-4 opacity-70"
+                className="w-2.5 h-2.5 opacity-70"
                 style={{ color: foregroundColor }}
                 fill="none"
                 viewBox="0 0 24 24"
@@ -300,13 +299,13 @@ export default function RecordingIndicator() {
           </div>
 
           <div
-            className={`w-8 h-8 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgQuit} transition-colors`}
+            className={`w-[22px] h-[22px] flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgQuit} transition-colors`}
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={handleQuitClick}
             title="Quit"
           >
             <svg
-              className="w-4 h-4 opacity-75 hover:opacity-100"
+              className="w-2.5 h-2.5 opacity-75 hover:opacity-100"
               style={{ color: foregroundColor }}
               fill="none"
               viewBox="0 0 24 24"

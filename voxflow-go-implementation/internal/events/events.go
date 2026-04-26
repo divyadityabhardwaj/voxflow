@@ -6,7 +6,8 @@ const (
 	RecordingStarted   = "recording-started"
 	RecordingStopped   = "recording-stopped"
 	ProcessingComplete = "processing-complete"
-	ResetToIdle        = "reset-to-idle" // Custom one if needed
+	ResetToIdle        = "reset-to-idle"      // Custom one if needed
+	PartialTranscript  = "partial-transcript" // Streaming transcription partial result
 
 	// Window Events
 	MiniMode = "mini-mode"

@@ -17,20 +17,25 @@ const (
 	SampleRate      = 16000 // Whisper expects 16kHz
 	Channels        = 1     // Mono
 	FramesPerBuffer = 1024
+	ChunkDuration   = 8 // seconds per chunk for streaming transcription
 )
+
+// ChunkCallback is called with audio chunks during recording
+type ChunkCallback func(samples []int16, startTime time.Duration, isFinal bool)
 
 // Recorder handles audio capture from the microphone
 type Recorder struct {
-	stream      *portaudio.Stream
-	buffer      []int16
-	mu          sync.Mutex
-	recording   atomic.Bool
-	stopChan    chan struct{}
-	stoppedChan chan struct{}
-	sampleRate  float64
-	initOnce    sync.Once
-	initErr     error
-	initialized atomic.Bool
+	stream        *portaudio.Stream
+	buffer        []int16
+	mu            sync.Mutex
+	recording     atomic.Bool
+	stopChan      chan struct{}
+	stoppedChan   chan struct{}
+	sampleRate    float64
+	initOnce      sync.Once
+	initErr       error
+	initialized   atomic.Bool
+	chunkCallback ChunkCallback
 }
 
 // NewRecorder creates a new audio recorder
@@ -39,6 +44,22 @@ func NewRecorder() *Recorder {
 		sampleRate: SampleRate,
 		buffer:     make([]int16, 0),
 	}
+}
+
+// SetChunkCallback sets a callback to receive audio chunks during recording.
+// Chunks are sent every ChunkDuration seconds while recording.
+// The isFinal flag is true when the chunk is the final one (recording stopped).
+func (r *Recorder) SetChunkCallback(callback ChunkCallback) {
+	r.mu.Lock()
+	r.chunkCallback = callback
+	r.mu.Unlock()
+}
+
+// ClearChunkCallback removes the chunk callback
+func (r *Recorder) ClearChunkCallback() {
+	r.mu.Lock()
+	r.chunkCallback = nil
+	r.mu.Unlock()
 }
 
 // Initialize initializes PortAudio
@@ -117,10 +138,26 @@ func (r *Recorder) Start() error {
 func (r *Recorder) readLoop(inputBuffer []int16) {
 	defer close(r.stoppedChan)
 
+	chunkSize := int(SampleRate) * ChunkDuration // samples per chunk
+	chunkBuffer := make([]int16, 0, chunkSize)
+	chunkStartTime := time.Duration(0)
+	hasCallback := false
+
 	for {
 		// Check if we should stop
 		select {
 		case <-r.stopChan:
+			// Send final chunk if we have one
+			if hasCallback && len(chunkBuffer) > 0 {
+				r.mu.Lock()
+				cb := r.chunkCallback
+				r.mu.Unlock()
+				if cb != nil {
+					samples := make([]int16, len(chunkBuffer))
+					copy(samples, chunkBuffer)
+					cb(samples, chunkStartTime, true)
+				}
+			}
 			return
 		default:
 		}
@@ -131,6 +168,7 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 
 		r.mu.Lock()
 		stream := r.stream
+		hasCallback = r.chunkCallback != nil
 		r.mu.Unlock()
 
 		if stream == nil {
@@ -149,13 +187,31 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 			continue
 		}
 
-		// Append to buffer
+		// Append to main buffer and chunk buffer
 		r.mu.Lock()
 		if r.recording.Load() {
 			// Make a copy to avoid data race
 			samples := make([]int16, len(inputBuffer))
 			copy(samples, inputBuffer)
 			r.buffer = append(r.buffer, samples...)
+			chunkBuffer = append(chunkBuffer, samples...)
+
+			// Check if chunk is ready
+			if hasCallback && len(chunkBuffer) >= chunkSize {
+				cb := r.chunkCallback
+				if cb != nil {
+					chunkSamples := make([]int16, chunkSize)
+					copy(chunkSamples, chunkBuffer[:chunkSize])
+					remaining := make([]int16, len(chunkBuffer)-chunkSize)
+					copy(remaining, chunkBuffer[chunkSize:])
+					chunkBuffer = remaining
+					// Send chunk asynchronously to not block
+					go func(s []int16, t time.Duration) {
+						cb(s, t, false)
+					}(chunkSamples, chunkStartTime)
+					chunkStartTime += time.Duration(ChunkDuration) * time.Second
+				}
+			}
 		}
 		r.mu.Unlock()
 	}

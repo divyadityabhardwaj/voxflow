@@ -501,6 +501,85 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 	return strings.TrimSpace(string(content)), nil
 }
 
+// TranscribeSamples transcribes raw audio samples using Whisper CLI
+func (s *Service) TranscribeSamples(samples []int16) (string, error) {
+	s.mu.RLock()
+	loaded := s.loaded
+	modelPath := s.modelPath
+	language := s.language
+	threads := s.threads
+	s.mu.RUnlock()
+
+	if !loaded {
+		return "", fmt.Errorf("model not loaded")
+	}
+
+	whisperBin := s.findWhisperBinary()
+	if whisperBin == "" {
+		return "", fmt.Errorf("whisper CLI binary not found")
+	}
+
+	// Write samples to temp WAV
+	wavPath, err := writeSamplesToWav(samples, 16000)
+	if err != nil {
+		return "", fmt.Errorf("failed to write WAV: %w", err)
+	}
+	defer os.Remove(wavPath)
+
+	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, "", language, threads)
+}
+
+// writeSamplesToWav writes int16 PCM mono samples to a temp WAV file
+func writeSamplesToWav(samples []int16, sampleRate int) (string, error) {
+	if len(samples) == 0 {
+		return "", fmt.Errorf("no samples")
+	}
+
+	tempDir := os.TempDir()
+	filename := fmt.Sprintf("voxflow_stream_%d.wav", time.Now().UnixNano())
+	filepath := filepath.Join(tempDir, filename)
+
+	file, err := os.Create(filepath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create WAV file: %w", err)
+	}
+	defer file.Close()
+
+	// Write WAV header
+	channels := 1
+	bitsPerSample := 16
+	byteRate := sampleRate * channels * bitsPerSample / 8
+	blockAlign := channels * bitsPerSample / 8
+	dataSize := len(samples) * 2
+	fileSize := 36 + dataSize
+
+	// RIFF header
+	file.Write([]byte("RIFF"))
+	binary.Write(file, binary.LittleEndian, int32(fileSize))
+	file.Write([]byte("WAVE"))
+
+	// fmt subchunk
+	file.Write([]byte("fmt "))
+	binary.Write(file, binary.LittleEndian, int32(16))            // Subchunk size
+	binary.Write(file, binary.LittleEndian, int16(1))             // Audio format (PCM)
+	binary.Write(file, binary.LittleEndian, int16(channels))      // Num channels
+	binary.Write(file, binary.LittleEndian, int32(sampleRate))    // Sample rate
+	binary.Write(file, binary.LittleEndian, int32(byteRate))      // Byte rate
+	binary.Write(file, binary.LittleEndian, int16(blockAlign))    // Block align
+	binary.Write(file, binary.LittleEndian, int16(bitsPerSample)) // Bits per sample
+
+	// data subchunk
+	file.Write([]byte("data"))
+	binary.Write(file, binary.LittleEndian, int32(dataSize))
+
+	// Write audio data
+	for _, sample := range samples {
+		binary.Write(file, binary.LittleEndian, sample)
+	}
+
+	return filepath, nil
+}
+
 // WarmUp runs a tiny transcription to warm model/runtime paths.
 func (s *Service) WarmUp() error {
 	s.mu.RLock()

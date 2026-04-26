@@ -22,6 +22,7 @@ type Transcript struct {
 	LLMModel          string    `json:"llm_model"`
 	TranslationTimeMs int64     `json:"translation_time_ms"`
 	TokensPerSecond   float64   `json:"tokens_per_second"`
+	WordsPerSecond    float64   `json:"words_per_second"`
 }
 
 // Service handles transcript storage and retrieval
@@ -76,7 +77,8 @@ func (s *Service) initDB() error {
 		llm_provider TEXT,
 		llm_model TEXT,
 		translation_time_ms INTEGER,
-		tokens_per_second REAL
+		tokens_per_second REAL,
+		words_per_second REAL
 	);
 	CREATE INDEX IF NOT EXISTS idx_timestamp ON transcripts(timestamp DESC);
 	`
@@ -91,6 +93,7 @@ func (s *Service) initDB() error {
 		"ALTER TABLE transcripts ADD COLUMN llm_model TEXT;",
 		"ALTER TABLE transcripts ADD COLUMN translation_time_ms INTEGER;",
 		"ALTER TABLE transcripts ADD COLUMN tokens_per_second REAL;",
+		"ALTER TABLE transcripts ADD COLUMN words_per_second REAL;",
 	}
 
 	for _, m := range migrations {
@@ -102,10 +105,10 @@ func (s *Service) initDB() error {
 }
 
 // Save saves a new transcript
-func (s *Service) Save(appName, rawText, polishedText, mode, provider, model string, timeMs int64, tps float64) (*Transcript, error) {
+func (s *Service) Save(appName, rawText, polishedText, mode, provider, model string, timeMs int64, tps, wps float64) (*Transcript, error) {
 	result, err := s.db.Exec(
-		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)",
-		appName, rawText, polishedText, mode, provider, model, timeMs, tps,
+		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		appName, rawText, polishedText, mode, provider, model, timeMs, tps, wps,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save transcript: %w", err)
@@ -122,7 +125,7 @@ func (s *Service) Save(appName, rawText, polishedText, mode, provider, model str
 // GetByID retrieves a transcript by ID
 func (s *Service) GetByID(id int64) (*Transcript, error) {
 	row := s.db.QueryRow(
-		"SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second FROM transcripts WHERE id = ?",
+		"SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE id = ?",
 		id,
 	)
 
@@ -130,8 +133,9 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 	var appName, polishedText, mode, provider, model sql.NullString
 	var timeMs sql.NullInt64
 	var tps sql.NullFloat64
+	var wps sql.NullFloat64
 
-	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps)
+	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps)
 	if err != nil {
 		var timestamp string
 		err = s.db.QueryRow("SELECT timestamp FROM transcripts WHERE id = ?", id).Scan(&timestamp)
@@ -149,13 +153,14 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 	t.LLMModel = model.String
 	t.TranslationTimeMs = timeMs.Int64
 	t.TokensPerSecond = tps.Float64
+	t.WordsPerSecond = wps.Float64
 
 	return t, nil
 }
 
 // GetAll retrieves all transcripts ordered by timestamp desc
 func (s *Service) GetAll(limit int) ([]*Transcript, error) {
-	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second FROM transcripts ORDER BY timestamp DESC"
+	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts ORDER BY timestamp DESC"
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
@@ -172,8 +177,9 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 		var appName, polishedText, mode, provider, model sql.NullString
 		var timeMs sql.NullInt64
 		var tps sql.NullFloat64
+		var wps sql.NullFloat64
 
-		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps)
+		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps)
 		if err != nil {
 			return nil, err
 		}
@@ -185,6 +191,7 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 		t.LLMModel = model.String
 		t.TranslationTimeMs = timeMs.Int64
 		t.TokensPerSecond = tps.Float64
+		t.WordsPerSecond = wps.Float64
 
 		transcripts = append(transcripts, t)
 	}
@@ -196,7 +203,7 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	searchQuery := "%" + query + "%"
 	sqlQuery := `
-		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second 
+		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second 
 		FROM transcripts 
 		WHERE raw_text LIKE ? OR polished_text LIKE ?
 		ORDER BY timestamp DESC
@@ -217,7 +224,8 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 		var appName, polishedText, mode, provider, model sql.NullString
 		var timeMs sql.NullInt64
 		var tps sql.NullFloat64
-		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps)
+		var wps sql.NullFloat64
+		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps)
 		if err != nil {
 			return nil, err
 		}
@@ -229,6 +237,7 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 		t.LLMModel = model.String
 		t.TranslationTimeMs = timeMs.Int64
 		t.TokensPerSecond = tps.Float64
+		t.WordsPerSecond = wps.Float64
 
 		transcripts = append(transcripts, t)
 	}

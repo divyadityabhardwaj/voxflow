@@ -274,6 +274,10 @@ export function StartRecording() {
   return window['go']['main']['App']['StartRecording']();
 }
 
+export function StartStreamingTranscription() {
+  return window['go']['main']['App']['StartStreamingTranscription']();
+}
+
 export function StopRecording() {
   return window['go']['main']['App']['StopRecording']();
 }
