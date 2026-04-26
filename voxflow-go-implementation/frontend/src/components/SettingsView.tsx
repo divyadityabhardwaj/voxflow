@@ -7,7 +7,6 @@ import {
   SetHandsFreeHotkey,
   SetPushToTalkHotkey,
   SetWhisperModel,
-  SetMode,
   GetAllModels,
   DownloadModelByName,
   DeleteModelByName,
@@ -47,7 +46,6 @@ interface Config {
   hotkey: string;
   whisper_model: string;
   gemini_model: string;
-  mode: string;
   api_key_set: boolean;
   llm_provider: string;
   openrouter_model: string;
@@ -790,19 +788,6 @@ export default function SettingsView() {
     }
   };
 
-  const handleModeChange = async (value: string) => {
-    setSaving("mode");
-    try {
-      await SetMode(value);
-      setConfig((prev) => (prev ? { ...prev, mode: value } : null));
-      showSuccess("mode");
-    } catch (err) {
-      console.error("Failed to save mode:", err);
-    } finally {
-      setSaving(null);
-    }
-  };
-
   const formatSize = (bytes: number) => {
     if (bytes >= 1024 * 1024 * 1024) {
       return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
@@ -813,7 +798,9 @@ export default function SettingsView() {
   if (!config) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <p className="text-tertiary font-bold uppercase tracking-tighter">Loading settings...</p>
+        <p className="text-tertiary font-bold uppercase tracking-tighter">
+          Loading settings...
+        </p>
       </div>
     );
   }
@@ -1090,7 +1077,9 @@ export default function SettingsView() {
           {/* Gemini API Key Section */}
           {(config.llm_provider === "gemini" || !config.llm_provider) && (
             <div className="pt-6 border-t-4 border-border">
-              <h4 className="font-black text-lg uppercase tracking-tighter text-text mb-4">Gemini API Key</h4>
+              <h4 className="font-black text-lg uppercase tracking-tighter text-text mb-4">
+                Gemini API Key
+              </h4>
               <p className="text-sm text-tertiary mb-4 font-bold">
                 Get your API key from{" "}
                 <a
@@ -1141,11 +1130,15 @@ export default function SettingsView() {
               {config.api_key_set && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-black text-lg uppercase tracking-tighter text-text">Gemini Model</h4>
+                    <h4 className="font-black text-lg uppercase tracking-tighter text-text">
+                      Gemini Model
+                    </h4>
                   </div>
 
                   {geminiModelsLoading ? (
-                    <p className="text-sm text-tertiary font-bold">Loading models...</p>
+                    <p className="text-sm text-tertiary font-bold">
+                      Loading models...
+                    </p>
                   ) : geminiModelsError ? (
                     <div className="text-sm text-red-500 font-bold">
                       {geminiModelsError}
@@ -1272,9 +1265,7 @@ export default function SettingsView() {
           {/* OpenRouter Section */}
           {config.llm_provider === "openrouter" && (
             <div className="pt-6 border-t border-border">
-              <h4 className="font-medium text-text mb-4">
-                OpenRouter API Key
-              </h4>
+              <h4 className="font-medium text-text mb-4">OpenRouter API Key</h4>
               <p className="text-sm text-tertiary mb-4">
                 Get your API key from{" "}
                 <a
@@ -1605,9 +1596,7 @@ export default function SettingsView() {
           {/* Cerebras Section */}
           {config.llm_provider === "cerebras" && (
             <div className="pt-6 border-t border-border">
-              <h4 className="font-medium text-text mb-4">
-                Cerebras API Key
-              </h4>
+              <h4 className="font-medium text-text mb-4">Cerebras API Key</h4>
               <p className="text-sm text-tertiary mb-4">
                 Get your API key from{" "}
                 <a
@@ -1911,7 +1900,9 @@ export default function SettingsView() {
                   <div className="flex items-center gap-2">
                     {model.downloaded ? (
                       <>
-                        <span className="text-xs text-green-500">✓ Downloaded</span>
+                        <span className="text-xs text-green-500">
+                          ✓ Downloaded
+                        </span>
                         {config.whisper_model !== model.name && (
                           <button
                             onClick={() => {
@@ -1982,48 +1973,6 @@ export default function SettingsView() {
             )}
           </div>
         </section>
-
-        {/* Mode */}
-        <section className="card p-6 brutal-card">
-          <h3 className="text-lg font-medium text-text mb-4">
-            Transcription Mode
-          </h3>
-          <p className="text-sm text-tertiary mb-4">
-            Choose how Gemini should refine your transcriptions.
-          </p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => handleModeChange("casual")}
-              disabled={saving === "mode"}
-              title="Use casual, conversational tone for transcriptions"
-              className={`flex-1 p-4 rounded-xl border transition-colors ${
-                config.mode === "casual"
-                  ? "bg-primary/10 border-primary"
-                  : "border-border hover:bg-secondary"
-              }`}
-            >
-              <p className="font-medium text-text">Casual</p>
-              <p className="text-sm text-tertiary mt-1">
-                Conversational, natural
-              </p>
-            </button>
-            <button
-              onClick={() => handleModeChange("formal")}
-              disabled={saving === "mode"}
-              title="Use professional, polished tone for transcriptions"
-              className={`flex-1 p-4 rounded-xl border transition-colors ${
-                config.mode === "formal"
-                  ? "bg-primary/10 border-primary"
-                  : "border-border hover:bg-secondary"
-              }`}
-            >
-              <p className="font-medium text-text">Formal</p>
-              <p className="text-sm text-tertiary mt-1">
-                Professional, polished
-              </p>
-            </button>
-          </div>
-        </section>
       </div>
 
       {/* Delete Confirmation Modal */}
@@ -2035,9 +1984,7 @@ export default function SettingsView() {
             </h3>
             <p className="text-secondary text-sm mb-6">
               Are you sure you want to delete the{" "}
-              <span className="text-text font-semibold">
-                {modelToDelete}
-              </span>{" "}
+              <span className="text-text font-semibold">{modelToDelete}</span>{" "}
               model? You will need to download it again to use it.
             </p>
             <div className="flex justify-end gap-3">

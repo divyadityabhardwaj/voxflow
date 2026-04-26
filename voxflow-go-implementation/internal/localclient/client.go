@@ -49,8 +49,8 @@ type usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-func (c *Client) RefineText(rawText string, model string, mode string) (string, int, bool, error) {
-	systemPrompt := llm.BuildSystemPrompt(mode)
+func (c *Client) RefineText(rawText string, model string) (string, int, bool, error) {
+	systemPrompt := llm.BuildSystemPrompt()
 	req := request{
 		Model: model,
 		Messages: []message{

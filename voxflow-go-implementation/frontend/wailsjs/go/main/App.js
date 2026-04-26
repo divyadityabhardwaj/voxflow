@@ -246,10 +246,6 @@ export function SetMiniModeExpanded(arg1) {
   return window['go']['main']['App']['SetMiniModeExpanded'](arg1);
 }
 
-export function SetMode(arg1) {
-  return window['go']['main']['App']['SetMode'](arg1);
-}
-
 export function SetOpenRouterAPIKey(arg1) {
   return window['go']['main']['App']['SetOpenRouterAPIKey'](arg1);
 }

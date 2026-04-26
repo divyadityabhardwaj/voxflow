@@ -55,8 +55,9 @@ func (c *Client) SetModel(modelName string) {
 
 // Request represents a Gemini API request
 type Request struct {
-	Contents         []Content        `json:"contents"`
-	GenerationConfig GenerationConfig `json:"generationConfig,omitempty"`
+	Contents          []Content         `json:"contents"`
+	SystemInstruction *Content          `json:"systemInstruction,omitempty"`
+	GenerationConfig  GenerationConfig  `json:"generationConfig,omitempty"`
 }
 
 // Content represents a message content
@@ -104,27 +105,28 @@ type APIError struct {
 
 // RefineText sends raw transcription to Gemini for refinement.
 // If ok_to_go is true, the caller should use rawText (second return is true).
-func (c *Client) RefineText(rawText string, mode string) (string, int, bool, error) {
+func (c *Client) RefineText(rawText string) (string, int, bool, error) {
 	fmt.Printf("[Gemini] Refining text: %s\n", rawText)
 	if c.apiKey == "" {
 		return "", 0, false, fmt.Errorf("API key not set")
 	}
 
-	// Build the system prompt based on mode
-	systemPrompt := llm.BuildSystemPrompt(mode)
+	systemPrompt := llm.BuildSystemPrompt()
 
-	// Create the request
+	// Create the request with proper system instruction separation
 	req := Request{
+		SystemInstruction: &Content{
+			Parts: []Part{{Text: systemPrompt}},
+		},
 		Contents: []Content{
 			{
-				Parts: []Part{
-					{Text: systemPrompt + "\n\nTranscription to refine:\n" + rawText},
-				},
+				Role:  "user",
+				Parts: []Part{{Text: rawText}},
 			},
 		},
 		GenerationConfig: GenerationConfig{
-			Temperature:     0.3, // Lower temperature for more consistent output
-			MaxOutputTokens: 2048,
+			Temperature:     0.2, // Lower temperature for more consistent output
+			MaxOutputTokens: 1024, // Reduced for typical voice transcription length
 		},
 	}
 

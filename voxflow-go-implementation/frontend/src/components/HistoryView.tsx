@@ -233,12 +233,6 @@ export default function HistoryView() {
                 <p className="text-xs text-tertiary font-medium">
                   {formatDate(selectedTranscript.timestamp)}
                 </p>
-                <p className="text-sm text-secondary mt-1 font-medium">
-                  Mode:{" "}
-                  <span className="capitalize">
-                    {selectedTranscript.mode || "casual"}
-                  </span>
-                </p>
                 {selectedTranscript.llm_provider && (
                   <p className="text-sm text-tertiary mt-2 flex items-center gap-2">
                     <span

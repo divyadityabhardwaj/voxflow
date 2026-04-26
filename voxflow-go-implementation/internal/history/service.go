@@ -105,10 +105,10 @@ func (s *Service) initDB() error {
 }
 
 // Save saves a new transcript
-func (s *Service) Save(appName, rawText, polishedText, mode, provider, model string, timeMs int64, tps, wps float64) (*Transcript, error) {
+func (s *Service) Save(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) (*Transcript, error) {
 	result, err := s.db.Exec(
 		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		appName, rawText, polishedText, mode, provider, model, timeMs, tps, wps,
+		appName, rawText, polishedText, "", provider, model, timeMs, tps, wps,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save transcript: %w", err)

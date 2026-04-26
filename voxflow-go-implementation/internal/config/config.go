@@ -18,7 +18,6 @@ type Config struct {
 	WhisperLanguage  string `json:"whisper_language"`    // fixed language for transcription (en)
 	WhisperThreads   int    `json:"whisper_threads"`     // 0 = auto
 	WhisperProfile   string `json:"whisper_profile"`     // machine+model profile key for autotuned threads
-	Mode             string `json:"mode"`                // casual, formal
 	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
 	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
 	MaximizedX       int    `json:"maximized_x"`         // Saved X position of maximized window
@@ -72,7 +71,6 @@ func GetInstance() *Config {
 			PushToTalkHotkey: "cmd+shift+p",
 			WhisperModel:     "base",
 			WhisperLanguage:  "en",
-			Mode:             "casual",
 		}
 		instance.Load()
 	})
@@ -122,9 +120,6 @@ func (c *Config) Load() error {
 	}
 	if c.WhisperThreads < 0 {
 		c.WhisperThreads = 0
-	}
-	if c.Mode == "" {
-		c.Mode = "casual"
 	}
 	if c.GeminiModel == "" {
 		c.GeminiModel = "gemini-1.5-flash"
@@ -309,20 +304,6 @@ func (c *Config) SetWhisperProfile(profile string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.WhisperProfile = profile
-}
-
-// GetMode returns the transcription mode
-func (c *Config) GetMode() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Mode
-}
-
-// SetMode sets the transcription mode
-func (c *Config) SetMode(mode string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.Mode = mode
 }
 
 // GetMiniModePosition returns the saved mini mode position

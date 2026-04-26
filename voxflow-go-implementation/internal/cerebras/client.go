@@ -171,12 +171,12 @@ func GetModelDescription(model string) string {
 }
 
 // RefineText sends raw transcription to Cerebras for refinement
-func (c *Client) RefineText(rawText string, model string, mode string) (string, int, bool, error) {
+func (c *Client) RefineText(rawText string, model string) (string, int, bool, error) {
 	if c.apiKey == "" {
 		return "", 0, false, fmt.Errorf("API key not set")
 	}
 
-	systemPrompt := llm.BuildSystemPrompt(mode)
+	systemPrompt := llm.BuildSystemPrompt()
 
 	req := Request{
 		Model: model,
