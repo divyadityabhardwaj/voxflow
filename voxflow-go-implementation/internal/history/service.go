@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"voxflow/internal/logger"
@@ -83,6 +84,8 @@ func (s *Service) initDB() error {
 		words_per_second REAL
 	);
 	CREATE INDEX IF NOT EXISTS idx_timestamp ON transcripts(timestamp DESC);
+	CREATE INDEX IF NOT EXISTS idx_raw_text ON transcripts(raw_text);
+	CREATE INDEX IF NOT EXISTS idx_polished_text ON transcripts(polished_text);
 	`
 	_, err := s.db.Exec(query)
 	if err != nil {
@@ -99,8 +102,13 @@ func (s *Service) initDB() error {
 	}
 
 	for _, m := range migrations {
-		// Ignore errors for migrations (column might already exist)
-		_, _ = s.db.Exec(m)
+		if _, err := s.db.Exec(m); err != nil {
+			// "duplicate column" is expected when the DB was already migrated — ignore it.
+			// Any other error (syntax error, constraint violation, etc.) is a real problem.
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("migration failed: %w\nSQL: %s", err, m)
+			}
+		}
 	}
 
 	return nil

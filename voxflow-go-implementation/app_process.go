@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -15,27 +14,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// captureTargetApp returns the bundle ID of the currently frontmost application.
-// This must be called BEFORE recording starts (i.e., before Voxflow steals focus),
-// so that text can be injected back into the correct app after processing.
-func (a *App) captureTargetApp() string {
-	script := `
-		tell application "System Events"
-			set frontApp to first application process whose frontmost is true
-			return bundle identifier of frontApp
-		end tell
-	`
-	cmd := exec.Command("osascript", "-e", script)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		logger.Errorf("[Injection] Failed to capture target app. Error: %v\nAppleScript Output: %s", err, string(out))
-		return ""
-	}
-	bundleID := strings.TrimSpace(string(out))
-	logger.Infof("[Injection] Target app bundle ID: %s", bundleID)
-	return bundleID
-}
-
 // onHotkeyPressed is called when the global hotkey is pressed
 func (a *App) onHotkeyPressed(state hotkey.State) {
 	a.state = state
@@ -43,9 +21,6 @@ func (a *App) onHotkeyPressed(state hotkey.State) {
 
 	switch state {
 	case hotkey.StateRecording:
-		// Capture the frontmost app bundle ID NOW — before Voxflow grabs focus during processing
-		// Focus gets taken shortly. We rely on the generic simulator.
-		// Only switch to mini mode if user hasn't explicitly maximized the app
 		if !a.userExplicitlyMaximized {
 			a.ShowMiniMode()
 		}
@@ -81,13 +56,15 @@ func (a *App) StartRecording() error {
 	// Start streaming transcription (chunks processed in background)
 	a.StartStreamingTranscription()
 
-	// Mute all system audio while we record (browsers, games, Spotify, YouTube — everything).
-	// Run synchronously so savedVolume is always set before recording can be stopped.
-	// The osascript call takes ~50ms, which is imperceptible.
-	vol := audio.MuteSystemAudio()
-	a.volumeMu.Lock()
-	a.savedVolume = vol
-	a.volumeMu.Unlock()
+	// Mute system audio asynchronously so the PortAudio stream starts capturing
+	// immediately — MuteSystemAudio calls osascript which takes ~50ms.
+	// Audio captured during that window is harmless silence at the very start.
+	go func() {
+		vol := audio.MuteSystemAudio()
+		a.volumeMu.Lock()
+		a.savedVolume = vol
+		a.volumeMu.Unlock()
+	}()
 
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Recording")
 	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
@@ -360,19 +337,23 @@ func (a *App) processRecording() {
 		}
 	}
 
-	// Always copy to clipboard first, then inject at cursor
+	// Copy to clipboard asynchronously (fast, non-blocking).
 	if a.injectionService != nil {
-		// Run in goroutine to not block timing log if clipboard is slow (unlikely but safe)
 		go func() {
-			a.injectionService.CopyToClipboard(polishedText)
+			_ = a.injectionService.CopyToClipboard(polishedText)
 			logger.Infof("Text copied to clipboard")
-
-			// Inject at cursor using CoreGraphics CGEventPost
-			if err := a.injectionService.Inject(polishedText); err != nil {
-				logger.Warnf("Could not inject text (no active cursor?): %v", err)
-				a.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
-			}
 		}()
+	}
+
+	// Inject text synchronously BEFORE emitting ProcessingComplete.
+	// This ensures the UI state flips to "Done" only after the text is actually
+	// in the target app — preventing a race where the user starts typing
+	// while injection is still pending.
+	if a.injectionService != nil {
+		if err := a.injectionService.Inject(polishedText); err != nil {
+			logger.Warnf("Could not inject text (no active cursor?): %v", err)
+			a.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
+		}
 	}
 
 	logger.Debugf("[App] LLM refined output (%d chars):\n%s", len(polishedText), polishedText)
