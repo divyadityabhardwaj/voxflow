@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"voxflow/internal/logger"
 )
 
 // Model sizes and their download URLs (Hugging Face)
@@ -301,7 +303,7 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("failed to finalize model file: %w", err)
 	}
 
-	fmt.Printf("[Whisper] Model %s downloaded successfully (%d bytes)\n", modelSize, bytesWritten)
+	logger.Infof("[Whisper] Model %s downloaded successfully (%d bytes)", modelSize, bytesWritten)
 	return nil
 }
 
@@ -347,7 +349,7 @@ func CleanupPartialDownloads() error {
 	for _, entry := range entries {
 		if strings.HasSuffix(entry.Name(), ".tmp") {
 			tmpPath := filepath.Join(modelsDir, entry.Name())
-			fmt.Printf("[Whisper] Cleaning up partial download: %s\n", entry.Name())
+			logger.Infof("[Whisper] Cleaning up partial download: %s", entry.Name())
 			os.Remove(tmpPath)
 		}
 	}

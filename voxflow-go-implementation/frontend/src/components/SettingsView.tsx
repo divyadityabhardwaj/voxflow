@@ -27,12 +27,11 @@ import {
   SetCerebrasAPIKey,
   SetCerebrasModel,
   CheckCerebrasModel,
-  GetLocalModels,
-  DownloadLocalModel,
-  DeleteLocalModel,
-  CancelLocalModelDownload,
+  GetLocalURL,
+  SetLocalURL,
+  GetLocalModel,
   SetLocalModel,
-  GetActiveLocalDownload,
+  CheckLocalModel,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -55,6 +54,7 @@ interface Config {
   cerebras_model: string;
   cerebras_api_key_set: boolean;
 
+  local_url: string;
   local_model: string;
 }
 
@@ -107,11 +107,14 @@ export default function SettingsView() {
   const [cerebrasModelsLoading, setCerebrasModelsLoading] = useState(false);
   const [cerebrasApiKey, setCerebrasApiKey] = useState("");
 
-  // Local Models State
-  const [localModels, setLocalModels] = useState<ModelInfo[]>([]);
-  const [localModelsLoading, setLocalModelsLoading] = useState(true);
-  const [localDownloading, setLocalDownloading] = useState<string | null>(null);
-  const [localDownloadProgress, setLocalDownloadProgress] = useState(0);
+  // Local Server State
+  const [localURL, setLocalURL] = useState("http://localhost:11434");
+  const [localModel, setLocalModel] = useState("");
+  const [localCheckResult, setLocalCheckResult] = useState<{
+    latency: number;
+    tps: number;
+  } | null>(null);
+  const [localCheckError, setLocalCheckError] = useState<string | null>(null);
 
   // Model status (latency for each model)
   const [modelStatuses, setModelStatuses] = useState<
@@ -175,7 +178,6 @@ export default function SettingsView() {
   useEffect(() => {
     loadConfig();
     loadModels();
-    loadLocalModels();
     checkWhisperCLI();
     setModelStatuses({});
 
@@ -192,38 +194,6 @@ export default function SettingsView() {
       setDownloadProgress(0);
       loadModels();
     });
-
-    // Listen for local model download progress
-    EventsOn(
-      Events.LocalModelDownloadProgress,
-      (data: { model: string; progress: number }) => {
-        setLocalDownloadProgress(Math.round(data.progress));
-      },
-    );
-
-    EventsOn(Events.LocalModelDownloadComplete, () => {
-      setLocalDownloading(null);
-      setLocalDownloadProgress(0);
-      loadLocalModels();
-    });
-
-    EventsOn(
-      Events.LocalModelDownloadError,
-      (data: { model: string; error: string }) => {
-        console.error("Local model download error:", data.error);
-        setLocalDownloading(null);
-        setLocalDownloadProgress(0);
-        if (
-          data.error.includes("401") ||
-          data.error.includes("403") ||
-          data.error.includes("authentication")
-        ) {
-          alert(
-            "Download failed: authentication error. Please check the model source.",
-          );
-        }
-      },
-    );
   }, []);
 
   // Load Gemini models when config (and thus API key) is loaded
@@ -251,6 +221,8 @@ export default function SettingsView() {
     try {
       const cfg = await GetConfig();
       setConfig(cfg as Config);
+      setLocalURL((cfg as Config).local_url || "http://localhost:11434");
+      setLocalModel((cfg as Config).local_model || "");
     } catch (err) {
       console.error("Failed to load config:", err);
     }
@@ -320,33 +292,6 @@ export default function SettingsView() {
         latency: number;
         tps: number;
       };
-      console.log(
-        `Model ${model} is WORKING (${result.latency}ms, ${result.tps.toFixed(1)} t/s).`,
-      );
-      setModelStatuses((prev) => ({
-        ...prev,
-        [model]: { working: true, latency: result.latency, tps: result.tps },
-      }));
-    } catch (err) {
-      console.error(`Model ${model} check FAILED:`, err);
-      setModelStatuses((prev) => ({
-        ...prev,
-        [model]: { working: false },
-      }));
-    } finally {
-      setCheckingModel(null);
-    }
-  };
-
-  const checkLocalModelStatus = async (model: string) => {
-    setCheckingModel(model);
-    setModelStatuses((prev) => ({ ...prev, [model]: { checking: true } }));
-    console.log(`Checking status for Local model: ${model}...`);
-
-    try {
-      const result = (await (window as any).go.main.App.CheckLocalModel(
-        model,
-      )) as { latency: number; tps: number };
       console.log(
         `Model ${model} is WORKING (${result.latency}ms, ${result.tps.toFixed(1)} t/s).`,
       );
@@ -446,73 +391,6 @@ export default function SettingsView() {
     }
   };
 
-  const loadLocalModels = async () => {
-    setLocalModelsLoading(true);
-    try {
-      const activeDownload = (await GetActiveLocalDownload()) as string;
-      if (activeDownload) {
-        setLocalDownloading(activeDownload);
-      }
-
-      const modelList = await GetLocalModels();
-      console.log("Loaded local models:", modelList);
-
-      const sortedModels = (modelList || []).sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
-
-      setLocalModels(sortedModels);
-    } catch (err) {
-      console.error("Failed to load local models:", err);
-    } finally {
-      setLocalModelsLoading(false);
-    }
-  };
-
-  const handleDownloadLocalModel = async (modelName: string) => {
-    setLocalDownloading(modelName);
-    setLocalDownloadProgress(0);
-    try {
-      await DownloadLocalModel(modelName);
-    } catch (err) {
-      console.error("Failed to download local model:", err);
-      setLocalDownloading(null);
-    }
-  };
-
-  const handleCancelLocalDownload = async () => {
-    try {
-      await CancelLocalModelDownload();
-      setLocalDownloading(null);
-      setLocalDownloadProgress(0);
-    } catch (err) {
-      console.error("Failed to cancel local download:", err);
-    }
-  };
-
-  const handleDeleteLocalModel = async (modelName: string) => {
-    try {
-      await DeleteLocalModel(modelName);
-      loadLocalModels();
-    } catch (err) {
-      console.error("Failed to delete local model:", err);
-      alert(String(err));
-    }
-  };
-
-  const handleLocalModelSelect = async (modelName: string) => {
-    setSaving("localModel");
-    try {
-      await SetLocalModel(modelName);
-      setConfig((prev) => (prev ? { ...prev, local_model: modelName } : null));
-      showSuccess("localModel");
-    } catch (err) {
-      console.error("Failed to save local model:", err);
-    } finally {
-      setSaving(null);
-    }
-  };
-
   const checkWhisperCLI = async () => {
     try {
       const ready = await IsWhisperCLIReady();
@@ -588,6 +466,49 @@ export default function SettingsView() {
       console.error("Failed to save Cerebras API key:", err);
     } finally {
       setSaving(null);
+    }
+  };
+
+  const handleSaveLocalURL = async () => {
+    setSaving("localURL");
+    try {
+      await SetLocalURL(localURL);
+      setConfig((prev) => (prev ? { ...prev, local_url: localURL } : null));
+      showSuccess("localURL");
+    } catch (err) {
+      console.error("Failed to save local URL:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleSaveLocalModel = async () => {
+    setSaving("localModel");
+    try {
+      await SetLocalModel(localModel);
+      setConfig((prev) => (prev ? { ...prev, local_model: localModel } : null));
+      showSuccess("localModel");
+    } catch (err) {
+      console.error("Failed to save local model:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleCheckLocalModel = async () => {
+    setCheckingModel(localModel);
+    setLocalCheckResult(null);
+    setLocalCheckError(null);
+    try {
+      const result = (await CheckLocalModel(localModel)) as {
+        latency: number;
+        tps: number;
+      };
+      setLocalCheckResult(result);
+    } catch (err) {
+      setLocalCheckError(String(err));
+    } finally {
+      setCheckingModel(null);
     }
   };
 
@@ -915,160 +836,97 @@ export default function SettingsView() {
           {config.llm_provider === "local" && (
             <div className="pt-6 border-t-4 border-border">
               <h4 className="font-black text-lg uppercase tracking-tighter text-text mb-4">
-                Local Model (GGUF)
+                Local Server
               </h4>
               <p className="text-sm text-tertiary mb-4 font-bold">
-                Select and download models for local inference via Ollama. Runs
-                entirely on your device.
+                Point VoxFlow at any running OpenAI-compatible server (Ollama,
+                LM Studio, llama.cpp, etc.). Start your server separately and
+                enter its URL and model name below.
               </p>
-              <div className="space-y-3">
-                {localModelsLoading ? (
-                  <p className="text-sm text-tertiary text-center py-4 font-bold">
-                    Loading models...
-                  </p>
-                ) : localModels.length === 0 ? (
-                  <p className="text-sm text-tertiary text-center py-4 font-bold">
-                    No models available
-                  </p>
-                ) : (
-                  localModels.map((model) => (
-                    <div
-                      key={model.name}
-                      className={`flex items-center justify-between p-4 rounded-[2rem] border-4 transition-colors ${
-                        config.local_model === model.name
-                          ? "bg-primary/10 border-primary"
-                          : "border-border hover:bg-secondary"
-                      }`}
-                    >
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="radio"
-                          name="local_model"
-                          checked={config.local_model === model.name}
-                          onChange={() =>
-                            model.downloaded &&
-                            handleLocalModelSelect(model.name)
-                          }
-                          disabled={!model.downloaded}
-                          className="w-4 h-4 text-primary focus:ring-primary"
-                        />
-                        <div>
-                          <p className="text-text font-bold">
-                            {model.name}
-                            {config.local_model === model.name && (
-                              <span className="ml-2 text-xs text-primary font-black uppercase">
-                                (Active)
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-sm text-tertiary font-bold">
-                            {model.description}
-                            {model.size > 0 && ` • ${formatSize(model.size)}`}
-                          </p>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        {model.downloaded ? (
-                          <>
-                            <span className="text-xs text-emerald-500 font-bold">
-                              ✓ Downloaded
-                              {modelStatuses[model.name]?.working && (
-                                <span className="ml-1">
-                                  ({modelStatuses[model.name]?.latency}ms |{" "}
-                                  {modelStatuses[model.name]?.tps?.toFixed(1)}{" "}
-                                  t/s)
-                                </span>
-                              )}
-                              {checkingModel === model.name && (
-                                <span className="ml-1 text-tertiary animate-pulse font-bold">
-                                  (Checking...)
-                                </span>
-                              )}
-                              {modelStatuses[model.name]?.working === false &&
-                                !checkingModel && (
-                                  <span className="ml-1 text-red-500 font-bold">
-                                    (Error)
-                                  </span>
-                                )}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                checkLocalModelStatus(model.name);
-                              }}
-                              disabled={!!checkingModel}
-                              className="text-[10px] text-primary hover:text-primary/80 disabled:opacity-50 ml-1 font-bold uppercase"
-                            >
-                              Check
-                            </button>
-                            {config.local_model !== model.name && (
-                              <button
-                                onClick={() =>
-                                  handleDeleteLocalModel(model.name)
-                                }
-                                className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-[2rem] transition-colors border-2 border-transparent hover:border-red-400"
-                                title="Delete model"
-                              >
-                                <svg
-                                  className="w-4 h-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
-                            )}
-                          </>
-                        ) : localDownloading === model.name ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-2 bg-secondary rounded-full overflow-hidden border-2 border-border">
-                              <div
-                                className="h-full bg-primary transition-all duration-300"
-                                style={{ width: `${localDownloadProgress}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-tertiary w-8 font-bold">
-                              {localDownloadProgress}%
-                            </span>
-                            <button
-                              onClick={handleCancelLocalDownload}
-                              className="p-1 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-[2rem] transition-colors border-2 border-transparent hover:border-red-400"
-                              title="Cancel download"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M6 18L18 6M6 6l12 12"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleDownloadLocalModel(model.name)}
-                            disabled={!!localDownloading}
-                            className="px-3 py-1.5 text-xs bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-[2rem] border-4 border-primary/80 transition-colors font-bold uppercase tracking-tighter"
-                          >
-                            Download
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))
+              {/* Server URL */}
+              <div className="mb-4">
+                <label className="block text-xs font-black uppercase tracking-tighter text-tertiary mb-2">
+                  Server URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={localURL}
+                    onChange={(e) => setLocalURL(e.target.value)}
+                    placeholder="http://localhost:11434"
+                    className="flex-1 px-4 py-3 bg-secondary border-4 border-border rounded-[2rem] text-text font-bold text-sm focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    onClick={handleSaveLocalURL}
+                    disabled={saving === "localURL"}
+                    className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white rounded-[2rem] border-4 border-primary/80 font-black uppercase tracking-tighter text-xs transition-colors"
+                  >
+                    {saving === "localURL"
+                      ? "Saving…"
+                      : success === "localURL"
+                        ? "Saved ✓"
+                        : "Save"}
+                  </button>
+                </div>
+                <p className="text-xs text-tertiary mt-1 font-bold">
+                  Ollama default: http://localhost:11434 · LM Studio:
+                  http://localhost:1234
+                </p>
+              </div>
+
+              {/* Model Name */}
+              <div className="mb-4">
+                <label className="block text-xs font-black uppercase tracking-tighter text-tertiary mb-2">
+                  Model Name
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={localModel}
+                    onChange={(e) => setLocalModel(e.target.value)}
+                    placeholder="qwen3:8b"
+                    className="flex-1 px-4 py-3 bg-secondary border-4 border-border rounded-[2rem] text-text font-bold text-sm focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    onClick={handleSaveLocalModel}
+                    disabled={saving === "localModel"}
+                    className="px-4 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white rounded-[2rem] border-4 border-primary/80 font-black uppercase tracking-tighter text-xs transition-colors"
+                  >
+                    {saving === "localModel"
+                      ? "Saving…"
+                      : success === "localModel"
+                        ? "Saved ✓"
+                        : "Save"}
+                  </button>
+                </div>
+                <p className="text-xs text-tertiary mt-1 font-bold">
+                  Examples: qwen3:8b · llama3:8b · mistral · phi4 ·
+                  deepseek-r1:7b
+                </p>
+              </div>
+
+              {/* Test Connection */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCheckLocalModel}
+                  disabled={!localModel || !!checkingModel}
+                  className="px-4 py-2 bg-secondary hover:bg-border disabled:opacity-40 disabled:cursor-not-allowed text-text rounded-[2rem] border-4 border-border font-black uppercase tracking-tighter text-xs transition-colors"
+                >
+                  {checkingModel === localModel
+                    ? "Testing…"
+                    : "Test Connection"}
+                </button>
+                {localCheckResult && (
+                  <span className="text-xs text-emerald-500 font-black">
+                    ✓ {localCheckResult.latency}ms ·{" "}
+                    {localCheckResult.tps.toFixed(1)} t/s
+                  </span>
+                )}
+                {localCheckError && (
+                  <span className="text-xs text-red-500 font-black">
+                    ✗ {localCheckError}
+                  </span>
                 )}
               </div>
             </div>

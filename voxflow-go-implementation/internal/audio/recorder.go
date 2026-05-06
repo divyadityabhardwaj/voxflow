@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"voxflow/internal/logger"
+
 	"github.com/gordonklaus/portaudio"
 )
 
@@ -25,17 +27,19 @@ type ChunkCallback func(samples []int16, startTime time.Duration, isFinal bool)
 
 // Recorder handles audio capture from the microphone
 type Recorder struct {
-	stream        *portaudio.Stream
-	buffer        []int16
-	mu            sync.Mutex
-	recording     atomic.Bool
-	stopChan      chan struct{}
-	stoppedChan   chan struct{}
-	sampleRate    float64
-	initOnce      sync.Once
-	initErr       error
-	initialized   atomic.Bool
-	chunkCallback ChunkCallback
+	stream      *portaudio.Stream
+	buffer      []int16
+	mu          sync.Mutex // guards stream, buffer, and saveToWav
+	recording   atomic.Bool
+	stopChan    chan struct{}
+	stoppedChan chan struct{}
+	sampleRate  float64
+	initOnce    sync.Once
+	initErr     error
+	initialized atomic.Bool
+	// atomicCallback allows the readLoop to read the callback without taking mu.
+	// Stores a ChunkCallback (function type); nil means no callback set.
+	atomicCallback atomic.Value
 }
 
 // NewRecorder creates a new audio recorder
@@ -50,16 +54,22 @@ func NewRecorder() *Recorder {
 // Chunks are sent every ChunkDuration seconds while recording.
 // The isFinal flag is true when the chunk is the final one (recording stopped).
 func (r *Recorder) SetChunkCallback(callback ChunkCallback) {
-	r.mu.Lock()
-	r.chunkCallback = callback
-	r.mu.Unlock()
+	r.atomicCallback.Store(callback)
 }
 
-// ClearChunkCallback removes the chunk callback
+// ClearChunkCallback removes the chunk callback.
 func (r *Recorder) ClearChunkCallback() {
-	r.mu.Lock()
-	r.chunkCallback = nil
-	r.mu.Unlock()
+	r.atomicCallback.Store(ChunkCallback(nil))
+}
+
+// loadCallback returns the currently set ChunkCallback, or nil.
+func (r *Recorder) loadCallback() ChunkCallback {
+	if v := r.atomicCallback.Load(); v != nil {
+		if cb, ok := v.(ChunkCallback); ok {
+			return cb
+		}
+	}
+	return nil
 }
 
 // Initialize initializes PortAudio
@@ -134,29 +144,36 @@ func (r *Recorder) Start() error {
 	return nil
 }
 
-// readLoop continuously reads audio data from the stream
+// readLoop continuously reads audio data from the stream.
+//
+// Design: r.stream is written only in Start() (before readLoop starts) and Stop()
+// (only after stoppedChan is closed, i.e. after readLoop exits). So it is safe
+// to cache it here without holding the mutex for every frame.
+// The chunk callback is read via atomicCallback, avoiding any lock on the hot path.
 func (r *Recorder) readLoop(inputBuffer []int16) {
 	defer close(r.stoppedChan)
 
-	chunkSize := int(SampleRate) * ChunkDuration // samples per chunk
+	// Cache stream — valid for the lifetime of this goroutine (see comment above).
+	r.mu.Lock()
+	stream := r.stream
+	r.mu.Unlock()
+	if stream == nil {
+		return
+	}
+
+	chunkSize := int(SampleRate) * ChunkDuration
 	chunkBuffer := make([]int16, 0, chunkSize)
 	chunkStartTime := time.Duration(0)
-	hasCallback := false
 
 	for {
-		// Check if we should stop
+		// Check stop signal first.
 		select {
 		case <-r.stopChan:
-			// Send final chunk if we have one
-			if hasCallback && len(chunkBuffer) > 0 {
-				r.mu.Lock()
-				cb := r.chunkCallback
-				r.mu.Unlock()
-				if cb != nil {
-					samples := make([]int16, len(chunkBuffer))
-					copy(samples, chunkBuffer)
-					cb(samples, chunkStartTime, true)
-				}
+			// Send the final partial chunk if any remains.
+			if cb := r.loadCallback(); cb != nil && len(chunkBuffer) > 0 {
+				samples := make([]int16, len(chunkBuffer))
+				copy(samples, chunkBuffer)
+				cb(samples, chunkStartTime, true)
 			}
 			return
 		default:
@@ -166,54 +183,41 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 			return
 		}
 
-		r.mu.Lock()
-		stream := r.stream
-		hasCallback = r.chunkCallback != nil
-		r.mu.Unlock()
-
-		if stream == nil {
-			return
-		}
-
-		// Read from the stream - this is the blocking call
-		err := stream.Read()
-		if err != nil {
-			// Check if we were asked to stop
+		// Blocking read — stream is stable for the lifetime of this loop.
+		if err := stream.Read(); err != nil {
 			if !r.recording.Load() {
 				return
 			}
-			fmt.Printf("Error reading audio: %v\n", err)
+			logger.Errorf("Error reading audio: %v", err)
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 
-		// Append to main buffer and chunk buffer
+		// Append samples to the persistent buffer (mu required for Stop() reader).
+		samples := make([]int16, len(inputBuffer))
+		copy(samples, inputBuffer)
+
 		r.mu.Lock()
 		if r.recording.Load() {
-			// Make a copy to avoid data race
-			samples := make([]int16, len(inputBuffer))
-			copy(samples, inputBuffer)
 			r.buffer = append(r.buffer, samples...)
-			chunkBuffer = append(chunkBuffer, samples...)
-
-			// Check if chunk is ready
-			if hasCallback && len(chunkBuffer) >= chunkSize {
-				cb := r.chunkCallback
-				if cb != nil {
-					chunkSamples := make([]int16, chunkSize)
-					copy(chunkSamples, chunkBuffer[:chunkSize])
-					remaining := make([]int16, len(chunkBuffer)-chunkSize)
-					copy(remaining, chunkBuffer[chunkSize:])
-					chunkBuffer = remaining
-					// Send chunk asynchronously to not block
-					go func(s []int16, t time.Duration) {
-						cb(s, t, false)
-					}(chunkSamples, chunkStartTime)
-					chunkStartTime += time.Duration(ChunkDuration) * time.Second
-				}
-			}
 		}
 		r.mu.Unlock()
+
+		// Accumulate chunk buffer and fire callback when full — no lock needed
+		// because chunkBuffer is local to this goroutine.
+		chunkBuffer = append(chunkBuffer, samples...)
+		if len(chunkBuffer) >= chunkSize {
+			if cb := r.loadCallback(); cb != nil {
+				chunkSamples := make([]int16, chunkSize)
+				copy(chunkSamples, chunkBuffer[:chunkSize])
+				remaining := make([]int16, len(chunkBuffer)-chunkSize)
+				copy(remaining, chunkBuffer[chunkSize:])
+				chunkBuffer = remaining
+				start := chunkStartTime
+				chunkStartTime += time.Duration(ChunkDuration) * time.Second
+				go cb(chunkSamples, start, false)
+			}
+		}
 	}
 }
 
@@ -232,7 +236,7 @@ func (r *Recorder) Stop() (string, error) {
 	case <-r.stoppedChan:
 		// Read loop finished
 	case <-time.After(2 * time.Second):
-		fmt.Println("Warning: read loop did not stop in time")
+		logger.Warnf("Warning: read loop did not stop in time")
 	}
 
 	r.mu.Lock()
@@ -271,11 +275,9 @@ func (r *Recorder) saveToWav() (string, error) {
 		return "", fmt.Errorf("failed to write WAV header: %w", err)
 	}
 
-	// Write audio data
-	for _, sample := range r.buffer {
-		if err := binary.Write(file, binary.LittleEndian, sample); err != nil {
-			return "", fmt.Errorf("failed to write audio data: %w", err)
-		}
+	// Write all audio data in a single call (avoids per-sample syscall overhead)
+	if err := binary.Write(file, binary.LittleEndian, r.buffer); err != nil {
+		return "", fmt.Errorf("failed to write audio data: %w", err)
 	}
 
 	return filepath, nil
@@ -299,10 +301,9 @@ func (r *Recorder) writeSamplesToWav(samples []int16) (string, error) {
 	if err := r.writeWavHeader(file, len(samples)); err != nil {
 		return "", fmt.Errorf("failed to write WAV header: %w", err)
 	}
-	for _, sample := range samples {
-		if err := binary.Write(file, binary.LittleEndian, sample); err != nil {
-			return "", fmt.Errorf("failed to write audio data: %w", err)
-		}
+	// Write all samples in a single call
+	if err := binary.Write(file, binary.LittleEndian, samples); err != nil {
+		return "", fmt.Errorf("failed to write audio data: %w", err)
 	}
 	return filepath, nil
 }

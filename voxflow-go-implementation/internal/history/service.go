@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"voxflow/internal/logger"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -203,8 +205,8 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	searchQuery := "%" + query + "%"
 	sqlQuery := `
-		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second 
-		FROM transcripts 
+		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second
+		FROM transcripts
 		WHERE raw_text LIKE ? OR polished_text LIKE ?
 		ORDER BY timestamp DESC
 	`
@@ -293,6 +295,6 @@ func parseTimestamp(ts string) time.Time {
 			return t
 		}
 	}
-	fmt.Printf("Warning: Failed to parse timestamp '%s', using current time\n", ts)
+	logger.Warnf("Warning: Failed to parse timestamp '%s', using current time", ts)
 	return time.Now()
 }

@@ -32,7 +32,8 @@ type Config struct {
 	CerebrasAPIKey   string `json:"cerebras_api_key"`
 	CerebrasModel    string `json:"cerebras_model"`
 
-	LocalModel string `json:"local_model"` // Selected local GGUF model name
+	LocalModel string `json:"local_model"` // Free-form model name sent to the local server
+	LocalURL   string `json:"local_url"`   // Base URL of the local OpenAI-compatible server
 	mu         sync.RWMutex
 }
 
@@ -136,8 +137,8 @@ func (c *Config) Load() error {
 	if c.CerebrasModel == "" {
 		c.CerebrasModel = "llama3.1-8b"
 	}
-	if c.LocalModel == "" {
-		c.LocalModel = "qwen3-0.5b"
+	if c.LocalURL == "" {
+		c.LocalURL = "http://localhost:11434"
 	}
 
 	// Check environment variable first for API key
@@ -487,16 +488,33 @@ func (c *Config) SetCerebrasModel(model string) {
 	c.CerebrasModel = model
 }
 
-// GetLocalModel returns the selected local model
+// GetLocalModel returns the user-supplied local model name (e.g. "qwen3:8b").
 func (c *Config) GetLocalModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.LocalModel
 }
 
-// SetLocalModel sets the selected local model
+// SetLocalModel sets the local model name.
 func (c *Config) SetLocalModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LocalModel = model
+}
+
+// GetLocalURL returns the base URL of the local OpenAI-compatible server.
+func (c *Config) GetLocalURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.LocalURL == "" {
+		return "http://localhost:11434"
+	}
+	return c.LocalURL
+}
+
+// SetLocalURL sets the base URL of the local OpenAI-compatible server.
+func (c *Config) SetLocalURL(url string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.LocalURL = url
 }

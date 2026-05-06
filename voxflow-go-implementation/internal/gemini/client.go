@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"voxflow/internal/llm"
+	"voxflow/internal/logger"
 )
 
 const (
@@ -55,9 +56,9 @@ func (c *Client) SetModel(modelName string) {
 
 // Request represents a Gemini API request
 type Request struct {
-	Contents          []Content         `json:"contents"`
-	SystemInstruction *Content          `json:"systemInstruction,omitempty"`
-	GenerationConfig  GenerationConfig  `json:"generationConfig,omitempty"`
+	Contents          []Content        `json:"contents"`
+	SystemInstruction *Content         `json:"systemInstruction,omitempty"`
+	GenerationConfig  GenerationConfig `json:"generationConfig,omitempty"`
 }
 
 // Content represents a message content
@@ -105,10 +106,17 @@ type APIError struct {
 
 // RefineText sends raw transcription to Gemini for refinement.
 // If ok_to_go is true, the caller should use rawText (second return is true).
-func (c *Client) RefineText(rawText string) (string, int, bool, error) {
-	fmt.Printf("[Gemini] Refining text: %s\n", rawText)
+// RefineText satisfies llm.Refiner. If model is non-empty it overrides the
+// client's configured model for this call only.
+func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
+	logger.Debugf("[Gemini] Refining text: %s", rawText)
 	if c.apiKey == "" {
 		return "", 0, false, fmt.Errorf("API key not set")
+	}
+
+	activeModel := c.modelName
+	if model != "" {
+		activeModel = model
 	}
 
 	systemPrompt := llm.BuildSystemPrompt()
@@ -125,7 +133,7 @@ func (c *Client) RefineText(rawText string) (string, int, bool, error) {
 			},
 		},
 		GenerationConfig: GenerationConfig{
-			Temperature:     0.2, // Lower temperature for more consistent output
+			Temperature:     0.2,  // Lower temperature for more consistent output
 			MaxOutputTokens: 1024, // Reduced for typical voice transcription length
 		},
 	}
@@ -137,7 +145,7 @@ func (c *Client) RefineText(rawText string) (string, int, bool, error) {
 	}
 
 	// Build URL with API key
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, c.modelName, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, activeModel, c.apiKey)
 
 	// Make HTTP request
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
@@ -182,7 +190,7 @@ func (c *Client) RefineText(rawText string) (string, int, bool, error) {
 	result := geminiResp.Candidates[0].Content.Parts[0].Text
 
 	// Debug logging
-	fmt.Printf("[Gemini] Raw output (%d chars):\n%s\n", len(result), result)
+	logger.Debugf("[Gemini] Raw output (%d chars):\n%s", len(result), result)
 
 	// Extract token count
 	var tokenCount int
@@ -193,7 +201,7 @@ func (c *Client) RefineText(rawText string) (string, int, bool, error) {
 	// Parse structured response
 	refined, okToGo, parsed := llm.ParseRefineResponse(result, rawText)
 	if !parsed {
-		fmt.Printf("[Gemini] Warning: Response was not valid JSON, using as plain text\n")
+		logger.Warnf("[Gemini] Warning: Response was not valid JSON, using as plain text")
 		return llm.StripCodeFences(result), tokenCount, false, nil
 	}
 	return refined, tokenCount, okToGo, nil

@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"voxflow/internal/logger"
 )
 
 // MuteSystemAudio reads the current system output volume, mutes it to 0,
@@ -15,24 +17,24 @@ func MuteSystemAudio() int {
 	getScript := `output volume of (get volume settings)`
 	out, err := exec.Command("osascript", "-e", getScript).Output()
 	if err != nil {
-		fmt.Printf("[Audio] Could not read system volume: %v\n", err)
+		logger.Errorf("[Audio] Could not read system volume: %v", err)
 		return -1
 	}
 
 	vol, err := strconv.Atoi(strings.TrimSpace(string(out)))
 	if err != nil {
-		fmt.Printf("[Audio] Could not parse system volume %q: %v\n", strings.TrimSpace(string(out)), err)
+		logger.Errorf("[Audio] Could not parse system volume %q: %v", strings.TrimSpace(string(out)), err)
 		return -1
 	}
 
 	// Mute output
 	muteScript := `set volume output volume 0`
 	if err := exec.Command("osascript", "-e", muteScript).Run(); err != nil {
-		fmt.Printf("[Audio] Could not mute system volume: %v\n", err)
+		logger.Errorf("[Audio] Could not mute system volume: %v", err)
 		return -1
 	}
 
-	fmt.Printf("[Audio] Muted system audio (was %d%%)\n", vol)
+	logger.Infof("[Audio] Muted system audio (was %d%%)", vol)
 	return vol
 }
 
@@ -44,8 +46,8 @@ func UnmuteSystemAudio(previousVolume int) {
 	}
 	script := fmt.Sprintf("set volume output volume %d", previousVolume)
 	if err := exec.Command("osascript", "-e", script).Run(); err != nil {
-		fmt.Printf("[Audio] Could not restore system volume to %d: %v\n", previousVolume, err)
+		logger.Errorf("[Audio] Could not restore system volume to %d: %v", previousVolume, err)
 		return
 	}
-	fmt.Printf("[Audio] Restored system audio to %d%%\n", previousVolume)
+	logger.Infof("[Audio] Restored system audio to %d%%", previousVolume)
 }

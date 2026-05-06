@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"voxflow/internal/logger"
+
 	"golang.design/x/hotkey"
 )
 
@@ -175,7 +177,7 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 		if err == nil {
 			m.handsFreeHK = hotkey.New(mods, key)
 			if err := m.handsFreeHK.Register(); err != nil {
-				fmt.Printf("Failed to register initial hands-free: %v\n", err)
+				logger.Errorf("Failed to register initial hands-free: %v", err)
 				m.handsFreeHK = nil
 			}
 		}
@@ -185,7 +187,7 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 		if err == nil {
 			m.pushToTalkHK = hotkey.New(mods, key)
 			if err := m.pushToTalkHK.Register(); err != nil {
-				fmt.Printf("Failed to register initial ptt: %v\n", err)
+				logger.Errorf("Failed to register initial ptt: %v", err)
 				m.pushToTalkHK = nil
 			}
 		}
@@ -294,16 +296,16 @@ func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
 }
 
 func (m *Manager) handleHandsFree() {
-	fmt.Println("[Hotkey] HandsFree triggered!")
+	logger.Debugf("[Hotkey] HandsFree triggered!")
 	m.mu.Lock()
 
 	if !m.running {
-		fmt.Println("[Hotkey] HandsFree ignored - not running")
+		logger.Debugf("[Hotkey] HandsFree ignored - not running")
 		m.mu.Unlock()
 		return
 	}
 
-	fmt.Printf("[Hotkey] HandsFree current state: %s\n", m.state)
+	logger.Debugf("[Hotkey] HandsFree current state: %s", m.state)
 	var newState State
 	var shouldCallback bool
 
@@ -329,22 +331,22 @@ func (m *Manager) handleHandsFree() {
 
 	// Call callback OUTSIDE of lock to avoid deadlock
 	if shouldCallback && callback != nil {
-		fmt.Printf("[Hotkey] HandsFree calling callback with state: %s\n", newState)
+		logger.Debugf("[Hotkey] HandsFree calling callback with state: %s", newState)
 		callback(newState)
 	}
 }
 
 func (m *Manager) handlePushToTalkDown() {
-	fmt.Println("[Hotkey] PushToTalk DOWN triggered!")
+	logger.Debugf("[Hotkey] PushToTalk DOWN triggered!")
 	m.mu.Lock()
 
 	if !m.running {
-		fmt.Println("[Hotkey] PushToTalk DOWN ignored - not running")
+		logger.Debugf("[Hotkey] PushToTalk DOWN ignored - not running")
 		m.mu.Unlock()
 		return
 	}
 
-	fmt.Printf("[Hotkey] PushToTalk DOWN current state: %s\n", m.state)
+	logger.Debugf("[Hotkey] PushToTalk DOWN current state: %s", m.state)
 	var newState State
 	var shouldCallback bool
 
@@ -359,22 +361,22 @@ func (m *Manager) handlePushToTalkDown() {
 	m.mu.Unlock()
 
 	if shouldCallback && callback != nil {
-		fmt.Printf("[Hotkey] PushToTalk DOWN calling callback with state: %s\n", newState)
+		logger.Debugf("[Hotkey] PushToTalk DOWN calling callback with state: %s", newState)
 		callback(newState)
 	}
 }
 
 func (m *Manager) handlePushToTalkUp() {
-	fmt.Println("[Hotkey] PushToTalk UP triggered!")
+	logger.Debugf("[Hotkey] PushToTalk UP triggered!")
 	m.mu.Lock()
 
 	if !m.running {
-		fmt.Println("[Hotkey] PushToTalk UP ignored - not running")
+		logger.Debugf("[Hotkey] PushToTalk UP ignored - not running")
 		m.mu.Unlock()
 		return
 	}
 
-	fmt.Printf("[Hotkey] PushToTalk UP current state: %s, trigger: %d\n", m.state, m.activeTrigger)
+	logger.Debugf("[Hotkey] PushToTalk UP current state: %s, trigger: %d", m.state, m.activeTrigger)
 	var newState State
 	var shouldCallback bool
 
@@ -389,7 +391,7 @@ func (m *Manager) handlePushToTalkUp() {
 	m.mu.Unlock()
 
 	if shouldCallback && callback != nil {
-		fmt.Printf("[Hotkey] PushToTalk UP calling callback with state: %s\n", newState)
+		logger.Debugf("[Hotkey] PushToTalk UP calling callback with state: %s", newState)
 		callback(newState)
 	}
 }
