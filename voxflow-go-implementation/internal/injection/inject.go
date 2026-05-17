@@ -10,8 +10,8 @@ import (
 
 // Service handles text injection into the active application
 type Service struct {
-	originalClipboard []byte
 	preserveClipboard bool
+	mu                sync.Mutex
 	initOnce          sync.Once
 	initErr           error
 }
@@ -39,15 +39,23 @@ func (s *Service) Inject(text string) error {
 		return err
 	}
 
-	// Optionally save current clipboard content
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var originalClipboard []byte
 	if s.preserveClipboard {
-		s.originalClipboard = clipboard.Read(clipboard.FmtText)
+		originalClipboard = clipboard.Read(clipboard.FmtText)
 	}
 
-	// Copy text to clipboard
+	defer func() {
+		if s.preserveClipboard && len(originalClipboard) > 0 {
+			time.Sleep(200 * time.Millisecond)
+			clipboard.Write(clipboard.FmtText, originalClipboard)
+		}
+	}()
+
 	clipboard.Write(clipboard.FmtText, []byte(text))
 
-	// Small delay to ensure clipboard is updated
 	time.Sleep(50 * time.Millisecond)
 
 	// Simulate Cmd+V using CoreGraphics CGEventPost (requires Accessibility permission
@@ -56,21 +64,16 @@ func (s *Service) Inject(text string) error {
 		return err
 	}
 
-	// Small delay before restoring clipboard
 	time.Sleep(100 * time.Millisecond)
-
-	// Optionally restore original clipboard content
-	if s.preserveClipboard && len(s.originalClipboard) > 0 {
-		// Delay a bit more to ensure paste completed
-		time.Sleep(200 * time.Millisecond)
-		clipboard.Write(clipboard.FmtText, s.originalClipboard)
-	}
 
 	return nil
 }
 
 // CopyToClipboard just copies text to clipboard without pasting
 func (s *Service) CopyToClipboard(text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.ensureClipboardInit(); err != nil {
 		return err
 	}

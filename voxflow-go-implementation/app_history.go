@@ -19,9 +19,9 @@ func (a *App) GetHistory(limit int) ([]*history.Transcript, error) {
 
 // HistoryPage is returned for paginated history requests
 type HistoryPage struct {
-	Transcripts   []*history.Transcript `json:"transcripts"`
-	NextCursorTS  string                 `json:"next_cursor_ts"`
-	NextCursorID  int64                  `json:"next_cursor_id"`
+	Transcripts  []*history.Transcript `json:"transcripts"`
+	NextCursorTS string                `json:"next_cursor_ts"`
+	NextCursorID int64                 `json:"next_cursor_id"`
 }
 
 // GetHistoryPage returns a page of transcripts using a cursor (RFC3339 timestamp + id)

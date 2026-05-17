@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+const (
+	retryMaxAttempts = 3
+	retryBaseDelay   = time.Second
+	retryMaxDelay    = 30 * time.Second
+)
+
+func isRetryableStatus(code int) bool {
+	return code == http.StatusTooManyRequests ||
+		code == http.StatusBadGateway ||
+		code == http.StatusServiceUnavailable
+}
+
 // chatRequest is the OpenAI-compatible /chat/completions request body.
 type chatRequest struct {
 	Model       string        `json:"model"`
@@ -62,6 +74,83 @@ func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *Op
 	}
 }
 
+// doPost sends reqBody to url with retry/backoff on transient failures (429/502/503
+// and network errors). Returns the raw response body on success.
+func (c *OpenAIClient) doPost(reqBody []byte, url string) ([]byte, int, error) {
+	delay := retryBaseDelay
+	var lastStatus int
+	for attempt := 0; attempt <= retryMaxAttempts; attempt++ {
+		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+		c.applyHeaders(httpReq)
+
+		resp, err := c.HTTPClient.Do(httpReq)
+		if err != nil {
+			if attempt == retryMaxAttempts {
+				return nil, 0, fmt.Errorf("failed to send request: %w", err)
+			}
+			time.Sleep(delay)
+			delay = min(delay*2, retryMaxDelay)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
+		}
+
+		lastStatus = resp.StatusCode
+		if !isRetryableStatus(resp.StatusCode) || attempt == retryMaxAttempts {
+			return body, lastStatus, nil
+		}
+
+		time.Sleep(delay)
+		delay = min(delay*2, retryMaxDelay)
+	}
+	return nil, lastStatus, nil
+}
+
+// doGet sends an HTTP GET to url with the same retry/backoff strategy as doPost.
+func (c *OpenAIClient) doGet(url string) ([]byte, int, error) {
+	delay := retryBaseDelay
+	var lastStatus int
+	for attempt := 0; attempt <= retryMaxAttempts; attempt++ {
+		httpReq, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+		c.applyHeaders(httpReq)
+
+		resp, err := c.HTTPClient.Do(httpReq)
+		if err != nil {
+			if attempt == retryMaxAttempts {
+				return nil, 0, fmt.Errorf("failed to send request: %w", err)
+			}
+			time.Sleep(delay)
+			delay = min(delay*2, retryMaxDelay)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
+		}
+
+		lastStatus = resp.StatusCode
+		if !isRetryableStatus(resp.StatusCode) || attempt == retryMaxAttempts {
+			return body, lastStatus, nil
+		}
+
+		time.Sleep(delay)
+		delay = min(delay*2, retryMaxDelay)
+	}
+	return nil, lastStatus, nil
+}
+
 // applyHeaders sets Content-Type, Authorization (when APIKey is set), and any
 // extra provider-specific headers on the given request.
 func (c *OpenAIClient) applyHeaders(req *http.Request) {
@@ -93,25 +182,13 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 	}
 
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	respBody, statusCode, err := c.doPost(reqBody, url)
 	if err != nil {
-		return "", 0, false, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.applyHeaders(httpReq)
-
-	resp, err := c.HTTPClient.Do(httpReq)
-	if err != nil {
-		return "", 0, false, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", 0, false, fmt.Errorf("failed to read response: %w", err)
+		return "", 0, false, err
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", 0, false, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	if statusCode != http.StatusOK {
+		return "", 0, false, fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
 	}
 
 	var apiResp chatResponse
@@ -196,29 +273,17 @@ func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 func (c *OpenAIClient) GetModels(filter func(id string) bool) ([]string, error) {
 	url := fmt.Sprintf("%s/models", c.BaseURL)
 
-	req, err := http.NewRequest("GET", url, nil)
+	respBody, statusCode, err := c.doGet(url)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
-	for k, v := range c.ExtraHeaders {
-		req.Header.Set(k, v)
+		return nil, err
 	}
 
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch models: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (status %d)", resp.StatusCode)
+	if statusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
 	}
 
 	var modResp modelsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&modResp); err != nil {
+	if err := json.Unmarshal(respBody, &modResp); err != nil {
 		return nil, fmt.Errorf("failed to parse models: %w", err)
 	}
 
