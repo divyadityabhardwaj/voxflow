@@ -33,6 +33,9 @@ type Service struct {
 	db *sql.DB
 }
 
+const MaxHistoryLimit = 10000
+const MaxPageSize = 100
+
 // NewService creates a new history service
 func NewService() (*Service, error) {
 	dbPath, err := getDBPath()
@@ -170,12 +173,13 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 
 // GetAll retrieves all transcripts ordered by timestamp desc
 func (s *Service) GetAll(limit int) ([]*Transcript, error) {
-	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts ORDER BY timestamp DESC"
-	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
+	if limit <= 0 || limit > MaxHistoryLimit {
+		limit = MaxHistoryLimit
 	}
 
-	rows, err := s.db.Query(query)
+	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts ORDER BY timestamp DESC LIMIT ?"
+
+	rows, err := s.db.Query(query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -183,26 +187,10 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 
 	var transcripts []*Transcript
 	for rows.Next() {
-		t := &Transcript{}
-		var appName, polishedText, mode, provider, model sql.NullString
-		var timeMs sql.NullInt64
-		var tps sql.NullFloat64
-		var wps sql.NullFloat64
-
-		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps)
+		t, err := s.scanTranscript(rows)
 		if err != nil {
 			return nil, err
 		}
-
-		t.AppName = appName.String
-		t.PolishedText = polishedText.String
-		t.Mode = mode.String
-		t.LLMProvider = provider.String
-		t.LLMModel = model.String
-		t.TranslationTimeMs = timeMs.Int64
-		t.TokensPerSecond = tps.Float64
-		t.WordsPerSecond = wps.Float64
-
 		transcripts = append(transcripts, t)
 	}
 
@@ -218,11 +206,13 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 		WHERE raw_text LIKE ? OR polished_text LIKE ?
 		ORDER BY timestamp DESC
 	`
-	if limit > 0 {
-		sqlQuery += fmt.Sprintf(" LIMIT %d", limit)
+	if limit <= 0 || limit > MaxHistoryLimit {
+		limit = MaxHistoryLimit
 	}
 
-	rows, err := s.db.Query(sqlQuery, searchQuery, searchQuery)
+	sqlQuery = strings.TrimSpace(sqlQuery) + " LIMIT ?"
+
+	rows, err := s.db.Query(sqlQuery, searchQuery, searchQuery, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -230,29 +220,118 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 
 	var transcripts []*Transcript
 	for rows.Next() {
-		t := &Transcript{}
-		var appName, polishedText, mode, provider, model sql.NullString
-		var timeMs sql.NullInt64
-		var tps sql.NullFloat64
-		var wps sql.NullFloat64
-		err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps)
+		t, err := s.scanTranscript(rows)
 		if err != nil {
 			return nil, err
 		}
-
-		t.AppName = appName.String
-		t.PolishedText = polishedText.String
-		t.Mode = mode.String
-		t.LLMProvider = provider.String
-		t.LLMModel = model.String
-		t.TranslationTimeMs = timeMs.Int64
-		t.TokensPerSecond = tps.Float64
-		t.WordsPerSecond = wps.Float64
-
 		transcripts = append(transcripts, t)
 	}
 
 	return transcripts, nil
+}
+
+// scanTranscript scans the current row into a Transcript struct.
+func (s *Service) scanTranscript(rows *sql.Rows) (*Transcript, error) {
+	t := &Transcript{}
+	var appName, polishedText, mode, provider, model sql.NullString
+	var timeMs sql.NullInt64
+	var tps sql.NullFloat64
+	var wps sql.NullFloat64
+
+	if err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps); err != nil {
+		return nil, err
+	}
+
+	t.AppName = appName.String
+	t.PolishedText = polishedText.String
+	t.Mode = mode.String
+	t.LLMProvider = provider.String
+	t.LLMModel = model.String
+	t.TranslationTimeMs = timeMs.Int64
+	t.TokensPerSecond = tps.Float64
+	t.WordsPerSecond = wps.Float64
+
+	return t, nil
+}
+
+// GetPage returns a page of transcripts using cursor-based pagination.
+// If cursorTS.IsZero(), it starts from the newest entries.
+// Returns the transcripts and the cursor (timestamp,id) to use for the next page (older results).
+func (s *Service) GetPage(cursorTS time.Time, cursorID int64, limit int) ([]*Transcript, time.Time, int64, error) {
+	if limit <= 0 || limit > MaxPageSize {
+		limit = MaxPageSize
+	}
+
+	var rows *sql.Rows
+	var err error
+
+	base := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts"
+
+	if cursorTS.IsZero() {
+		query := base + " ORDER BY timestamp DESC, id DESC LIMIT ?"
+		rows, err = s.db.Query(query, limit)
+	} else {
+		query := base + " WHERE (timestamp < ? OR (timestamp = ? AND id < ?)) ORDER BY timestamp DESC, id DESC LIMIT ?"
+		rows, err = s.db.Query(query, cursorTS, cursorTS, cursorID, limit)
+	}
+	if err != nil {
+		return nil, time.Time{}, 0, err
+	}
+	defer rows.Close()
+
+	var transcripts []*Transcript
+	var lastTS time.Time
+	var lastID int64
+	for rows.Next() {
+		t, err := s.scanTranscript(rows)
+		if err != nil {
+			return nil, time.Time{}, 0, err
+		}
+		transcripts = append(transcripts, t)
+		lastTS = t.Timestamp
+		lastID = t.ID
+	}
+
+	return transcripts, lastTS, lastID, nil
+}
+
+// SearchPage searches transcripts with cursor-based pagination.
+func (s *Service) SearchPage(q string, cursorTS time.Time, cursorID int64, limit int) ([]*Transcript, time.Time, int64, error) {
+	if limit <= 0 || limit > MaxPageSize {
+		limit = MaxPageSize
+	}
+
+	searchQuery := "%" + q + "%"
+	base := `SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE (raw_text LIKE ? OR polished_text LIKE ?)`
+
+	var rows *sql.Rows
+	var err error
+	if cursorTS.IsZero() {
+		query := base + " ORDER BY timestamp DESC, id DESC LIMIT ?"
+		rows, err = s.db.Query(query, searchQuery, searchQuery, limit)
+	} else {
+		query := base + " AND (timestamp < ? OR (timestamp = ? AND id < ?)) ORDER BY timestamp DESC, id DESC LIMIT ?"
+		rows, err = s.db.Query(query, searchQuery, searchQuery, cursorTS, cursorTS, cursorID, limit)
+	}
+	if err != nil {
+		return nil, time.Time{}, 0, err
+	}
+	defer rows.Close()
+
+	var transcripts []*Transcript
+	var lastTS time.Time
+	var lastID int64
+	for rows.Next() {
+		t, err := s.scanTranscript(rows)
+		if err != nil {
+			return nil, time.Time{}, 0, err
+		}
+		transcripts = append(transcripts, t)
+		lastTS = t.Timestamp
+		lastID = t.ID
+	}
+
+	return transcripts, lastTS, lastID, nil
 }
 
 // UpdatePolishedText updates the polished text for a transcript

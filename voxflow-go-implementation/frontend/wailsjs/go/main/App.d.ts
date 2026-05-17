@@ -3,11 +3,8 @@
 import {main} from '../models';
 import {whisper} from '../models';
 import {history} from '../models';
-import {localgguf} from '../models';
 
 export function CancelDownload():Promise<void>;
-
-export function CancelLocalModelDownload():Promise<void>;
 
 export function CheckCerebrasModel(arg1:string):Promise<main.CheckResult>;
 
@@ -23,21 +20,15 @@ export function ClearAllHistory():Promise<void>;
 
 export function CopyToClipboard(arg1:string):Promise<void>;
 
-export function DeleteLocalModel(arg1:string):Promise<void>;
-
 export function DeleteModelByName(arg1:string):Promise<void>;
 
 export function DeleteTranscript(arg1:number):Promise<void>;
-
-export function DownloadLocalModel(arg1:string):Promise<void>;
 
 export function DownloadModel():Promise<void>;
 
 export function DownloadModelByName(arg1:string):Promise<void>;
 
 export function EnsureWhisperCLI():Promise<void>;
-
-export function GetActiveLocalDownload():Promise<string>;
 
 export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 
@@ -61,11 +52,13 @@ export function GetGroqModels():Promise<Array<string>>;
 
 export function GetHistory(arg1:number):Promise<Array<history.Transcript>>;
 
+export function GetHistoryPage(arg1:string,arg2:number,arg3:number):Promise<main.HistoryPage>;
+
 export function GetLLMProvider():Promise<string>;
 
 export function GetLocalModel():Promise<string>;
 
-export function GetLocalModels():Promise<Array<localgguf.ModelInfo>>;
+export function GetLocalURL():Promise<string>;
 
 export function GetOpenRouterModel():Promise<string>;
 
@@ -105,6 +98,8 @@ export function RetryWithGemini(arg1:number,arg2:string):Promise<string>;
 
 export function SearchHistory(arg1:string,arg2:number):Promise<Array<history.Transcript>>;
 
+export function SearchHistoryPage(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.HistoryPage>;
+
 export function SetAPIKey(arg1:string):Promise<void>;
 
 export function SetCerebrasAPIKey(arg1:string):Promise<void>;
@@ -124,6 +119,8 @@ export function SetHotkey(arg1:string):Promise<void>;
 export function SetLLMProvider(arg1:string):Promise<void>;
 
 export function SetLocalModel(arg1:string):Promise<void>;
+
+export function SetLocalURL(arg1:string):Promise<void>;
 
 export function SetMiniModeExpanded(arg1:boolean):Promise<void>;
 

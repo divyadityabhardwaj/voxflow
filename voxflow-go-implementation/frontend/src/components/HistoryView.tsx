@@ -1,7 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  GetHistory,
-  SearchHistory,
   DeleteTranscript,
   ClearAllHistory,
   CopyToClipboard,
@@ -26,17 +24,40 @@ export default function HistoryView() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [cursorTS, setCursorTS] = useState<string>("");
+  const [cursorID, setCursorID] = useState<number>(0);
+  const [hasMore, setHasMore] = useState(true);
 
   const { confirm, ConfirmModalComponent } = useConfirmModal();
 
-  const loadTranscripts = async () => {
+  const PAGE_SIZE = 50;
+
+  const loadNextPage = async () => {
+    if (loading || !hasMore) return;
     setLoading(true);
     try {
-      const data = searchQuery
-        ? await SearchHistory(searchQuery, 100)
-        : await GetHistory(100);
-      setTranscripts(data || []);
+      let res: any;
+      if (searchQuery) {
+        res = await (window as any).go.main.App.SearchHistoryPage(
+          searchQuery,
+          cursorTS,
+          cursorID,
+          PAGE_SIZE,
+        );
+      } else {
+        res = await (window as any).go.main.App.GetHistoryPage(
+          cursorTS,
+          cursorID,
+          PAGE_SIZE,
+        );
+      }
+
+      const items: Transcript[] = res.transcripts || [];
+      setTranscripts((prev) => [...prev, ...items]);
+      setCursorTS(res.next_cursor_ts || "");
+      setCursorID(res.next_cursor_id || 0);
+      setHasMore(items.length === PAGE_SIZE);
     } catch (err) {
       console.error("Failed to load history:", err);
     } finally {
@@ -44,16 +65,35 @@ export default function HistoryView() {
     }
   };
 
+  // Reset and load first page on mount and when search query changes
   useEffect(() => {
-    loadTranscripts();
-  }, []);
-
-  useEffect(() => {
-    const debounce = setTimeout(() => {
-      loadTranscripts();
-    }, 300);
-    return () => clearTimeout(debounce);
+    setTranscripts([]);
+    setCursorTS("");
+    setCursorID(0);
+    setHasMore(true);
+    const t = setTimeout(() => {
+      loadNextPage();
+    }, 200);
+    return () => clearTimeout(t);
   }, [searchQuery]);
+
+  // Infinite scroll: observe a sentinel element at the end of the list
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          loadNextPage();
+        }
+      });
+    });
+    io.observe(el);
+    return () => io.disconnect();
+    // We intentionally only recreate observer when the sentinel element changes.
+    // Other state changes (loading/hasMore) are handled inside loadNextPage.
+  }, [sentinelRef]);
 
   const selectedTranscript = transcripts.find((t) => t.id === selectedId);
 
@@ -218,6 +258,8 @@ export default function HistoryView() {
                   </p>
                 </button>
               ))}
+              {/* sentinel for infinite scroll */}
+              <div ref={sentinelRef} />
             </div>
           )}
         </div>

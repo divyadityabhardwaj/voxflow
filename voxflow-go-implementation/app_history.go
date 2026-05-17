@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 	"voxflow/internal/events"
 	"voxflow/internal/history"
 
@@ -14,6 +15,70 @@ func (a *App) GetHistory(limit int) ([]*history.Transcript, error) {
 		return nil, fmt.Errorf("history service not available")
 	}
 	return a.historyService.GetAll(limit)
+}
+
+// HistoryPage is returned for paginated history requests
+type HistoryPage struct {
+	Transcripts   []*history.Transcript `json:"transcripts"`
+	NextCursorTS  string                 `json:"next_cursor_ts"`
+	NextCursorID  int64                  `json:"next_cursor_id"`
+}
+
+// GetHistoryPage returns a page of transcripts using a cursor (RFC3339 timestamp + id)
+// If cursorTS is empty, the newest entries are returned.
+func (a *App) GetHistoryPage(cursorTS string, cursorID int64, limit int) (*HistoryPage, error) {
+	if a.historyService == nil {
+		return nil, fmt.Errorf("history service not available")
+	}
+
+	var ts time.Time
+	var err error
+	if cursorTS != "" {
+		ts, err = time.Parse(time.RFC3339, cursorTS)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor timestamp: %w", err)
+		}
+	}
+
+	transcripts, nextTS, nextID, err := a.historyService.GetPage(ts, cursorID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var nextTSStr string
+	if !nextTS.IsZero() {
+		nextTSStr = nextTS.UTC().Format(time.RFC3339)
+	}
+
+	return &HistoryPage{Transcripts: transcripts, NextCursorTS: nextTSStr, NextCursorID: nextID}, nil
+}
+
+// SearchHistoryPage searches transcripts with cursor-based pagination.
+func (a *App) SearchHistoryPage(query string, cursorTS string, cursorID int64, limit int) (*HistoryPage, error) {
+	if a.historyService == nil {
+		return nil, fmt.Errorf("history service not available")
+	}
+
+	var ts time.Time
+	var err error
+	if cursorTS != "" {
+		ts, err = time.Parse(time.RFC3339, cursorTS)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor timestamp: %w", err)
+		}
+	}
+
+	transcripts, nextTS, nextID, err := a.historyService.SearchPage(query, ts, cursorID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var nextTSStr string
+	if !nextTS.IsZero() {
+		nextTSStr = nextTS.UTC().Format(time.RFC3339)
+	}
+
+	return &HistoryPage{Transcripts: transcripts, NextCursorTS: nextTSStr, NextCursorID: nextID}, nil
 }
 
 // SearchHistory searches transcript history

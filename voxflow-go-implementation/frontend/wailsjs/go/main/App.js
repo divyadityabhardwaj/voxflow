@@ -6,10 +6,6 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
-export function CancelLocalModelDownload() {
-  return window['go']['main']['App']['CancelLocalModelDownload']();
-}
-
 export function CheckCerebrasModel(arg1) {
   return window['go']['main']['App']['CheckCerebrasModel'](arg1);
 }
@@ -38,20 +34,12 @@ export function CopyToClipboard(arg1) {
   return window['go']['main']['App']['CopyToClipboard'](arg1);
 }
 
-export function DeleteLocalModel(arg1) {
-  return window['go']['main']['App']['DeleteLocalModel'](arg1);
-}
-
 export function DeleteModelByName(arg1) {
   return window['go']['main']['App']['DeleteModelByName'](arg1);
 }
 
 export function DeleteTranscript(arg1) {
   return window['go']['main']['App']['DeleteTranscript'](arg1);
-}
-
-export function DownloadLocalModel(arg1) {
-  return window['go']['main']['App']['DownloadLocalModel'](arg1);
 }
 
 export function DownloadModel() {
@@ -64,10 +52,6 @@ export function DownloadModelByName(arg1) {
 
 export function EnsureWhisperCLI() {
   return window['go']['main']['App']['EnsureWhisperCLI']();
-}
-
-export function GetActiveLocalDownload() {
-  return window['go']['main']['App']['GetActiveLocalDownload']();
 }
 
 export function GetAllModels() {
@@ -114,6 +98,10 @@ export function GetHistory(arg1) {
   return window['go']['main']['App']['GetHistory'](arg1);
 }
 
+export function GetHistoryPage(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetHistoryPage'](arg1, arg2, arg3);
+}
+
 export function GetLLMProvider() {
   return window['go']['main']['App']['GetLLMProvider']();
 }
@@ -122,8 +110,8 @@ export function GetLocalModel() {
   return window['go']['main']['App']['GetLocalModel']();
 }
 
-export function GetLocalModels() {
-  return window['go']['main']['App']['GetLocalModels']();
+export function GetLocalURL() {
+  return window['go']['main']['App']['GetLocalURL']();
 }
 
 export function GetOpenRouterModel() {
@@ -202,6 +190,10 @@ export function SearchHistory(arg1, arg2) {
   return window['go']['main']['App']['SearchHistory'](arg1, arg2);
 }
 
+export function SearchHistoryPage(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SearchHistoryPage'](arg1, arg2, arg3, arg4);
+}
+
 export function SetAPIKey(arg1) {
   return window['go']['main']['App']['SetAPIKey'](arg1);
 }
@@ -240,6 +232,10 @@ export function SetLLMProvider(arg1) {
 
 export function SetLocalModel(arg1) {
   return window['go']['main']['App']['SetLocalModel'](arg1);
+}
+
+export function SetLocalURL(arg1) {
+  return window['go']['main']['App']['SetLocalURL'](arg1);
 }
 
 export function SetMiniModeExpanded(arg1) {
