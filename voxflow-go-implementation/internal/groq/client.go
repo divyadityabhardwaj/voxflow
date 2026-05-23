@@ -118,3 +118,11 @@ func (c *Client) CheckModel(model string) (int64, float64, error) {
 	}
 	return c.openai.CheckModel(model)
 }
+
+// RetryWithInstruction re-processes text with a custom instruction using Groq.
+func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
+	if c.apiKey == "" {
+		return "", fmt.Errorf("API key not set")
+	}
+	return c.openai.RetryWithInstruction(text, instruction, model)
+}

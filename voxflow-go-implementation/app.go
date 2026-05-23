@@ -184,8 +184,22 @@ func (a *App) startup(ctx context.Context) {
 		// Check and request Accessibility permission needed for CGEventPost (Cmd+V simulation).
 		// This is a one-time prompt — once granted it persists for the app bundle.
 		if !injection.IsAccessibilityGranted() {
-			logger.Infof("[Injection] Accessibility permission not granted — prompting user")
-			injection.PromptAccessibility()
+			logger.Infof("[Injection] Accessibility permission not granted — prompting user with explanation")
+			
+			// Show pre-prompt explanation dialog
+			selection, dialogErr := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:          runtime.QuestionDialog,
+				Title:         "Accessibility Permission Required",
+				Message:       "VoxFlow uses macOS Accessibility to simulate a Cmd+V paste and inject your refined text directly into target applications.\n\nPlease click \"Grant Permission\", then enable \"VoxFlow\" in the System Settings window that opens.",
+				Buttons:       []string{"Grant Permission", "Later"},
+				DefaultButton: "Grant Permission",
+			})
+			
+			if dialogErr == nil && selection == "Grant Permission" {
+				injection.PromptAccessibility()
+			} else {
+				logger.Infof("[Injection] User deferred or skipped Accessibility permission grant")
+			}
 		} else {
 			logger.Infof("[Injection] Accessibility permission granted")
 		}

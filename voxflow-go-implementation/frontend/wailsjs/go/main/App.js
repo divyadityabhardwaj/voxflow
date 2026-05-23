@@ -182,6 +182,10 @@ export function Quit() {
   return window['go']['main']['App']['Quit']();
 }
 
+export function RetryRefinement(arg1, arg2) {
+  return window['go']['main']['App']['RetryRefinement'](arg1, arg2);
+}
+
 export function RetryWithGemini(arg1, arg2) {
   return window['go']['main']['App']['RetryWithGemini'](arg1, arg2);
 }

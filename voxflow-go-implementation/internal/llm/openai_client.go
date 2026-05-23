@@ -210,6 +210,51 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 	return refined, tokenCount, okToGo, nil
 }
 
+// RetryWithInstruction re-processes text with a custom instruction.
+func (c *OpenAIClient) RetryWithInstruction(text, instruction, model string) (string, error) {
+	prompt := fmt.Sprintf(`Apply the following instruction to the text:
+Instruction: %s
+
+Text:
+%s
+
+Return ONLY the modified text, nothing else.`, instruction, text)
+
+	req := chatRequest{
+		Model: model,
+		Messages: []chatMessage{
+			{Role: "user", Content: prompt},
+		},
+		Temperature: 0.3,
+	}
+
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
+	respBody, statusCode, err := c.doPost(reqBody, url)
+	if err != nil {
+		return "", err
+	}
+
+	if statusCode != http.StatusOK {
+		return "", fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
+	}
+
+	var apiResp chatResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w, response: %s", err, string(respBody))
+	}
+
+	if len(apiResp.Choices) == 0 {
+		return "", fmt.Errorf("no response generated")
+	}
+
+	return StripCodeFences(apiResp.Choices[0].Message.Content), nil
+}
+
 // CheckModel runs a latency probe against the provider and returns
 // (latencyMs, tokensPerSecond, error).
 func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {

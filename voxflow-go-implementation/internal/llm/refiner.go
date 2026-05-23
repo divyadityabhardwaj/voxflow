@@ -13,4 +13,7 @@ type Refiner interface {
 	// CheckModel runs a latency probe against the provider and returns
 	// (latencyMs, tokensPerSecond, error).
 	CheckModel(model string) (int64, float64, error)
+
+	// RetryWithInstruction re-processes text with a custom instruction.
+	RetryWithInstruction(text, instruction, model string) (string, error)
 }

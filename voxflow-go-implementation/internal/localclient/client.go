@@ -37,3 +37,8 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 func (c *Client) CheckModel(model string) (int64, float64, error) {
 	return c.openai.CheckModel(model)
 }
+
+// RetryWithInstruction re-processes text with a custom instruction using the local model.
+func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
+	return c.openai.RetryWithInstruction(text, instruction, model)
+}

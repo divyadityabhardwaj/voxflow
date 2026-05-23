@@ -208,9 +208,14 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 }
 
 // RetryWithInstruction re-processes text with a custom instruction
-func (c *Client) RetryWithInstruction(text string, instruction string) (string, error) {
+func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
 	if c.apiKey == "" {
 		return "", fmt.Errorf("API key not set")
+	}
+
+	activeModel := c.modelName
+	if model != "" {
+		activeModel = model
 	}
 
 	prompt := fmt.Sprintf(`Apply the following instruction to the text:
@@ -240,7 +245,7 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, c.modelName, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, activeModel, c.apiKey)
 
 	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 	if err != nil {

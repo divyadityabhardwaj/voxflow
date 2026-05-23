@@ -113,8 +113,8 @@ func (a *App) ClearAllHistory() error {
 	return a.historyService.DeleteAll()
 }
 
-// RetryWithGemini re-processes a transcript with a custom instruction
-func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
+// RetryRefinement re-processes a transcript with a custom instruction using the active LLM provider.
+func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 	if a.historyService == nil {
 		return "", fmt.Errorf("history service not available")
 	}
@@ -124,12 +124,14 @@ func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
 		return "", err
 	}
 
+	activeModel := a.activeLLMModel()
+
 	// Use raw text if no instruction, otherwise apply instruction
 	var newPolished string
 	if instruction == "" {
-		newPolished, _, _, err = a.geminiClient.RefineText(transcript.RawText, "")
+		newPolished, _, _, err = a.refiner.RefineText(transcript.RawText, activeModel)
 	} else {
-		newPolished, err = a.geminiClient.RetryWithInstruction(transcript.PolishedText, instruction)
+		newPolished, err = a.refiner.RetryWithInstruction(transcript.PolishedText, instruction, activeModel)
 	}
 
 	if err != nil {
@@ -142,6 +144,11 @@ func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
 	}
 
 	return newPolished, nil
+}
+
+// RetryWithGemini re-processes a transcript with a custom instruction (legacy alias for provider-agnostic RetryRefinement)
+func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
+	return a.RetryRefinement(id, instruction)
 }
 
 // CopyToClipboard copies text to clipboard

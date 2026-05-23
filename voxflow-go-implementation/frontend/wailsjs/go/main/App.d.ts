@@ -94,6 +94,8 @@ export function OpenSettings():Promise<void>;
 
 export function Quit():Promise<void>;
 
+export function RetryRefinement(arg1:number,arg2:string):Promise<string>;
+
 export function RetryWithGemini(arg1:number,arg2:string):Promise<string>;
 
 export function SearchHistory(arg1:string,arg2:number):Promise<Array<history.Transcript>>;
