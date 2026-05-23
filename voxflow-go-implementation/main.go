@@ -50,10 +50,10 @@ func main() {
 	// Create application with options - Start as floating indicator
 	err := wails.Run(&options.App{
 		Title:             "voxflow",
-		Width:             110,
-		Height:            60,
-		MinWidth:          110,
-		MinHeight:         60,
+		Width:             96,
+		Height:            52,
+		MinWidth:          96,
+		MinHeight:         52,
 		DisableResize:     false, // Enable native resizing
 		Frameless:         true,
 		AlwaysOnTop:       true,

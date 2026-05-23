@@ -234,7 +234,24 @@ export default function SettingsView() {
     try {
       const models = await GetGeminiModels();
       console.log("Loaded Gemini models:", models);
-      setGeminiModels(models || []);
+      const modelsList = models || [];
+      setGeminiModels(modelsList);
+      if (modelsList.length > 0) {
+        setConfig((prev) => {
+          if (!prev) return null;
+          const currentModel = prev.gemini_model;
+          if (!currentModel || !modelsList.includes(currentModel)) {
+            const defaultModel = modelsList.find(m => m.includes("gemini-1.5-flash")) || 
+                                 modelsList.find(m => m.includes("flash")) || 
+                                 modelsList[0];
+            if (defaultModel) {
+              SetGeminiModel(defaultModel).catch(err => console.error("Failed to auto-set Gemini model:", err));
+              return { ...prev, gemini_model: defaultModel };
+            }
+          }
+          return prev;
+        });
+      }
     } catch (err) {
       console.error("Failed to load Gemini models:", err);
       setGeminiModelsError("Failed to fetch models. Check your API key.");
@@ -248,7 +265,22 @@ export default function SettingsView() {
     try {
       const models = await GetOpenRouterModels();
       console.log("Loaded OpenRouter models:", models);
-      setOpenRouterModels(models || []);
+      const modelsList = models || [];
+      setOpenRouterModels(modelsList);
+      if (modelsList.length > 0) {
+        setConfig((prev) => {
+          if (!prev) return null;
+          const currentModel = prev.openrouter_model;
+          if (!currentModel || !modelsList.includes(currentModel)) {
+            const defaultModel = modelsList.find(m => m.includes("free")) || modelsList[0];
+            if (defaultModel) {
+              SetOpenRouterModel(defaultModel).catch(err => console.error("Failed to auto-set OpenRouter model:", err));
+              return { ...prev, openrouter_model: defaultModel };
+            }
+          }
+          return prev;
+        });
+      }
     } catch (err) {
       console.error("Failed to load OpenRouter models:", err);
     } finally {
@@ -261,7 +293,24 @@ export default function SettingsView() {
     try {
       const models = await GetGroqModels();
       console.log("Loaded Groq models:", models);
-      setGroqModels(models || []);
+      const modelsList = models || [];
+      setGroqModels(modelsList);
+      if (modelsList.length > 0) {
+        setConfig((prev) => {
+          if (!prev) return null;
+          const currentModel = prev.groq_model;
+          if (!currentModel || !modelsList.includes(currentModel)) {
+            const defaultModel = modelsList.find(m => m.includes("llama-3.1-8b-instant")) || 
+                                 modelsList.find(m => m.includes("llama3")) || 
+                                 modelsList[0];
+            if (defaultModel) {
+              SetGroqModel(defaultModel).catch(err => console.error("Failed to auto-set Groq model:", err));
+              return { ...prev, groq_model: defaultModel };
+            }
+          }
+          return prev;
+        });
+      }
     } catch (err) {
       console.error("Failed to load Groq models:", err);
     } finally {
@@ -274,7 +323,22 @@ export default function SettingsView() {
     try {
       const models = await GetCerebrasModels();
       console.log("Loaded Cerebras models:", models);
-      setCerebrasModels(models || []);
+      const modelsList = models || [];
+      setCerebrasModels(modelsList);
+      if (modelsList.length > 0) {
+        setConfig((prev) => {
+          if (!prev) return null;
+          const currentModel = prev.cerebras_model;
+          if (!currentModel || !modelsList.includes(currentModel)) {
+            const defaultModel = modelsList.find(m => m.includes("llama3.1-8b")) || modelsList[0];
+            if (defaultModel) {
+              SetCerebrasModel(defaultModel).catch(err => console.error("Failed to auto-set Cerebras model:", err));
+              return { ...prev, cerebras_model: defaultModel };
+            }
+          }
+          return prev;
+        });
+      }
     } catch (err) {
       console.error("Failed to load Cerebras models:", err);
     } finally {
@@ -413,6 +477,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, api_key_set: true } : null));
       setApiKey("");
       showSuccess("apiKey");
+      await loadGeminiModels();
     } catch (err) {
       console.error("Failed to save API key:", err);
     } finally {
@@ -430,6 +495,7 @@ export default function SettingsView() {
       );
       setOpenRouterApiKey("");
       showSuccess("openRouterApiKey");
+      await loadOpenRouterModels();
     } catch (err) {
       console.error("Failed to save OpenRouter API key:", err);
     } finally {
@@ -445,6 +511,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, groq_api_key_set: true } : null));
       setGroqApiKey("");
       showSuccess("groqApiKey");
+      await loadGroqModels();
     } catch (err) {
       console.error("Failed to save Groq API key:", err);
     } finally {
@@ -462,6 +529,7 @@ export default function SettingsView() {
       );
       setCerebrasApiKey("");
       showSuccess("cerebrasApiKey");
+      await loadCerebrasModels();
     } catch (err) {
       console.error("Failed to save Cerebras API key:", err);
     } finally {

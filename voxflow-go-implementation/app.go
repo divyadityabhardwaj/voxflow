@@ -27,13 +27,16 @@ import (
 // - expanded is the hover-reveal control strip
 // Resizing the native window prevents a large transparent hit area.
 const (
-	miniModeCollapsedW = 84
-	miniModeCollapsedH = 44
-	miniModeExpandedW  = 140
-	miniModeExpandedH  = 44
+	miniModeCollapsedW = 96
+	miniModeCollapsedH = 52
+	miniModeExpandedW  = 192
+	miniModeExpandedH  = 104
 )
 
-var whisperNoiseMarkerRe = regexp.MustCompile(`(?i)(^|\s)[\[(](audio|music|applause|noise|silence)[\])](\s|$)`)
+var whisperNoiseMarkerRe = regexp.MustCompile(
+	`(?i)(^|\s)[\[(](audio|music|applause|noise|silence|laughter)[\])](?:\s|$)` +
+		`|(^|\s)\[[A-Z]{2,}(?:\s[A-Z]{2,})+\](?:\s|$)`,
+)
 
 type streamChunk struct {
 	Start time.Duration

@@ -94,7 +94,7 @@ func (a *App) HideMiniMode() {
 }
 
 // SetMiniModeExpanded resizes the mini-mode window between compact and full control strip.
-func (a *App) SetMiniModeExpanded(expanded bool) {
+func (a *App) SetMiniModeExpanded(expanded bool, height int) {
 	if !a.isMiniMode {
 		return
 	}
@@ -104,12 +104,17 @@ func (a *App) SetMiniModeExpanded(expanded bool) {
 		targetW = miniModeExpandedW
 	}
 
-	// Tween window width for a smoother hover expansion.
+	targetH := height
+	if targetH <= 0 {
+		targetH = miniModeCollapsedH
+	}
+
+	// Tween window size smoothly.
 	startW, startH := runtime.WindowGetSize(a.ctx)
 	if startH <= 0 {
-		startH = miniModeExpandedH
+		startH = targetH
 	}
-	if startW == targetW {
+	if startW == targetW && startH == targetH {
 		return
 	}
 
@@ -121,7 +126,9 @@ func (a *App) SetMiniModeExpanded(expanded bool) {
 	a.miniResizeCancel = cancel
 	a.miniResizeMu.Unlock()
 
-	go func(startW int, targetW int, targetH int, ctx context.Context) {
+	startX, startY := runtime.WindowGetPosition(a.ctx)
+
+	go func(startW int, targetW int, startH int, targetH int, startX int, startY int, ctx context.Context) {
 		const steps = 10
 		const stepDelay = 12 * time.Millisecond
 
@@ -134,7 +141,14 @@ func (a *App) SetMiniModeExpanded(expanded bool) {
 
 			t := float64(i) / float64(steps)
 			w := int(float64(startW) + (float64(targetW-startW) * t))
-			runtime.WindowSetSize(a.ctx, w, targetH)
+			h := int(float64(startH) + (float64(targetH-startH) * t))
+
+			// Shift Y coordinate to keep the bottom edge of the window anchored
+			diffH := h - startH
+			y := startY - diffH
+
+			runtime.WindowSetSize(a.ctx, w, h)
+			runtime.WindowSetPosition(a.ctx, startX, y)
 			time.Sleep(stepDelay)
 		}
 
@@ -143,9 +157,11 @@ func (a *App) SetMiniModeExpanded(expanded bool) {
 		case <-ctx.Done():
 			return
 		default:
+			diffH := targetH - startH
 			runtime.WindowSetSize(a.ctx, targetW, targetH)
+			runtime.WindowSetPosition(a.ctx, startX, startY-diffH)
 		}
-	}(startW, targetW, miniModeExpandedH, ctx)
+	}(startW, targetW, startH, targetH, startX, startY, ctx)
 }
 
 // startPositionWatch starts a goroutine to poll and save window position
@@ -174,10 +190,17 @@ func (a *App) startPositionWatch() {
 				return
 			case <-ticker.C:
 				rx, ry := runtime.WindowGetPosition(a.ctx)
+				_, rh := runtime.WindowGetSize(a.ctx)
 
-				if rx != lastSavedX || ry != lastSavedY {
-					lastSavedX, lastSavedY = rx, ry
-					a.config.SetMiniModePosition(rx, ry)
+				// Calculate baseline Y as if the height was standard collapsed height
+				baselineY := ry
+				if rh > 0 {
+					baselineY = ry + (rh - miniModeCollapsedH)
+				}
+
+				if rx != lastSavedX || baselineY != lastSavedY {
+					lastSavedX, lastSavedY = rx, baselineY
+					a.config.SetMiniModePosition(rx, baselineY)
 					dirty = true
 				}
 
@@ -195,9 +218,14 @@ func (a *App) startPositionWatch() {
 func (a *App) saveCurrentMiniModePosition() {
 	if a.isMiniMode {
 		x, y := runtime.WindowGetPosition(a.ctx)
-		a.config.SetMiniModePosition(x, y)
+		_, h := runtime.WindowGetSize(a.ctx)
+		baselineY := y
+		if h > 0 {
+			baselineY = y + (h - miniModeCollapsedH)
+		}
+		a.config.SetMiniModePosition(x, baselineY)
 		a.config.Save()
-		logger.Infof("[App] Saved mini mode position: %d, %d", x, y)
+		logger.Infof("[App] Saved baseline mini mode position: %d, %d (actual: %d, %d, height: %d)", x, baselineY, x, y, h)
 	}
 }
 

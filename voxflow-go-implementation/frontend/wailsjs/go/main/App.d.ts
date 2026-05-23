@@ -122,7 +122,7 @@ export function SetLocalModel(arg1:string):Promise<void>;
 
 export function SetLocalURL(arg1:string):Promise<void>;
 
-export function SetMiniModeExpanded(arg1:boolean):Promise<void>;
+export function SetMiniModeExpanded(arg1:boolean,arg2:number):Promise<void>;
 
 export function SetOpenRouterAPIKey(arg1:string):Promise<void>;
 

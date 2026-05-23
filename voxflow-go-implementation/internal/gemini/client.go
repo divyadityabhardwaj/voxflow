@@ -281,7 +281,8 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 
 // ModelListResponse represents the response from listing models
 type ModelListResponse struct {
-	Models []Model `json:"models"`
+	Models []Model   `json:"models"`
+	Error  *APIError `json:"error,omitempty"`
 }
 
 // Model represents a Gemini model
@@ -328,6 +329,10 @@ func (c *Client) ListModels() ([]string, error) {
 	var listResp ModelListResponse
 	if err := json.Unmarshal(respBody, &listResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if listResp.Error != nil {
+		return nil, fmt.Errorf("API error: %s (code: %d)", listResp.Error.Message, listResp.Error.Code)
 	}
 
 	var models []string

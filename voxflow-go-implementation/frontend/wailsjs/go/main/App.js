@@ -238,8 +238,8 @@ export function SetLocalURL(arg1) {
   return window['go']['main']['App']['SetLocalURL'](arg1);
 }
 
-export function SetMiniModeExpanded(arg1) {
-  return window['go']['main']['App']['SetMiniModeExpanded'](arg1);
+export function SetMiniModeExpanded(arg1, arg2) {
+  return window['go']['main']['App']['SetMiniModeExpanded'](arg1, arg2);
 }
 
 export function SetOpenRouterAPIKey(arg1) {
