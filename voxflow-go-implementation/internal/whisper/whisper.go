@@ -556,27 +556,53 @@ func writeSamplesToWav(samples []int16, sampleRate int) (string, error) {
 	fileSize := 36 + dataSize
 
 	// RIFF header
-	file.Write([]byte("RIFF"))
-	binary.Write(file, binary.LittleEndian, int32(fileSize))
-	file.Write([]byte("WAVE"))
+	if _, err := file.Write([]byte("RIFF")); err != nil {
+		return "", fmt.Errorf("failed to write RIFF chunk descriptor: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int32(fileSize)); err != nil {
+		return "", fmt.Errorf("failed to write WAV file size: %w", err)
+	}
+	if _, err := file.Write([]byte("WAVE")); err != nil {
+		return "", fmt.Errorf("failed to write WAVE format descriptor: %w", err)
+	}
 
 	// fmt subchunk
-	file.Write([]byte("fmt "))
-	binary.Write(file, binary.LittleEndian, int32(16))            // Subchunk size
-	binary.Write(file, binary.LittleEndian, int16(1))             // Audio format (PCM)
-	binary.Write(file, binary.LittleEndian, int16(channels))      // Num channels
-	binary.Write(file, binary.LittleEndian, int32(sampleRate))    // Sample rate
-	binary.Write(file, binary.LittleEndian, int32(byteRate))      // Byte rate
-	binary.Write(file, binary.LittleEndian, int16(blockAlign))    // Block align
-	binary.Write(file, binary.LittleEndian, int16(bitsPerSample)) // Bits per sample
+	if _, err := file.Write([]byte("fmt ")); err != nil {
+		return "", fmt.Errorf("failed to write fmt subchunk ID: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int32(16)); err != nil { // Subchunk size
+		return "", fmt.Errorf("failed to write fmt subchunk size: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int16(1)); err != nil { // Audio format (PCM)
+		return "", fmt.Errorf("failed to write audio format: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int16(channels)); err != nil { // Num channels
+		return "", fmt.Errorf("failed to write num channels: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int32(sampleRate)); err != nil { // Sample rate
+		return "", fmt.Errorf("failed to write sample rate: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int32(byteRate)); err != nil { // Byte rate
+		return "", fmt.Errorf("failed to write byte rate: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int16(blockAlign)); err != nil { // Block align
+		return "", fmt.Errorf("failed to write block align: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int16(bitsPerSample)); err != nil { // Bits per sample
+		return "", fmt.Errorf("failed to write bits per sample: %w", err)
+	}
 
 	// data subchunk
-	file.Write([]byte("data"))
-	binary.Write(file, binary.LittleEndian, int32(dataSize))
+	if _, err := file.Write([]byte("data")); err != nil {
+		return "", fmt.Errorf("failed to write data subchunk ID: %w", err)
+	}
+	if err := binary.Write(file, binary.LittleEndian, int32(dataSize)); err != nil {
+		return "", fmt.Errorf("failed to write data subchunk size: %w", err)
+	}
 
-	// Write audio data
-	for _, sample := range samples {
-		binary.Write(file, binary.LittleEndian, sample)
+	// Write entire audio data slice at once to prevent slow iteration over samples
+	if err := binary.Write(file, binary.LittleEndian, samples); err != nil {
+		return "", fmt.Errorf("failed to write audio data samples: %w", err)
 	}
 
 	return filepath, nil

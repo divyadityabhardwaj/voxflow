@@ -70,6 +70,54 @@ export namespace main {
 	        this.tps = source["tps"];
 	    }
 	}
+	export class ConfigResponse {
+	    hotkey: string;
+	    hands_free_hotkey: string;
+	    push_to_talk_hotkey: string;
+	    whisper_model: string;
+	    whisper_language: string;
+	    whisper_threads: number;
+	    gemini_model: string;
+	    api_key_set: boolean;
+	    llm_provider: string;
+	    openrouter_model: string;
+	    openrouter_api_key_set: boolean;
+	    groq_model: string;
+	    groq_api_key_set: boolean;
+	    cerebras_model: string;
+	    cerebras_api_key_set: boolean;
+	    local_model: string;
+	    local_url: string;
+	    refinement_mode: string;
+	    mute_system_audio: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConfigResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hotkey = source["hotkey"];
+	        this.hands_free_hotkey = source["hands_free_hotkey"];
+	        this.push_to_talk_hotkey = source["push_to_talk_hotkey"];
+	        this.whisper_model = source["whisper_model"];
+	        this.whisper_language = source["whisper_language"];
+	        this.whisper_threads = source["whisper_threads"];
+	        this.gemini_model = source["gemini_model"];
+	        this.api_key_set = source["api_key_set"];
+	        this.llm_provider = source["llm_provider"];
+	        this.openrouter_model = source["openrouter_model"];
+	        this.openrouter_api_key_set = source["openrouter_api_key_set"];
+	        this.groq_model = source["groq_model"];
+	        this.groq_api_key_set = source["groq_api_key_set"];
+	        this.cerebras_model = source["cerebras_model"];
+	        this.cerebras_api_key_set = source["cerebras_api_key_set"];
+	        this.local_model = source["local_model"];
+	        this.local_url = source["local_url"];
+	        this.refinement_mode = source["refinement_mode"];
+	        this.mute_system_audio = source["mute_system_audio"];
+	    }
+	}
 	export class HistoryPage {
 	    transcripts: history.Transcript[];
 	    next_cursor_ts: string;

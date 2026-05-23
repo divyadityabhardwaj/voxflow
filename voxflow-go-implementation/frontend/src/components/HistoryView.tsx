@@ -3,6 +3,7 @@ import {
   DeleteTranscript,
   ClearAllHistory,
   CopyToClipboard,
+  InjectText,
 } from "../../wailsjs/go/main/App";
 import { useConfirmModal } from "./ConfirmModal";
 
@@ -19,6 +20,34 @@ interface Transcript {
   tokens_per_second?: number;
   words_per_second?: number;
 }
+
+const escapeRegExp = (string: string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+const highlightText = (text: string, highlight: string) => {
+  if (!highlight.trim()) {
+    return <span>{text}</span>;
+  }
+  const regex = new RegExp(`(${escapeRegExp(highlight)})`, "gi");
+  const parts = text.split(regex);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        part.toLowerCase() === highlight.toLowerCase() ? (
+          <mark
+            key={i}
+            className="bg-primary/20 text-text px-0.5 rounded font-black border-b-2 border-primary/50"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        )
+      )}
+    </span>
+  );
+};
 
 export default function HistoryView() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
@@ -142,6 +171,14 @@ export default function HistoryView() {
     }
   };
 
+  const handleInject = async (text: string) => {
+    try {
+      await InjectText(text);
+    } catch (err) {
+      console.error("Failed to inject:", err);
+    }
+  };
+
   const formatDate = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString("en-US", {
@@ -254,7 +291,7 @@ export default function HistoryView() {
                     {formatDate(t.timestamp)}
                   </p>
                   <p className="text-sm text-text font-medium line-clamp-2">
-                    {truncate(t.polished_text || t.raw_text, 80)}
+                    {highlightText(truncate(t.polished_text || t.raw_text, 80), searchQuery)}
                   </p>
                 </button>
               ))}
@@ -344,17 +381,30 @@ export default function HistoryView() {
                       <h3 className="text-xs font-black text-text uppercase tracking-tighter">
                         Original
                       </h3>
-                      <button
-                        onClick={() => handleCopy(selectedTranscript.raw_text)}
-                        title="Copy original text to clipboard"
-                        className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
-                      >
-                        Copy
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleCopy(selectedTranscript.raw_text)}
+                          title="Copy original text to clipboard"
+                          className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
+                        >
+                          Copy
+                        </button>
+                        <span className="text-border">|</span>
+                        <button
+                          onClick={() => handleInject(selectedTranscript.raw_text)}
+                          title="Inject original text into current cursor position"
+                          className="text-xs text-tertiary hover:text-primary transition-colors font-bold flex items-center gap-1"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20" />
+                          </svg>
+                          Inject
+                        </button>
+                      </div>
                     </div>
                     <div className="card p-4">
                       <p className="text-secondary whitespace-pre-wrap leading-relaxed font-medium">
-                        {selectedTranscript.raw_text}
+                        {highlightText(selectedTranscript.raw_text, searchQuery)}
                       </p>
                     </div>
                   </div>
@@ -369,17 +419,30 @@ export default function HistoryView() {
                       ? "Polished"
                       : "Result"}
                   </h3>
-                  <button
-                    onClick={() => handleCopy(selectedTranscript.polished_text)}
-                    title="Copy polished text to clipboard"
-                    className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
-                  >
-                    Copy
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleCopy(selectedTranscript.polished_text)}
+                      title="Copy polished text to clipboard"
+                      className="text-xs text-tertiary hover:text-primary transition-colors font-bold"
+                    >
+                      Copy
+                    </button>
+                    <span className="text-border">|</span>
+                    <button
+                      onClick={() => handleInject(selectedTranscript.polished_text)}
+                      title="Inject text into current cursor position"
+                      className="text-xs text-tertiary hover:text-primary transition-colors font-bold flex items-center gap-1"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20" />
+                      </svg>
+                      Inject
+                    </button>
+                  </div>
                 </div>
                 <div className="card p-4">
                   <p className="text-text whitespace-pre-wrap leading-relaxed font-medium">
-                    {selectedTranscript.polished_text}
+                    {highlightText(selectedTranscript.polished_text, searchQuery)}
                   </p>
                 </div>
               </div>

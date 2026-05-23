@@ -1,22 +1,11 @@
-import { useState, useEffect } from "react";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { ToggleRecording, GetStatus } from "../../wailsjs/go/main/App";
-import { Events } from "../constants/events";
-
-type Status = "Idle" | "Recording" | "Processing";
+import { ToggleRecording } from "../../wailsjs/go/main/App";
+import { useRecordingState } from "../hooks/useRecordingState";
 
 export default function RecordingPill() {
-  const [status, setStatus] = useState<Status>("Idle");
-
-  useEffect(() => {
-    GetStatus().then((s) => setStatus(s as Status));
-
-    EventsOn(Events.StateChanged, (newStatus: string) => {
-      setStatus(newStatus as Status);
-    });
-  }, []);
+  const status = useRecordingState();
 
   const handleStop = async () => {
+
     if (status === "Recording") {
       await ToggleRecording();
     }

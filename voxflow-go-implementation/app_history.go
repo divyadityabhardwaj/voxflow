@@ -159,6 +159,14 @@ func (a *App) CopyToClipboard(text string) error {
 	return a.injectionService.CopyToClipboard(text)
 }
 
+// InjectText injects text into the active cursor position
+func (a *App) InjectText(text string) error {
+	if a.injectionService == nil {
+		return fmt.Errorf("injection service not available")
+	}
+	return a.injectionService.Inject(text)
+}
+
 // OpenHistoryWindow emits event to open history window
 func (a *App) OpenHistoryWindow() {
 	runtime.EventsEmit(a.ctx, events.OpenHistory, nil)

@@ -9,13 +9,11 @@ import { EventsOn, Quit } from "../../wailsjs/runtime/runtime";
 import {
   HideMiniMode,
   ToggleRecording,
-  GetStatus,
   SetMiniModeExpanded,
 } from "../../wailsjs/go/main/App";
 import { useTheme } from "../contexts/ThemeContext";
 import { Events } from "../constants/events";
-
-type Status = "Idle" | "Recording" | "Processing";
+import { useRecordingState, Status } from "../hooks/useRecordingState";
 
 const LEAVE_DELAY_MS = 280;
 
@@ -57,7 +55,7 @@ const Waveform = ({
 );
 
 export default function RecordingIndicator() {
-  const [status, setStatus] = useState<Status>("Idle");
+  const status = useRecordingState();
   const [hovered, setHovered] = useState(false);
   const [activeToast, setActiveToast] = useState<{
     id: number;
@@ -71,10 +69,7 @@ export default function RecordingIndicator() {
   const showStatusLabel = status !== "Idle" && uiExpanded;
 
   useEffect(() => {
-    GetStatus().then((s) => setStatus(s as Status));
-
     const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
-      setStatus(newStatus as Status);
       // Automatically clear toast if recording starts or processing stops
       if (newStatus === "Recording" || newStatus === "Processing") {
         setActiveToast(null);
@@ -111,6 +106,7 @@ export default function RecordingIndicator() {
       unsubToast();
     };
   }, []);
+
 
   const hasToast = activeToast !== null;
   const targetHeight = hasToast ? 104 : 52;

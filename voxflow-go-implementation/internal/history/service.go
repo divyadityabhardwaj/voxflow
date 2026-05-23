@@ -36,16 +36,21 @@ type Service struct {
 const MaxHistoryLimit = 10000
 const MaxPageSize = 100
 
-// NewService creates a new history service
+// NewService creates a new history service using the default user configuration directory path.
 func NewService() (*Service, error) {
 	dbPath, err := getDBPath()
 	if err != nil {
 		return nil, err
 	}
+	return NewServiceWithPath(dbPath)
+}
 
+// NewServiceWithPath creates a new history service using a custom SQLite database file path.
+// This is extremely helpful for testing.
+func NewServiceWithPath(dbPath string) (*Service, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open database at %s: %w", dbPath, err)
 	}
 
 	s := &Service{db: db}

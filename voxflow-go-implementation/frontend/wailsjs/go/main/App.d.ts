@@ -38,7 +38,7 @@ export function GetCerebrasModelDescriptions():Promise<Record<string, string>>;
 
 export function GetCerebrasModels():Promise<Array<string>>;
 
-export function GetConfig():Promise<Record<string, any>>;
+export function GetConfig():Promise<main.ConfigResponse>;
 
 export function GetGeminiModel():Promise<string>;
 
@@ -71,6 +71,8 @@ export function GetStatus():Promise<string>;
 export function GetTranscript(arg1:number):Promise<history.Transcript>;
 
 export function HideMiniMode():Promise<void>;
+
+export function InjectText(arg1:string):Promise<void>;
 
 export function IsFullscreen():Promise<boolean>;
 

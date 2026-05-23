@@ -138,6 +138,10 @@ export function HideMiniMode() {
   return window['go']['main']['App']['HideMiniMode']();
 }
 
+export function InjectText(arg1) {
+  return window['go']['main']['App']['InjectText'](arg1);
+}
+
 export function IsFullscreen() {
   return window['go']['main']['App']['IsFullscreen']();
 }

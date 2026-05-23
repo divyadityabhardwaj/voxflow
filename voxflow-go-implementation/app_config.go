@@ -9,30 +9,51 @@ import (
 	"voxflow/internal/whisper"
 )
 
-// GetConfig returns the current configuration
-func (a *App) GetConfig() map[string]interface{} {
-	return map[string]interface{}{
-		"hotkey":                 a.config.GetHotkey(),
-		"hands_free_hotkey":      a.config.GetHandsFreeHotkey(),
-		"push_to_talk_hotkey":    a.config.GetPushToTalkHotkey(),
-		"whisper_model":          a.config.GetWhisperModel(),
-		"whisper_language":       a.config.GetWhisperLanguage(),
-		"whisper_threads":        a.config.GetWhisperThreads(),
-		"gemini_model":           a.config.GetGeminiModel(),
-		"api_key_set":            a.config.GetGeminiAPIKey() != "",
-		"llm_provider":           a.config.GetLLMProvider(),
-		"openrouter_model":       a.config.GetOpenRouterModel(),
-		"openrouter_api_key_set": a.config.GetOpenRouterAPIKey() != "",
-		"groq_model":             a.config.GetGroqModel(),
-		"groq_api_key_set":       a.config.GetGroqAPIKey() != "",
-		"cerebras_model":         a.config.GetCerebrasModel(),
-		"cerebras_api_key_set":   a.config.GetCerebrasAPIKey() != "",
+// ConfigResponse represents the strongly-typed configuration payload exposed to the frontend.
+type ConfigResponse struct {
+	Hotkey              string `json:"hotkey"`
+	HandsFreeHotkey     string `json:"hands_free_hotkey"`
+	PushToTalkHotkey    string `json:"push_to_talk_hotkey"`
+	WhisperModel        string `json:"whisper_model"`
+	WhisperLanguage     string `json:"whisper_language"`
+	WhisperThreads      int    `json:"whisper_threads"`
+	GeminiModel         string `json:"gemini_model"`
+	APIKeySet           bool   `json:"api_key_set"`
+	LLMProvider         string `json:"llm_provider"`
+	OpenRouterModel     string `json:"openrouter_model"`
+	OpenRouterAPIKeySet bool   `json:"openrouter_api_key_set"`
+	GroqModel           string `json:"groq_model"`
+	GroqAPIKeySet       bool   `json:"groq_api_key_set"`
+	CerebrasModel       string `json:"cerebras_model"`
+	CerebrasAPIKeySet   bool   `json:"cerebras_api_key_set"`
+	LocalModel          string `json:"local_model"`
+	LocalURL            string `json:"local_url"`
+	RefinementMode      string `json:"refinement_mode"`
+	MuteSystemAudio     bool   `json:"mute_system_audio"`
+}
 
-		"local_model": a.config.GetLocalModel(),
-		"local_url":   a.config.GetLocalURL(),
-
-		"refinement_mode":   a.config.GetRefinementMode(),
-		"mute_system_audio": a.config.GetMuteSystemAudio(),
+// GetConfig returns the current configuration strongly typed.
+func (a *App) GetConfig() *ConfigResponse {
+	return &ConfigResponse{
+		Hotkey:              a.config.GetHotkey(),
+		HandsFreeHotkey:     a.config.GetHandsFreeHotkey(),
+		PushToTalkHotkey:    a.config.GetPushToTalkHotkey(),
+		WhisperModel:        a.config.GetWhisperModel(),
+		WhisperLanguage:     a.config.GetWhisperLanguage(),
+		WhisperThreads:      a.config.GetWhisperThreads(),
+		GeminiModel:         a.config.GetGeminiModel(),
+		APIKeySet:           a.config.GetGeminiAPIKey() != "",
+		LLMProvider:         a.config.GetLLMProvider(),
+		OpenRouterModel:     a.config.GetOpenRouterModel(),
+		OpenRouterAPIKeySet: a.config.GetOpenRouterAPIKey() != "",
+		GroqModel:           a.config.GetGroqModel(),
+		GroqAPIKeySet:       a.config.GetGroqAPIKey() != "",
+		CerebrasModel:       a.config.GetCerebrasModel(),
+		CerebrasAPIKeySet:   a.config.GetCerebrasAPIKey() != "",
+		LocalModel:          a.config.GetLocalModel(),
+		LocalURL:            a.config.GetLocalURL(),
+		RefinementMode:      a.config.GetRefinementMode(),
+		MuteSystemAudio:     a.config.GetMuteSystemAudio(),
 	}
 }
 
