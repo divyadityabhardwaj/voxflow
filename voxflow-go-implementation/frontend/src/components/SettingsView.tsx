@@ -44,6 +44,7 @@ import LLMProviderSettings from "./settings/LLMProviderSettings";
 import ModelSelectionSettings from "./settings/ModelSelectionSettings";
 import PipelineSettings from "./settings/PipelineSettings";
 import HotkeySettings from "./settings/HotkeySettings";
+import AppRulesSettings from "./settings/AppRulesSettings";
 
 interface Config {
   hands_free_hotkey: string;
@@ -926,6 +927,8 @@ export default function SettingsView() {
           handleRefinementModeChange={handleRefinementModeChange}
           handleMuteSystemAudioChange={handleMuteSystemAudioChange}
         />
+
+        <AppRulesSettings />
 
         {/* Global Key Hotkeys */}
         <HotkeySettings

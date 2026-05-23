@@ -136,7 +136,6 @@ func parseKey(keyStr string) (hotkey.Key, error) {
 // Update updates the registered hotkeys (called from app.go)
 // This sends a request to the main loop and waits for the result
 func (m *Manager) Update(handsFreeStr, pttStr string) error {
-	// Create request with result channel
 	req := reconfigRequest{
 		handsFreeStr: handsFreeStr,
 		pttStr:       pttStr,
@@ -246,7 +245,6 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 
 // handleReconfigure performs the actual hotkey swap (called from main loop)
 func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
-	// Unregister old hotkeys
 	if m.handsFreeHK != nil {
 		m.handsFreeHK.Unregister()
 		m.handsFreeHK = nil

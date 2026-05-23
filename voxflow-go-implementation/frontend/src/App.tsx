@@ -10,7 +10,12 @@ import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { Tooltip } from "./components/Tooltip";
 import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
-import { IsMiniMode, ShowMiniMode } from "../wailsjs/go/main/App";
+import {
+  GetOnboardingCompleted,
+  IsMiniMode,
+  ShowMiniMode,
+} from "../wailsjs/go/main/App";
+import OnboardingWizard from "./components/OnboardingWizard";
 import { Events } from "./constants/events";
 
 type View = "main" | "history" | "settings";
@@ -129,6 +134,7 @@ function AppContent() {
   const [modelReady, setModelReady] = useState<boolean>(false);
   const [modelDownloading, setModelDownloading] = useState<boolean>(false);
   const [isMiniMode, setIsMiniMode] = useState<boolean>(true);
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
@@ -153,6 +159,7 @@ function AppContent() {
     IsMiniMode().then((isMini) => {
       setIsMiniMode(isMini);
     });
+    GetOnboardingCompleted().then(setOnboardingDone);
 
     EventsOn(Events.OpenHistory, () => setCurrentView("history"));
     EventsOn(Events.OpenSettings, () => setCurrentView("settings"));
@@ -199,6 +206,12 @@ function AppContent() {
     setModelReady(true);
     setModelDownloading(false);
   };
+
+  if (onboardingDone === false && !isMiniMode) {
+    return (
+      <OnboardingWizard onComplete={() => setOnboardingDone(true)} />
+    );
+  }
 
   // Mini mode - show only recording indicator
   if (isMiniMode) {

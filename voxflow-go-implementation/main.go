@@ -9,6 +9,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"voxflow/internal/window"
 )
 
 //go:embed all:frontend/dist
@@ -50,10 +51,10 @@ func main() {
 	// Create application with options - Start as floating indicator
 	err := wails.Run(&options.App{
 		Title:             "voxflow",
-		Width:             96,
-		Height:            52,
-		MinWidth:          96,
-		MinHeight:         52,
+		Width:             window.MiniModeCollapsedW,
+		Height:            window.MiniModeCollapsedH,
+		MinWidth:          window.MiniModeCollapsedW,
+		MinHeight:         window.MiniModeCollapsedH,
 		DisableResize:     false, // Enable native resizing
 		Frameless:         true,
 		AlwaysOnTop:       true,

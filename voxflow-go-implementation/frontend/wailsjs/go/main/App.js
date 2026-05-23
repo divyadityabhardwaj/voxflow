@@ -30,6 +30,10 @@ export function ClearAllHistory() {
   return window['go']['main']['App']['ClearAllHistory']();
 }
 
+export function CompleteOnboarding() {
+  return window['go']['main']['App']['CompleteOnboarding']();
+}
+
 export function CopyToClipboard(arg1) {
   return window['go']['main']['App']['CopyToClipboard'](arg1);
 }
@@ -58,6 +62,10 @@ export function GetAllModels() {
   return window['go']['main']['App']['GetAllModels']();
 }
 
+export function GetAppRules() {
+  return window['go']['main']['App']['GetAppRules']();
+}
+
 export function GetCerebrasModel() {
   return window['go']['main']['App']['GetCerebrasModel']();
 }
@@ -72,6 +80,10 @@ export function GetCerebrasModels() {
 
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
+}
+
+export function GetFrontmostApp() {
+  return window['go']['main']['App']['GetFrontmostApp']();
 }
 
 export function GetGeminiModel() {
@@ -114,6 +126,10 @@ export function GetLocalURL() {
   return window['go']['main']['App']['GetLocalURL']();
 }
 
+export function GetOnboardingCompleted() {
+  return window['go']['main']['App']['GetOnboardingCompleted']();
+}
+
 export function GetOpenRouterModel() {
   return window['go']['main']['App']['GetOpenRouterModel']();
 }
@@ -140,6 +156,10 @@ export function HideMiniMode() {
 
 export function InjectText(arg1) {
   return window['go']['main']['App']['InjectText'](arg1);
+}
+
+export function IsAccessibilityGranted() {
+  return window['go']['main']['App']['IsAccessibilityGranted']();
 }
 
 export function IsFullscreen() {
@@ -182,8 +202,20 @@ export function OpenSettings() {
   return window['go']['main']['App']['OpenSettings']();
 }
 
+export function PromptAccessibilityExplanation() {
+  return window['go']['main']['App']['PromptAccessibilityExplanation']();
+}
+
 export function Quit() {
   return window['go']['main']['App']['Quit']();
+}
+
+export function RemoveAppRule(arg1) {
+  return window['go']['main']['App']['RemoveAppRule'](arg1);
+}
+
+export function RequestAccessibilityPermission() {
+  return window['go']['main']['App']['RequestAccessibilityPermission']();
 }
 
 export function RetryRefinement(arg1, arg2) {
@@ -204,6 +236,10 @@ export function SearchHistoryPage(arg1, arg2, arg3, arg4) {
 
 export function SetAPIKey(arg1) {
   return window['go']['main']['App']['SetAPIKey'](arg1);
+}
+
+export function SetAppRule(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetAppRule'](arg1, arg2, arg3);
 }
 
 export function SetCerebrasAPIKey(arg1) {
@@ -280,10 +316,6 @@ export function ShowMiniMode() {
 
 export function StartRecording() {
   return window['go']['main']['App']['StartRecording']();
-}
-
-export function StartStreamingTranscription() {
-  return window['go']['main']['App']['StartStreamingTranscription']();
 }
 
 export function StopRecording() {

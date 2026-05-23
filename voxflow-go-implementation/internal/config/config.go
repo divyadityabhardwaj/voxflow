@@ -38,7 +38,17 @@ type Config struct {
 
 	RefinementMode  string `json:"refinement_mode"` // "refine", "raw", "copy-only"
 	MuteSystemAudio *bool  `json:"mute_system_audio,omitempty"`
+	AppRules        map[string]AppRule `json:"app_rules,omitempty"`
+	OnboardingCompleted bool `json:"onboarding_completed"`
 	mu              sync.RWMutex
+}
+
+// AppRule holds per-application overrides for refinement and injection behavior.
+type AppRule struct {
+	// RefinementMode overrides the global mode: "refine", "raw", or "copy-only".
+	RefinementMode string `json:"refinement_mode,omitempty"`
+	// InjectMethod is "paste" (default) or "clipboard" (copy only, no Cmd+V).
+	InjectMethod string `json:"inject_method,omitempty"`
 }
 
 var (
@@ -146,6 +156,9 @@ func (c *Config) Load() error {
 	}
 	if c.RefinementMode == "" {
 		c.RefinementMode = "refine"
+	}
+	if c.AppRules == nil {
+		c.AppRules = make(map[string]AppRule)
 	}
 
 	// Check environment variable first for API key
@@ -558,6 +571,75 @@ func (c *Config) SetMuteSystemAudio(val bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.MuteSystemAudio = &val
+}
+
+// GetOnboardingCompleted reports whether the first-run wizard was finished.
+func (c *Config) GetOnboardingCompleted() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.OnboardingCompleted
+}
+
+// SetOnboardingCompleted marks the onboarding wizard as done.
+func (c *Config) SetOnboardingCompleted(done bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.OnboardingCompleted = done
+}
+
+// GetAppRules returns a copy of configured per-app rules keyed by bundle ID.
+func (c *Config) GetAppRules() map[string]AppRule {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]AppRule, len(c.AppRules))
+	for k, v := range c.AppRules {
+		out[k] = v
+	}
+	return out
+}
+
+// SetAppRule sets or updates a per-app rule.
+func (c *Config) SetAppRule(bundleID string, rule AppRule) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.AppRules == nil {
+		c.AppRules = make(map[string]AppRule)
+	}
+	c.AppRules[bundleID] = rule
+}
+
+// RemoveAppRule deletes a per-app rule.
+func (c *Config) RemoveAppRule(bundleID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.AppRules, bundleID)
+}
+
+// ResolveRefinementMode returns the effective refinement mode for an app bundle ID.
+func (c *Config) ResolveRefinementMode(bundleID string) string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if bundleID != "" {
+		if rule, ok := c.AppRules[bundleID]; ok && rule.RefinementMode != "" {
+			return rule.RefinementMode
+		}
+	}
+	if c.RefinementMode == "" {
+		return "refine"
+	}
+	return c.RefinementMode
+}
+
+// ShouldInjectPaste returns whether Cmd+V paste injection should run for the given app.
+func (c *Config) ShouldInjectPaste(bundleID string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if bundleID != "" {
+		if rule, ok := c.AppRules[bundleID]; ok && rule.InjectMethod == "clipboard" {
+			return false
+		}
+	}
+	return true
 }
 
 // CachedModelList holds a list of models and the time they were fetched.

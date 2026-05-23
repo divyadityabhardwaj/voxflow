@@ -56,6 +56,24 @@ export namespace history {
 
 export namespace main {
 	
+	export class AppRuleDTO {
+	    bundle_id: string;
+	    app_name?: string;
+	    refinement_mode?: string;
+	    inject_method?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppRuleDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bundle_id = source["bundle_id"];
+	        this.app_name = source["app_name"];
+	        this.refinement_mode = source["refinement_mode"];
+	        this.inject_method = source["inject_method"];
+	    }
+	}
 	export class CheckResult {
 	    latency: number;
 	    tps: number;
@@ -116,6 +134,20 @@ export namespace main {
 	        this.local_url = source["local_url"];
 	        this.refinement_mode = source["refinement_mode"];
 	        this.mute_system_audio = source["mute_system_audio"];
+	    }
+	}
+	export class FrontmostAppInfo {
+	    bundle_id: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FrontmostAppInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bundle_id = source["bundle_id"];
+	        this.name = source["name"];
 	    }
 	}
 	export class HistoryPage {

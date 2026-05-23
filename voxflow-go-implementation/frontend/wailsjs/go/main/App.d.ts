@@ -18,6 +18,8 @@ export function CheckOpenRouterModel(arg1:string):Promise<main.CheckResult>;
 
 export function ClearAllHistory():Promise<void>;
 
+export function CompleteOnboarding():Promise<void>;
+
 export function CopyToClipboard(arg1:string):Promise<void>;
 
 export function DeleteModelByName(arg1:string):Promise<void>;
@@ -32,6 +34,8 @@ export function EnsureWhisperCLI():Promise<void>;
 
 export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 
+export function GetAppRules():Promise<Array<main.AppRuleDTO>>;
+
 export function GetCerebrasModel():Promise<string>;
 
 export function GetCerebrasModelDescriptions():Promise<Record<string, string>>;
@@ -39,6 +43,8 @@ export function GetCerebrasModelDescriptions():Promise<Record<string, string>>;
 export function GetCerebrasModels():Promise<Array<string>>;
 
 export function GetConfig():Promise<main.ConfigResponse>;
+
+export function GetFrontmostApp():Promise<main.FrontmostAppInfo>;
 
 export function GetGeminiModel():Promise<string>;
 
@@ -60,6 +66,8 @@ export function GetLocalModel():Promise<string>;
 
 export function GetLocalURL():Promise<string>;
 
+export function GetOnboardingCompleted():Promise<boolean>;
+
 export function GetOpenRouterModel():Promise<string>;
 
 export function GetOpenRouterModelDescriptions():Promise<Record<string, string>>;
@@ -73,6 +81,8 @@ export function GetTranscript(arg1:number):Promise<history.Transcript>;
 export function HideMiniMode():Promise<void>;
 
 export function InjectText(arg1:string):Promise<void>;
+
+export function IsAccessibilityGranted():Promise<boolean>;
 
 export function IsFullscreen():Promise<boolean>;
 
@@ -94,7 +104,13 @@ export function OpenHistoryWindow():Promise<void>;
 
 export function OpenSettings():Promise<void>;
 
+export function PromptAccessibilityExplanation():Promise<boolean>;
+
 export function Quit():Promise<void>;
+
+export function RemoveAppRule(arg1:string):Promise<void>;
+
+export function RequestAccessibilityPermission():Promise<void>;
 
 export function RetryRefinement(arg1:number,arg2:string):Promise<string>;
 
@@ -105,6 +121,8 @@ export function SearchHistory(arg1:string,arg2:number):Promise<Array<history.Tra
 export function SearchHistoryPage(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.HistoryPage>;
 
 export function SetAPIKey(arg1:string):Promise<void>;
+
+export function SetAppRule(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SetCerebrasAPIKey(arg1:string):Promise<void>;
 
@@ -143,8 +161,6 @@ export function SetWhisperModel(arg1:string):Promise<void>;
 export function ShowMiniMode():Promise<void>;
 
 export function StartRecording():Promise<void>;
-
-export function StartStreamingTranscription():Promise<void>;
 
 export function StopRecording():Promise<void>;
 

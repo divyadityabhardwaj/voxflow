@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"regexp"
 	"sync"
-	"time"
 	"voxflow/internal/audio"
 	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
@@ -17,38 +15,20 @@ import (
 	"voxflow/internal/localclient"
 	"voxflow/internal/logger"
 	"voxflow/internal/openrouter"
+	"voxflow/internal/orchestrator"
 	"voxflow/internal/whisper"
+	"voxflow/internal/window"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
-
-// Mini mode window sizes:
-// - collapsed is the minimal visible pill (record + quit only)
-// - expanded is the hover-reveal control strip
-// Resizing the native window prevents a large transparent hit area.
-const (
-	miniModeCollapsedW = 96
-	miniModeCollapsedH = 52
-	miniModeExpandedW  = 192
-	miniModeExpandedH  = 104
-)
-
-var whisperNoiseMarkerRe = regexp.MustCompile(
-	`(?i)(^|\s)[\[(](audio|music|applause|noise|silence|laughter)[\])](?:\s|$)` +
-		`|(^|\s)\[[A-Z]{2,}(?:\s[A-Z]{2,})+\](?:\s|$)`,
-)
-
-type streamChunk struct {
-	Start time.Duration
-	Text  string
-}
 
 // App struct holds the application state
 type App struct {
 	ctx              context.Context
 	config           *config.Config
 	hotkeyManager    *hotkey.Manager
-	state            hotkey.State
+	windowMgr        *window.Manager
+	pipeline         *orchestrator.Pipeline
 	audioRecorder    *audio.Recorder
 	whisperService   *whisper.Service
 	localClient      *localclient.Client
@@ -58,53 +38,50 @@ type App struct {
 	cerebrasClient   *cerebras.Client
 	historyService   *history.Service
 	injectionService *injection.Service
-	// refiner is the active LLM provider. Swap it when the provider config changes.
-	// All pipeline code calls a.refiner.RefineText — no if/else over provider names.
-	refiner                 llm.Refiner
-	modelReady              bool
-	isMiniMode              bool               // Tracks if app is in mini indicator mode
-	userExplicitlyMaximized bool               // Tracks if user manually opened full app (don't auto-minimize)
-	downloadCancel          context.CancelFunc // Cancel function for active download
-	downloadMu              sync.Mutex         // Mutex for download operations
-	positionWatchCancel     context.CancelFunc // Cancel function for position polling
-	volumeMu                sync.Mutex         // Guards savedVolume
-	savedVolume             int                // System volume saved before muting; -1 = not muted
-
-	miniResizeMu     sync.Mutex
-	miniResizeCancel context.CancelFunc
-
-	// Streaming transcription state
-	streamTextMu sync.Mutex
-	streamText   string        // Accumulated streaming text
-	streamChunks []streamChunk // Individual chunk results for merging
+	refiner          llm.Refiner
+	modelReady       bool
+	downloadCancel   context.CancelFunc
+	downloadMu       sync.Mutex
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
 	cfg := config.GetInstance()
 	app := &App{
-		ctx:              context.Background(),
-		config:           cfg,
-		state:            hotkey.StateIdle,
-		isMiniMode:       true, // Start in mini mode (floating indicator)
-		audioRecorder:    audio.NewRecorder(),
-		whisperService:   whisper.NewService(),
-		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
+		ctx:            context.Background(),
+		config:         cfg,
+		audioRecorder:  audio.NewRecorder(),
+		whisperService: whisper.NewService(),
+		geminiClient:   gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
 		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
-		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
-		cerebrasClient:   cerebras.NewClient(cfg.GetCerebrasAPIKey()),
-		localClient:      localclient.NewClient(cfg.GetLocalURL()),
-		savedVolume:      -1, // -1 = not currently muted by VoxFlow
+		groqClient:     groq.NewClient(cfg.GetGroqAPIKey()),
+		cerebrasClient: cerebras.NewClient(cfg.GetCerebrasAPIKey()),
+		localClient:    localclient.NewClient(cfg.GetLocalURL()),
 	}
 	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
 	app.whisperService.SetThreads(cfg.GetWhisperThreads())
 	app.refiner = app.activeRefiner()
-
+	app.windowMgr = window.NewManager(app.ctx, cfg)
+	app.rebuildPipeline()
 	return app
 }
 
-// activeRefiner returns the llm.Refiner for the currently configured provider.
-// Call this whenever the provider selection changes.
+func (a *App) rebuildPipeline() {
+	a.pipeline = orchestrator.New(orchestrator.Config{
+		Ctx:            a.ctx,
+		AppConfig:      a.config,
+		Audio:          a.audioRecorder,
+		Whisper:        a.whisperService,
+		History:        a.historyService,
+		Injection:      a.injectionService,
+		Hotkeys:        a.hotkeyManager,
+		Windows:        a.windowMgr,
+		Refiner:        a.activeRefiner,
+		ActiveLLMModel: a.activeLLMModel,
+		ModelReady:     a.IsModelReady,
+	})
+}
+
 func (a *App) activeRefiner() llm.Refiner {
 	switch a.config.GetLLMProvider() {
 	case "openrouter":
@@ -115,12 +92,11 @@ func (a *App) activeRefiner() llm.Refiner {
 		return a.cerebrasClient
 	case "local":
 		return a.localClient
-	default: // "gemini" and anything unrecognised
+	default:
 		return a.geminiClient
 	}
 }
 
-// activeLLMModel returns the model name string for the currently configured provider.
 func (a *App) activeLLMModel() string {
 	switch a.config.GetLLMProvider() {
 	case "openrouter":
@@ -131,7 +107,7 @@ func (a *App) activeLLMModel() string {
 		return a.config.GetCerebrasModel()
 	case "local":
 		return a.config.GetLocalModel()
-	default: // "gemini"
+	default:
 		model := a.config.GetGeminiModel()
 		if model == "" {
 			model = "gemini-1.5-flash"
@@ -140,53 +116,33 @@ func (a *App) activeLLMModel() string {
 	}
 }
 
-// startup is called when the app starts
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.windowMgr.SetContext(ctx)
+	a.rebuildPipeline()
+	a.pipeline.SetContext(ctx)
 
-	// Make the floating indicator visible on all spaces and over fullscreen apps
-	MakeWindowFloatEverywhere()
+	window.FloatEverywhere()
 
-	// If starting in mini mode, ensure position is restored and watcher is started
-	if a.isMiniMode {
-		// Restore saved position if available
-		x, y := a.config.GetMiniModePosition()
-		if x != 0 || y != 0 {
-			runtime.WindowSetPosition(a.ctx, x, y)
-			// Ensure size is correct too, just in case
-			runtime.WindowSetMinSize(a.ctx, 200, 60)
-			runtime.WindowSetMaxSize(a.ctx, 200, 60)
-			runtime.WindowSetSize(a.ctx, 200, 60)
-		}
-
-		// Start watching position
-		a.startPositionWatch()
+	if !a.config.GetOnboardingCompleted() {
+		a.windowMgr.HideMini()
+	} else if a.windowMgr.IsMiniMode() {
+		a.windowMgr.StartupMiniMode()
 	}
 
-	// Initialize audio
-	// NOTE: PortAudio init is deferred until first recording start to avoid
-	// background audio threads/polling when the app is idle.
-
-	// Initialize history service
-	histService, err := history.NewService()
-	if err != nil {
+	if histService, err := history.NewService(); err != nil {
 		logger.Warnf("Warning: Failed to initialize history: %v", err)
 	} else {
 		a.historyService = histService
 	}
 
-	// Initialize injection service
-	injService, err := injection.NewService(true)
-	if err != nil {
+	if injService, err := injection.NewService(true); err != nil {
 		logger.Warnf("Warning: Failed to initialize injection: %v", err)
 	} else {
 		a.injectionService = injService
-		// Check and request Accessibility permission needed for CGEventPost (Cmd+V simulation).
-		// This is a one-time prompt — once granted it persists for the app bundle.
-		if !injection.IsAccessibilityGranted() {
-			logger.Infof("[Injection] Accessibility permission not granted — prompting user with explanation")
-			
-			// Show pre-prompt explanation dialog
+		if !a.config.GetOnboardingCompleted() && !injection.IsAccessibilityGranted() {
+			logger.Infof("[Injection] Accessibility not granted — onboarding will prompt")
+		} else if !injection.IsAccessibilityGranted() {
 			selection, dialogErr := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
 				Type:          runtime.QuestionDialog,
 				Title:         "Accessibility Permission Required",
@@ -194,38 +150,31 @@ func (a *App) startup(ctx context.Context) {
 				Buttons:       []string{"Grant Permission", "Later"},
 				DefaultButton: "Grant Permission",
 			})
-			
 			if dialogErr == nil && selection == "Grant Permission" {
 				injection.PromptAccessibility()
-			} else {
-				logger.Infof("[Injection] User deferred or skipped Accessibility permission grant")
 			}
-		} else {
-			logger.Infof("[Injection] Accessibility permission granted")
 		}
 	}
 
-	// Clean up any partial model downloads from previous interrupted sessions
+	a.rebuildPipeline()
+
 	if err := whisper.CleanupPartialDownloads(); err != nil {
 		logger.Warnf("Warning: Failed to cleanup partial downloads: %v", err)
 	}
-	// Check if model is downloaded
 	go a.checkModelStatus()
 
-	// Initialize hotkey manager with callback
 	a.hotkeyManager = hotkey.NewManager(a.onHotkeyPressed)
+	a.rebuildPipeline()
 
-	// Register and Start listening for hotkeys
 	hfHotkey := a.config.GetHandsFreeHotkey()
 	pttHotkey := a.config.GetPushToTalkHotkey()
 
-	logger.Infof("Starting hotkey manager with: HF=%s, PTT=%s", hfHotkey, pttHotkey)
+	logger.Infof("Starting hotkey manager: HF=%s, PTT=%s", hfHotkey, pttHotkey)
 	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey); err != nil {
 		logger.Errorf("Failed to start hotkey listener: %v", err)
 	}
 }
 
-// shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
 	if a.hotkeyManager != nil {
 		a.hotkeyManager.Stop()
@@ -239,35 +188,22 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.historyService != nil {
 		a.historyService.Close()
 	}
-	// Stop position watcher
-	if a.positionWatchCancel != nil {
-		a.positionWatchCancel()
-	}
-
-	// Save window position if we are shutting down in mini mode
-	if a.isMiniMode {
-		a.saveCurrentMiniModePosition()
-	}
-
+	a.windowMgr.Shutdown()
 	a.config.Save()
 }
 
-// GetStatus returns the current application status
 func (a *App) GetStatus() string {
-	return a.state.String()
+	return a.pipeline.State().String()
 }
 
-// IsMiniMode returns whether the app is in mini indicator mode
 func (a *App) IsMiniMode() bool {
-	return a.isMiniMode
+	return a.windowMgr.IsMiniMode()
 }
 
-// Quit closes the application
 func (a *App) Quit() {
 	runtime.Quit(a.ctx)
 }
 
-// ToggleFullscreen toggles fullscreen mode (true macOS fullscreen)
 func (a *App) ToggleFullscreen() {
 	if runtime.WindowIsFullscreen(a.ctx) {
 		runtime.WindowUnfullscreen(a.ctx)
@@ -276,12 +212,10 @@ func (a *App) ToggleFullscreen() {
 	}
 }
 
-// IsFullscreen returns whether the window is currently fullscreen
 func (a *App) IsFullscreen() bool {
 	return runtime.WindowIsFullscreen(a.ctx)
 }
 
-// ToggleMaximize toggles between normal and maximized window state
 func (a *App) ToggleMaximize() {
 	if runtime.WindowIsMaximised(a.ctx) {
 		runtime.WindowUnmaximise(a.ctx)
@@ -290,17 +224,14 @@ func (a *App) ToggleMaximize() {
 	}
 }
 
-// IsMaximized returns whether the window is currently maximized
 func (a *App) IsMaximized() bool {
 	return runtime.WindowIsMaximised(a.ctx)
 }
 
-// Minimize minimizes the window to the dock
 func (a *App) Minimize() {
 	runtime.WindowMinimise(a.ctx)
 }
 
-// IsMinimized returns whether the window is currently minimized
 func (a *App) IsMinimized() bool {
 	return runtime.WindowIsMinimised(a.ctx)
 }
