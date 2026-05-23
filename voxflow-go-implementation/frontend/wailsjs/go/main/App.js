@@ -246,6 +246,10 @@ export function SetMiniModeExpanded(arg1, arg2) {
   return window['go']['main']['App']['SetMiniModeExpanded'](arg1, arg2);
 }
 
+export function SetMuteSystemAudio(arg1) {
+  return window['go']['main']['App']['SetMuteSystemAudio'](arg1);
+}
+
 export function SetOpenRouterAPIKey(arg1) {
   return window['go']['main']['App']['SetOpenRouterAPIKey'](arg1);
 }
@@ -256,6 +260,10 @@ export function SetOpenRouterModel(arg1) {
 
 export function SetPushToTalkHotkey(arg1) {
   return window['go']['main']['App']['SetPushToTalkHotkey'](arg1);
+}
+
+export function SetRefinementMode(arg1) {
+  return window['go']['main']['App']['SetRefinementMode'](arg1);
 }
 
 export function SetWhisperModel(arg1) {

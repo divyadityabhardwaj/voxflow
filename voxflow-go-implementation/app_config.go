@@ -30,6 +30,9 @@ func (a *App) GetConfig() map[string]interface{} {
 
 		"local_model": a.config.GetLocalModel(),
 		"local_url":   a.config.GetLocalURL(),
+
+		"refinement_mode":   a.config.GetRefinementMode(),
+		"mute_system_audio": a.config.GetMuteSystemAudio(),
 	}
 }
 
@@ -294,4 +297,16 @@ func (a *App) SetCerebrasModel(model string) error {
 // GetCerebrasModel returns the current Cerebras model
 func (a *App) GetCerebrasModel() string {
 	return a.config.GetCerebrasModel()
+}
+
+// SetRefinementMode sets the refinement mode ("refine", "raw", "copy-only")
+func (a *App) SetRefinementMode(mode string) error {
+	a.config.SetRefinementMode(mode)
+	return a.config.Save()
+}
+
+// SetMuteSystemAudio sets whether system audio should be muted during recording
+func (a *App) SetMuteSystemAudio(val bool) error {
+	a.config.SetMuteSystemAudio(val)
+	return a.config.Save()
 }

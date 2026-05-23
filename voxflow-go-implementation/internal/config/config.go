@@ -34,7 +34,10 @@ type Config struct {
 
 	LocalModel string `json:"local_model"` // Free-form model name sent to the local server
 	LocalURL   string `json:"local_url"`   // Base URL of the local OpenAI-compatible server
-	mu         sync.RWMutex
+
+	RefinementMode  string `json:"refinement_mode"` // "refine", "raw", "copy-only"
+	MuteSystemAudio *bool  `json:"mute_system_audio,omitempty"`
+	mu              sync.RWMutex
 }
 
 var (
@@ -139,6 +142,9 @@ func (c *Config) Load() error {
 	}
 	if c.LocalURL == "" {
 		c.LocalURL = "http://localhost:11434"
+	}
+	if c.RefinementMode == "" {
+		c.RefinementMode = "refine"
 	}
 
 	// Check environment variable first for API key
@@ -517,4 +523,38 @@ func (c *Config) SetLocalURL(url string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LocalURL = url
+}
+
+// GetRefinementMode returns the configured refinement mode ("refine", "raw", "copy-only").
+func (c *Config) GetRefinementMode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.RefinementMode == "" {
+		return "refine"
+	}
+	return c.RefinementMode
+}
+
+// SetRefinementMode sets the refinement mode.
+func (c *Config) SetRefinementMode(mode string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.RefinementMode = mode
+}
+
+// GetMuteSystemAudio returns whether the system audio should be muted during recording (defaults to true).
+func (c *Config) GetMuteSystemAudio() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.MuteSystemAudio == nil {
+		return true // Default is true
+	}
+	return *c.MuteSystemAudio
+}
+
+// SetMuteSystemAudio sets whether system audio should be muted during recording.
+func (c *Config) SetMuteSystemAudio(val bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.MuteSystemAudio = &val
 }

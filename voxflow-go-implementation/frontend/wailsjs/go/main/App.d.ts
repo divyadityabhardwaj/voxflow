@@ -126,11 +126,15 @@ export function SetLocalURL(arg1:string):Promise<void>;
 
 export function SetMiniModeExpanded(arg1:boolean,arg2:number):Promise<void>;
 
+export function SetMuteSystemAudio(arg1:boolean):Promise<void>;
+
 export function SetOpenRouterAPIKey(arg1:string):Promise<void>;
 
 export function SetOpenRouterModel(arg1:string):Promise<void>;
 
 export function SetPushToTalkHotkey(arg1:string):Promise<void>;
+
+export function SetRefinementMode(arg1:string):Promise<void>;
 
 export function SetWhisperModel(arg1:string):Promise<void>;
 

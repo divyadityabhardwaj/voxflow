@@ -56,15 +56,15 @@ func (a *App) StartRecording() error {
 	// Start streaming transcription (chunks processed in background)
 	a.StartStreamingTranscription()
 
-	// Mute system audio asynchronously so the PortAudio stream starts capturing
-	// immediately — MuteSystemAudio calls osascript which takes ~50ms.
-	// Audio captured during that window is harmless silence at the very start.
-	go func() {
-		vol := audio.MuteSystemAudio()
-		a.volumeMu.Lock()
-		a.savedVolume = vol
-		a.volumeMu.Unlock()
-	}()
+	// Mute system audio asynchronously if enabled in config
+	if a.config.GetMuteSystemAudio() {
+		go func() {
+			vol := audio.MuteSystemAudio()
+			a.volumeMu.Lock()
+			a.savedVolume = vol
+			a.volumeMu.Unlock()
+		}()
+	}
 
 	runtime.EventsEmit(a.ctx, events.StateChanged, "Recording")
 	runtime.EventsEmit(a.ctx, events.RecordingStarted, nil)
@@ -222,6 +222,13 @@ func (a *App) processRecording() {
 	}
 	defer os.Remove(wavPath) // Clean up temp file
 
+	// --- VAD-based silence check (fast failure) ---
+	if !a.audioRecorder.HasAudioActivity() {
+		a.emitToast("No speech detected. Please try speaking louder or check your microphone.", "warning")
+		a.resetToIdle()
+		return
+	}
+
 	var rawText string
 	var whisperDuration time.Duration
 
@@ -284,25 +291,34 @@ func (a *App) processRecording() {
 	llmProvider := a.config.GetLLMProvider()
 	llmModel := a.activeLLMModel()
 
-	// Single dispatch point — no if/else over provider names.
 	var polishedText string
 	var tokenCount int
 	var okToGo bool
-	llmStart := time.Now()
-	polishedText, tokenCount, okToGo, err = a.refiner.RefineText(rawText, llmModel)
-	llmDuration := time.Since(llmStart)
+	var llmDuration time.Duration
 
-	if err != nil {
-		a.emitToast(llmProvider+" error: "+err.Error(), "error")
-		a.resetToIdle()
-		return
-	}
+	mode := a.config.GetRefinementMode()
+	if mode == "raw" || mode == "copy-only" {
+		polishedText = rawText
+		okToGo = true
+		logger.Infof("[App] Refinement mode is '%s' — bypassing LLM refinement phase", mode)
+	} else {
+		// Single dispatch point — no if/else over provider names.
+		llmStart := time.Now()
+		polishedText, tokenCount, okToGo, err = a.refiner.RefineText(rawText, llmModel)
+		llmDuration = time.Since(llmStart)
 
-	if okToGo {
-		polishedText = rawText
-	} else if polishedText == "" {
-		polishedText = rawText
-		a.emitToast("LLM refining failed - using raw transcription", "warning")
+		if err != nil {
+			a.emitToast(llmProvider+" error: "+err.Error(), "error")
+			a.resetToIdle()
+			return
+		}
+
+		if okToGo {
+			polishedText = rawText
+		} else if polishedText == "" {
+			polishedText = rawText
+			a.emitToast("LLM refining failed - using raw transcription", "warning")
+		}
 	}
 
 	// Calculate speed
@@ -345,11 +361,11 @@ func (a *App) processRecording() {
 		}()
 	}
 
-	// Inject text synchronously BEFORE emitting ProcessingComplete.
+	// Inject text synchronously BEFORE emitting ProcessingComplete, unless mode is copy-only.
 	// This ensures the UI state flips to "Done" only after the text is actually
 	// in the target app — preventing a race where the user starts typing
 	// while injection is still pending.
-	if a.injectionService != nil {
+	if a.injectionService != nil && mode != "copy-only" {
 		if err := a.injectionService.Inject(polishedText); err != nil {
 			logger.Warnf("Could not inject text (no active cursor?): %v", err)
 			a.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")

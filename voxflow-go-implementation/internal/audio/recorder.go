@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -354,4 +355,53 @@ func (r *Recorder) GetDuration() time.Duration {
 // IsRecording returns whether the recorder is currently recording
 func (r *Recorder) IsRecording() bool {
 	return r.recording.Load()
+}
+
+// HasAudioActivity calculates if there is sufficient audio energy in the recorded buffer
+func (r *Recorder) HasAudioActivity() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.buffer) == 0 {
+		return false
+	}
+
+	// Calculate RMS energy in sliding windows of 100ms
+	// 100ms window at 16kHz = 1600 samples
+	windowSize := 1600
+	if len(r.buffer) < windowSize {
+		// For extremely short recordings, check if average absolute amplitude > threshold
+		sum := int64(0)
+		for _, s := range r.buffer {
+			abs := s
+			if abs < 0 {
+				abs = -abs
+			}
+			sum += int64(abs)
+		}
+		avg := float64(sum) / float64(len(r.buffer))
+		logger.Infof("[Audio VAD] Short recording average absolute amplitude: %.2f (threshold: 100)", avg)
+		return avg > 100
+	}
+
+	maxRMS := float64(0)
+	for i := 0; i <= len(r.buffer)-windowSize; i += windowSize {
+		sumSq := float64(0)
+		for j := 0; j < windowSize; j++ {
+			s := float64(r.buffer[i+j])
+			sumSq += s * s
+		}
+		rms := math.Sqrt(sumSq / float64(windowSize))
+		if rms > maxRMS {
+			maxRMS = rms
+		}
+	}
+
+	logger.Infof("[Audio VAD] Max sliding window RMS energy: %.2f (threshold: 100)", maxRMS)
+
+	// Threshold: background quiet room noise is typically 10-50 RMS.
+	// Low-level whispers or speech yield >100.
+	// Normal speech usually yields 1000-8000 RMS.
+	// Setting threshold to 100 is highly safe, fast, and conservative.
+	return maxRMS > 100
 }
