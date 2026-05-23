@@ -37,7 +37,7 @@ const highlightText = (text: string, highlight: string) => {
         part.toLowerCase() === highlight.toLowerCase() ? (
           <mark
             key={i}
-            className="bg-primary/20 text-text px-0.5 rounded font-black border-b-2 border-primary/50"
+            className="bg-accent-soft text-primary px-0.5 rounded font-medium"
           >
             {part}
           </mark>
@@ -195,12 +195,10 @@ export default function HistoryView() {
   };
 
   return (
-    <div className="flex h-screen animate-fade-in">
-      {/* Sidebar list */}
-      <div className="w-80 border-r-2 border-border flex flex-col bg-background">
-        {/* Header */}
-        <div className="p-4 border-b-2 border-border flex items-center justify-between">
-          <h2 className="font-serif text-lg font-bold text-text">History</h2>
+    <div className="flex h-full min-h-0 animate-fade-in">
+      <div className="w-72 shrink-0 border-r border-border flex flex-col bg-surface">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h2 className="text-base font-semibold text-text">History</h2>
           {transcripts.length > 0 && (
             <button
               onClick={handleClearAll}
@@ -378,7 +376,7 @@ export default function HistoryView() {
                   selectedTranscript.polished_text && (
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xs font-black text-text uppercase tracking-tighter">
+                      <h3 className="text-xs font-medium text-secondary uppercase tracking-wide">
                         Original
                       </h3>
                       <div className="flex items-center gap-3">
@@ -412,7 +410,7 @@ export default function HistoryView() {
 
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-black text-text uppercase tracking-tighter">
+                  <h3 className="text-xs font-medium text-secondary uppercase tracking-wide">
                     {selectedTranscript.raw_text &&
                     selectedTranscript.raw_text !==
                       selectedTranscript.polished_text

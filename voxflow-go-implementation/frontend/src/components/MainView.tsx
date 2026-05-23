@@ -51,15 +51,14 @@ export default function MainView() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-8 animate-fade-in">
-      {/* Heading */}
-      <div className="text-center mb-10">
-        <h1 className="font-serif text-3xl font-black text-text mb-3 uppercase tracking-tighter">
-          {status === "Idle" && "For quick thoughts you want to capture"}
-          {status === "Recording" && "Listening..."}
-          {status === "Processing" && "Processing your thoughts"}
+    <div className="flex flex-col items-center justify-center h-full min-h-0 p-8 overflow-y-auto animate-fade-in">
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-semibold text-text mb-2">
+          {status === "Idle" && "Capture a quick thought"}
+          {status === "Recording" && "Listening…"}
+          {status === "Processing" && "Processing…"}
         </h1>
-        <p className="text-secondary text-sm font-medium">
+        <p className="text-secondary text-sm">
           {status === "Idle" &&
             "Press the button or use your hotkey to start recording"}
           {status === "Recording" &&
@@ -103,7 +102,7 @@ export default function MainView() {
               flex items-center justify-center
               ${
                 status === "Idle"
-                  ? "bg-primary text-white hover:shadow-cartoon-sm hover:-translate-y-1"
+                  ? "bg-primary text-[var(--primary-foreground)] hover:opacity-90"
                   : status === "Recording"
                     ? "bg-recording text-white"
                     : "bg-processing text-white"
@@ -163,8 +162,8 @@ export default function MainView() {
 
       {/* Error display */}
       {error && (
-        <div className="w-full max-w-xl mb-6 p-4 bg-red-500/10 border-2 border-red-500 rounded-[1.5rem]">
-          <p className="text-sm font-bold text-red-500">{error}</p>
+        <div className="w-full max-w-xl mb-6 p-4 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         </div>
       )}
 
@@ -173,10 +172,12 @@ export default function MainView() {
         <div className="w-full max-w-xl animate-fade-in">
           <div className="card p-6">
             <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-xs font-black text-text uppercase tracking-tighter">
+              <h3 className="text-xs font-medium text-secondary uppercase tracking-wide">
                 Result
               </h3>
-              <span className="brutal-badge">Done</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-primary font-medium">
+                Done
+              </span>
             </div>
             {usedRawNoPolish && (
               <p className="text-xs text-tertiary mb-2 font-medium">
@@ -194,7 +195,7 @@ export default function MainView() {
       {!lastTranscription && status === "Idle" && (
         <div className="w-full max-w-xl">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-black text-text uppercase tracking-tighter">
+            <h2 className="text-xs font-medium text-secondary uppercase tracking-wide">
               Recent
             </h2>
           </div>

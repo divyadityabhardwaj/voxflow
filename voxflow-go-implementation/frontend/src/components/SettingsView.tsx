@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   GetConfig,
   SetAPIKey,
@@ -45,6 +45,8 @@ import ModelSelectionSettings from "./settings/ModelSelectionSettings";
 import PipelineSettings from "./settings/PipelineSettings";
 import HotkeySettings from "./settings/HotkeySettings";
 import AppRulesSettings from "./settings/AppRulesSettings";
+import AppearanceSettings from "./ui/AppearanceSettings";
+import SettingsSection from "./ui/SettingsSection";
 
 interface Config {
   hands_free_hotkey: string;
@@ -131,58 +133,6 @@ export default function SettingsView() {
   >({});
 
   const [checkingModel, setCheckingModel] = useState<string | null>(null);
-
-  const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
-  const [isGeminiDropdownOpen, setIsGeminiDropdownOpen] = useState(false);
-  const [isOpenRouterDropdownOpen, setIsOpenRouterDropdownOpen] =
-    useState(false);
-  const [isGroqDropdownOpen, setIsGroqDropdownOpen] = useState(false);
-  const [isCerebrasDropdownOpen, setIsCerebrasDropdownOpen] = useState(false);
-
-  const providerDropdownRef = useRef<HTMLDivElement>(null);
-  const geminiDropdownRef = useRef<HTMLDivElement>(null);
-  const openRouterDropdownRef = useRef<HTMLDivElement>(null);
-  const groqDropdownRef = useRef<HTMLDivElement>(null);
-  const cerebrasDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        providerDropdownRef.current &&
-        !providerDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsProviderDropdownOpen(false);
-      }
-      if (
-        geminiDropdownRef.current &&
-        !geminiDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsGeminiDropdownOpen(false);
-      }
-      if (
-        openRouterDropdownRef.current &&
-        !openRouterDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpenRouterDropdownOpen(false);
-      }
-      if (
-        groqDropdownRef.current &&
-        !groqDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsGroqDropdownOpen(false);
-      }
-      if (
-        cerebrasDropdownRef.current &&
-        !cerebrasDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsCerebrasDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   useEffect(() => {
     loadConfig();
@@ -821,34 +771,32 @@ export default function SettingsView() {
 
   if (!config) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-tertiary font-bold uppercase tracking-tighter">
-          Loading settings...
-        </p>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-sm text-tertiary">Loading settings…</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-8 overflow-y-auto h-screen animate-fade-in">
-      <h2 className="font-black text-3xl uppercase tracking-tighter text-primary mb-8">
-        Settings
-      </h2>
+    <div className="settings-page animate-fade-in">
+      <header className="shrink-0 px-6 pt-6 pb-4 border-b border-border">
+        <h2 className="text-xl font-semibold text-text">Settings</h2>
+        <p className="text-sm text-secondary mt-0.5">
+          Configure transcription, models, and shortcuts.
+        </p>
+      </header>
 
-      <div className="space-y-8">
-        {/* Whisper CLI Status */}
+      <div className="settings-scroll px-6 py-5">
+        <div className="max-w-xl mx-auto space-y-4 pb-8">
         {!whisperReady && (
-          <section className="p-4 bg-amber-500/10 border-4 border-amber-500 rounded-[2rem]">
-            <p className="text-sm text-amber-500 font-bold">
-              ⚠️ Whisper CLI not found. Please install via:{" "}
-              <code className="bg-secondary px-2 py-0.5 rounded font-mono text-xs border-2 border-border">
-                brew install whisper-cpp
-              </code>
-            </p>
-          </section>
+          <div className="alert alert-warning">
+            Whisper CLI not found. Install with{" "}
+            <code>brew install whisper-cpp</code>
+          </div>
         )}
 
-        {/* LLM Provider Selection & Credentials */}
+        <AppearanceSettings />
+
         <LLMProviderSettings
           config={config}
           saving={saving}
@@ -868,9 +816,6 @@ export default function SettingsView() {
           localCheckResult={localCheckResult}
           localCheckError={localCheckError}
           checkingModel={checkingModel}
-          isProviderDropdownOpen={isProviderDropdownOpen}
-          setIsProviderDropdownOpen={setIsProviderDropdownOpen}
-          providerDropdownRef={providerDropdownRef}
           handleLLMProviderChange={handleLLMProviderChange}
           handleSaveLocalURL={handleSaveLocalURL}
           handleSaveLocalModel={handleSaveLocalModel}
@@ -888,30 +833,18 @@ export default function SettingsView() {
           geminiModels={geminiModels}
           geminiModelsLoading={geminiModelsLoading}
           geminiModelsError={geminiModelsError}
-          isGeminiDropdownOpen={isGeminiDropdownOpen}
-          setIsGeminiDropdownOpen={setIsGeminiDropdownOpen}
-          geminiDropdownRef={geminiDropdownRef}
           handleGeminiModelSelect={handleGeminiModelSelect}
           checkGeminiModelStatus={checkGeminiModelStatus}
           openRouterModels={openRouterModels}
           openRouterModelsLoading={openRouterModelsLoading}
-          isOpenRouterDropdownOpen={isOpenRouterDropdownOpen}
-          setIsOpenRouterDropdownOpen={setIsOpenRouterDropdownOpen}
-          openRouterDropdownRef={openRouterDropdownRef}
           handleOpenRouterModelSelect={handleOpenRouterModelSelect}
           checkOpenRouterModelStatus={checkOpenRouterModelStatus}
           groqModels={groqModels}
           groqModelsLoading={groqModelsLoading}
-          isGroqDropdownOpen={isGroqDropdownOpen}
-          setIsGroqDropdownOpen={setIsGroqDropdownOpen}
-          groqDropdownRef={groqDropdownRef}
           handleGroqModelSelect={handleGroqModelSelect}
           checkGroqModelStatus={checkGroqModelStatus}
           cerebrasModels={cerebrasModels}
           cerebrasModelsLoading={cerebrasModelsLoading}
-          isCerebrasDropdownOpen={isCerebrasDropdownOpen}
-          setIsCerebrasDropdownOpen={setIsCerebrasDropdownOpen}
-          cerebrasDropdownRef={cerebrasDropdownRef}
           handleCerebrasModelSelect={handleCerebrasModelSelect}
           checkCerebrasModelStatus={checkCerebrasModelStatus}
           checkingModel={checkingModel}
@@ -939,25 +872,22 @@ export default function SettingsView() {
           formatHotkey={formatHotkey}
         />
 
-        <section className="card p-6 brutal-card">
-          <h3 className="text-lg font-medium text-text mb-4">
-            Speech Recognition Models
-          </h3>
-          <p className="text-sm text-tertiary mb-4">
-            Download and manage Whisper models. Larger models are more accurate
-            but slower.
-          </p>
-          <div className="space-y-3">
+        <SettingsSection
+          title="Speech recognition models"
+          description="Download and manage Whisper models. Larger models are more accurate but slower."
+        >
+          <div className="space-y-2">
             {modelsLoading ? (
               <p className="text-sm text-tertiary text-center py-4">
                 Loading models...
               </p>
             ) : modelsError ? (
-              <div className="p-3 bg-red-500/10 border border-red-500 rounded-xl">
-                <p className="text-sm text-red-500">
+              <div className="p-3 rounded-md border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+                <p className="text-sm text-[var(--danger)]">
                   Failed to load models: {modelsError}
                 </p>
                 <button
+                  type="button"
                   onClick={loadModels}
                   className="text-xs text-primary mt-2 hover:underline"
                 >
@@ -972,14 +902,13 @@ export default function SettingsView() {
               models.map((model) => (
                 <div
                   key={model.name}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${
+                  className={`flex items-center justify-between gap-3 p-3 rounded-md border transition-colors ${
                     config.whisper_model === model.name
-                      ? "bg-primary/10 border-primary"
-                      : "border-border hover:bg-secondary/50"
+                      ? "border-primary bg-accent-soft"
+                      : "border-border bg-background hover:bg-surface-hover"
                   }`}
                 >
-                  <div className="flex items-center gap-4">
-                    {/* Select radio */}
+                  <div className="flex items-center gap-3 min-w-0">
                     <input
                       type="radio"
                       name="active_model"
@@ -988,36 +917,36 @@ export default function SettingsView() {
                         model.downloaded && handleModelSelect(model.name)
                       }
                       disabled={!model.downloaded || saving === "model"}
-                      className="w-4 h-4 text-primary focus:border-primary"
+                      className="w-4 h-4 shrink-0 accent-[var(--primary)]"
                     />
-                    <div>
-                      <p className="text-text capitalize font-medium">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text capitalize truncate">
                         {model.name}
                         {config.whisper_model === model.name && (
-                          <span className="ml-2 text-xs text-primary">
-                            (Active)
+                          <span className="ml-1.5 text-xs text-primary font-normal">
+                            Active
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-tertiary">
-                        {model.description} • {formatSize(model.size)}
+                      <p className="text-xs text-tertiary truncate">
+                        {model.description} · {formatSize(model.size)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {model.downloaded ? (
                       <>
-                        <span className="text-xs text-green-500">
-                          ✓ Downloaded
+                        <span className="text-xs text-[var(--success)] hidden sm:inline">
+                          Ready
                         </span>
                         {config.whisper_model !== model.name && (
                           <button
-                            onClick={() => {
-                              startDeleteModel(model.name);
-                            }}
-                            className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                            type="button"
+                            onClick={() => startDeleteModel(model.name)}
+                            className="btn btn-ghost !p-1.5 text-[var(--danger)]"
                             title="Delete model"
+                            aria-label={`Delete ${model.name}`}
                           >
                             <svg
                               className="w-4 h-4"
@@ -1037,19 +966,18 @@ export default function SettingsView() {
                       </>
                     ) : downloading === model.name ? (
                       <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 bg-tertiary rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary transition-all duration-300"
-                            style={{ width: `${downloadProgress}%` }}
-                          />
+                        <div className="progress-bar w-16">
+                          <div style={{ width: `${downloadProgress}%` }} />
                         </div>
-                        <span className="text-xs text-secondary w-8">
+                        <span className="text-xs text-tertiary w-8 tabular-nums">
                           {downloadProgress}%
                         </span>
                         <button
+                          type="button"
                           onClick={handleCancelDownload}
-                          className="p-1 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                          className="btn btn-ghost !p-1.5"
                           title="Cancel download"
+                          aria-label="Cancel download"
                         >
                           <svg
                             className="w-4 h-4"
@@ -1068,9 +996,10 @@ export default function SettingsView() {
                       </div>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => handleDownloadModel(model.name)}
-                        title={`Download ${model.name} model (${Math.round(model.size / 1024 / 1024)}MB)`}
-                        className="px-3 py-1.5 text-xs bg-primary hover:bg-primary text-white rounded-xl transition-colors"
+                        title={`Download ${model.name}`}
+                        className="btn btn-primary !py-1.5 !px-3 !text-xs"
                       >
                         Download
                       </button>
@@ -1080,31 +1009,32 @@ export default function SettingsView() {
               ))
             )}
           </div>
-        </section>
+        </SettingsSection>
+        </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       {modelToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-background border border-border rounded-[2rem] p-6 w-full max-w-sm shadow-xl transform transition-all scale-100 opacity-100">
-            <h3 className="text-lg font-medium text-text mb-2">
-              Delete Model?
+        <div className="modal-overlay">
+          <div className="modal-panel" role="dialog" aria-modal="true">
+            <h3 className="text-lg font-semibold text-text mb-2">
+              Delete model?
             </h3>
-            <p className="text-secondary text-sm mb-6">
-              Are you sure you want to delete the{" "}
-              <span className="text-text font-semibold">{modelToDelete}</span>{" "}
-              model? You will need to download it again to use it.
+            <p className="text-sm text-secondary mb-6">
+              Delete <span className="font-medium text-text">{modelToDelete}</span>?
+              You will need to download it again.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2">
               <button
+                type="button"
                 onClick={() => setModelToDelete(null)}
-                className="px-4 py-2 text-sm text-secondary hover:text-text transition-colors"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={confirmDeleteModel}
-                className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors font-medium"
+                className="btn btn-danger"
               >
                 Delete
               </button>

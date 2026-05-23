@@ -162,17 +162,15 @@ export default function HotkeyRecorderModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-background border-2 border-border rounded-[1.5rem] p-6 w-full max-w-md shadow-soft-lg animate-scale-in">
+    <div className="modal-overlay">
+      <div className="modal-panel max-w-md">
         <div className="text-center space-y-5">
-          <h3 className="text-xl font-bold text-text">
-            Record Shortcut
-          </h3>
+          <h3 className="text-lg font-semibold text-text">Record shortcut</h3>
 
           <div
-            className={`py-6 flex items-center justify-center min-h-[100px] bg-secondary rounded-xl border-2 border-dashed ${
+            className={`py-6 flex items-center justify-center min-h-[100px] bg-background rounded-md border border-dashed ${
               !validation.isValid && displayKeys.length > 0
-                ? "border-red-500"
+                ? "border-[var(--danger)]"
                 : "border-border"
             }`}
           >
@@ -180,7 +178,7 @@ export default function HotkeyRecorderModal({
               <div className="flex flex-wrap gap-2 justify-center">
                 {displayKeys.map((k, i) => (
                   <div key={i} className="flex items-center">
-                    <kbd className="px-3 py-1.5 bg-background border-2 border-border rounded-lg text-lg font-mono font-bold text-primary">
+                    <kbd className="px-3 py-1.5 bg-surface border border-border rounded-md text-base font-mono font-medium text-primary">
                       {k === "cmd" || k === "win" || k === "super"
                         ? isMac
                           ? "⌘"
@@ -208,26 +206,29 @@ export default function HotkeyRecorderModal({
                 ))}
               </div>
             ) : (
-              <p className="text-tertiary italic font-medium">Press keys...</p>
+              <p className="text-tertiary text-sm">Press keys…</p>
             )}
           </div>
 
           {!validation.isValid && displayKeys.length > 0 && (
-            <div className="p-3 bg-red-500/10 border border-red-500 rounded-xl">
-              <p className="text-sm font-bold text-red-500">{validation.message}</p>
+            <div className="p-3 rounded-md border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+              <p className="text-sm text-[var(--danger)]">{validation.message}</p>
             </div>
           )}
 
           <div className="space-y-2">
-            <p className="text-sm text-secondary font-medium">
+            <p className="text-sm text-secondary">
               Press the desired key combination (max 3 keys).
             </p>
-            <p className="text-xs text-primary font-bold">
-              Press{" "}
-              <kbd className="font-mono bg-secondary px-2 py-0.5 rounded-lg border border-border">Enter</kbd> to
-              save •{" "}
-              <kbd className="font-mono bg-secondary px-2 py-0.5 rounded-lg border border-border">Esc</kbd> to
-              cancel
+            <p className="text-xs text-tertiary">
+              <kbd className="font-mono bg-background px-1.5 py-0.5 rounded border border-border">
+                Enter
+              </kbd>{" "}
+              to save ·{" "}
+              <kbd className="font-mono bg-background px-1.5 py-0.5 rounded border border-border">
+                Esc
+              </kbd>{" "}
+              to cancel
             </p>
           </div>
         </div>

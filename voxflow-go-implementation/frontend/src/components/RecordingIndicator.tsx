@@ -27,7 +27,7 @@ const Waveform = ({
   isDark: boolean;
 }) => (
   <div
-    className={`flex items-center justify-center ${compact ? "gap-[2px] h-3" : "gap-[3px] h-5"}`}
+    className={`flex items-center justify-center ${compact ? "gap-px h-2.5" : "gap-[2px] h-4"}`}
   >
     {[1, 2, 3, 4, 5].map((i) => (
       <div
@@ -36,20 +36,20 @@ const Waveform = ({
         style={{
           background: active ? "#ffffff" : isDark ? "#e5e7eb" : "#111827",
           opacity: active ? 1 : 0.45,
-          height: active ? undefined : compact ? "2px" : "4px",
+          height: active ? undefined : compact ? "1.5px" : "3px",
           animation: active
             ? `${compact ? "waveCompact" : "wave"} ${
-                compact ? "0.8s" : "1s"
+                compact ? "0.75s" : "1s"
               } ease-in-out infinite`
             : "none",
           animationDelay: `${i * 0.08}s`,
-          minHeight: compact ? "2px" : "4px",
+          minHeight: compact ? "1.5px" : "3px",
         }}
       />
     ))}
     <style>{`
-      @keyframes wave { 0%, 100% { height: 4px; } 50% { height: 18px; } }
-      @keyframes waveCompact { 0%, 100% { height: 2px; } 50% { height: 9px; } }
+      @keyframes wave { 0%, 100% { height: 3px; } 50% { height: 14px; } }
+      @keyframes waveCompact { 0%, 100% { height: 1.5px; } 50% { height: 7px; } }
     `}</style>
   </div>
 );
@@ -109,7 +109,7 @@ export default function RecordingIndicator() {
 
 
   const hasToast = activeToast !== null;
-  const targetHeight = hasToast ? 104 : 52;
+  const targetHeight = hasToast ? 84 : 32;
 
   useEffect(() => {
     SetMiniModeExpanded(uiExpanded, targetHeight);
@@ -281,14 +281,14 @@ export default function RecordingIndicator() {
 
   return (
     <div
-      className="w-full h-full flex flex-col justify-end pt-1 pb-2.5 px-2.5 select-none pointer-events-none"
+      className="w-full h-full flex flex-col justify-end pt-0.5 pb-1 px-1 select-none pointer-events-none"
       onMouseEnter={handlePointerEnter}
       onMouseLeave={handlePointerLeave}
     >
       {activeToast && (
         /* Floating Toast Card Above Pill */
         <div
-          className="w-full h-[38px] flex flex-row items-center justify-between px-2.5 rounded-xl transition-all duration-300 pointer-events-auto cursor-pointer animate-slide-up-fade mb-1.5"
+          className="w-full h-[26px] flex flex-row items-center justify-between px-1.5 rounded-lg transition-all duration-300 pointer-events-auto cursor-pointer animate-slide-up-fade mb-1"
           onClick={handleToastClick}
           title={`${activeToast.message}\n\nClick to open VoxFlow`}
           style={
@@ -302,10 +302,10 @@ export default function RecordingIndicator() {
           }
         >
           {/* Left: Alert Icon */}
-          <div className="flex-none flex items-center justify-center w-[22px] h-[22px] rounded-full bg-white/20 animate-pulse-soft">
+          <div className="flex-none flex items-center justify-center size-4 rounded-full bg-white/20 animate-pulse-soft">
             {activeToast.type === "error" && (
               <svg
-                className="w-3.5 h-3.5 text-white"
+                className="w-2.5 h-2.5 text-white"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -320,7 +320,7 @@ export default function RecordingIndicator() {
             )}
             {activeToast.type === "warning" && (
               <svg
-                className="w-3.5 h-3.5 text-white"
+                className="w-2.5 h-2.5 text-white"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -335,7 +335,7 @@ export default function RecordingIndicator() {
             )}
             {activeToast.type === "success" && (
               <svg
-                className="w-3.5 h-3.5 text-white"
+                className="w-2.5 h-2.5 text-white"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -350,7 +350,7 @@ export default function RecordingIndicator() {
             )}
             {activeToast.type === "info" && (
               <svg
-                className="w-3.5 h-3.5 text-white"
+                className="w-2.5 h-2.5 text-white"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -366,9 +366,9 @@ export default function RecordingIndicator() {
           </div>
 
           {/* Middle: Shortened message summary */}
-          <div className="flex-1 px-2 min-w-0 flex items-center justify-center">
+          <div className="flex-1 px-1 min-w-0 flex items-center justify-center">
             <span
-              className="text-[8.5px] font-black uppercase tracking-[0.1em] truncate whitespace-nowrap text-center animate-fade-in"
+              className="text-[7px] font-semibold uppercase tracking-[0.08em] truncate whitespace-nowrap text-center animate-fade-in"
               style={{ color: toastForegroundColor }}
             >
               {getShortErrorMessage(activeToast.message)}
@@ -377,7 +377,7 @@ export default function RecordingIndicator() {
 
           {/* Right: Dismiss button */}
           <button
-            className="flex-none w-[22px] h-[22px] flex items-center justify-center rounded-full hover:bg-white/20 transition-colors no-drag"
+            className="flex-none size-4 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors no-drag"
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={(e) => {
               e.preventDefault();
@@ -387,7 +387,7 @@ export default function RecordingIndicator() {
             title="Dismiss"
           >
             <svg
-              className="w-3 h-3"
+              className="w-2.5 h-2.5"
               style={{ color: toastForegroundColor }}
               fill="none"
               viewBox="0 0 24 24"
@@ -404,9 +404,9 @@ export default function RecordingIndicator() {
         </div>
       )}
 
-      {/* Main Control Pill - Sitting snagly at bottom */}
+      {/* Main Control Pill */}
       <div
-        className="w-full h-[38px] flex flex-row items-center justify-between px-1.5 rounded-full transition-[box-shadow] duration-150 ease-out pointer-events-auto shadow-md"
+        className="w-full h-[24px] flex flex-row items-center justify-between px-1 rounded-full transition-[box-shadow] duration-150 ease-out pointer-events-auto shadow-sm"
         style={
           {
             background: statusBg,
@@ -419,17 +419,17 @@ export default function RecordingIndicator() {
         }
       >
         {/* Left: Record button + label */}
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-0.5 min-w-0">
           <div
-            className="flex-none w-7 h-7 flex items-center justify-center cursor-pointer no-drag"
+            className="flex-none size-5 flex items-center justify-center cursor-pointer no-drag"
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={handleRecordClick}
             title={status === "Idle" ? "Start Recording" : "Stop Recording"}
           >
-            <div className="rounded-full w-7 h-7 flex items-center justify-center transition-all duration-200">
+            <div className="rounded-full size-5 flex items-center justify-center transition-all duration-200">
               {status === "Processing" ? (
                 <svg
-                  className="w-3.5 h-3.5 animate-spin"
+                  className="w-3 h-3 animate-spin"
                   style={{ color: foregroundColor }}
                   fill="none"
                   viewBox="0 0 24 24"
@@ -463,11 +463,11 @@ export default function RecordingIndicator() {
               showStatusLabel ? "opacity-100" : "opacity-0"
             }`}
             aria-hidden={!showStatusLabel}
-            style={{ maxWidth: uiExpanded ? 100 : 0 }}
+            style={{ maxWidth: uiExpanded ? 72 : 0 }}
           >
             {status === "Recording" && (
               <div
-                className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[7px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--recording)" }}
               >
                 Recording
@@ -475,7 +475,7 @@ export default function RecordingIndicator() {
             )}
             {status === "Processing" && (
               <div
-                className="text-[9px] font-black uppercase tracking-[0.2em] whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[7px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--processing)" }}
               >
                 Processing
@@ -496,7 +496,7 @@ export default function RecordingIndicator() {
             title="Drag to move"
           >
             <svg
-              className="w-3.5 h-3.5 transform rotate-90"
+              className="w-2.5 h-2.5 transform rotate-90"
               style={{ color: foregroundColor }}
               fill="currentColor"
               viewBox="0 0 24 24"
@@ -507,20 +507,20 @@ export default function RecordingIndicator() {
         </div>
 
         {/* Right: Expand + Quit */}
-        <div className="flex-none flex items-center gap-1">
+        <div className="flex-none flex items-center gap-0.5">
           <div
             className={`transition-all duration-200 ease-out overflow-hidden ${
-              uiExpanded ? "opacity-100 w-[22px]" : "opacity-0 w-0"
+              uiExpanded ? "opacity-100 w-4" : "opacity-0 w-0"
                 }`}
               >
                 <div
-                  className={`w-[22px] h-[22px] flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
+                  className={`size-4 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
                   style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
                   onClick={handleExpandClick}
                   title="Expand"
                 >
                   <svg
-                    className="w-2.5 h-2.5 opacity-70"
+                    className="w-2 h-2 opacity-70"
                     style={{ color: foregroundColor }}
                     fill="none"
                     viewBox="0 0 24 24"
@@ -537,18 +537,18 @@ export default function RecordingIndicator() {
               </div>
 
               <div
-                className={`w-[22px] h-[22px] flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgQuit} transition-colors`}
+                className={`size-4 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgQuit} transition-colors`}
                 style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
                 onClick={handleQuitClick}
                 title="Quit"
               >
                 <svg
-                  className="w-2.5 h-2.5 opacity-75 hover:opacity-100"
+                  className="w-2 h-2 opacity-75 hover:opacity-100"
                   style={{ color: foregroundColor }}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                 >
                   <path
                     strokeLinecap="round"

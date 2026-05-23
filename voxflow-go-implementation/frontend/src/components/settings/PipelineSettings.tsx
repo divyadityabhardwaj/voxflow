@@ -1,3 +1,5 @@
+import SettingsSection from "../ui/SettingsSection";
+
 interface Config {
   refinement_mode: string;
   mute_system_audio: boolean;
@@ -11,6 +13,24 @@ interface PipelineSettingsProps {
   handleMuteSystemAudioChange: (value: boolean) => Promise<void>;
 }
 
+const MODES = [
+  {
+    id: "refine",
+    name: "Refine",
+    desc: "Whisper → LLM polish → paste",
+  },
+  {
+    id: "raw",
+    name: "Raw",
+    desc: "Whisper → paste as-is",
+  },
+  {
+    id: "copy-only",
+    name: "Copy only",
+    desc: "Whisper → clipboard",
+  },
+] as const;
+
 export default function PipelineSettings({
   config,
   saving,
@@ -18,107 +38,72 @@ export default function PipelineSettings({
   handleRefinementModeChange,
   handleMuteSystemAudioChange,
 }: PipelineSettingsProps) {
-  return (
-    <section className="card p-6 brutal-card">
-      <h3 className="font-black text-xl uppercase tracking-tighter text-primary mb-4">
-        Pipeline & Audio Settings
-      </h3>
-      <p className="text-sm text-tertiary mb-6 font-bold">
-        Configure VoxFlow's transcription behavior, text injection pipeline, and system interaction.
-      </p>
+  const active = config.refinement_mode || "refine";
 
+  return (
+    <SettingsSection
+      title="Pipeline & audio"
+      description="Control how recordings are processed and whether system audio is muted while recording."
+    >
       <div className="space-y-6">
-        {/* Refinement Mode Toggle */}
         <div>
-          <label className="block text-xs font-black uppercase tracking-tighter text-tertiary mb-2">
-            Transcription Pipeline Mode
-          </label>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              {
-                id: "refine",
-                name: "Refine (Default)",
-                desc: "Whisper → LLM Polish → Paste",
-              },
-              {
-                id: "raw",
-                name: "Raw Transcription",
-                desc: "Whisper → Direct Paste",
-              },
-              {
-                id: "copy-only",
-                name: "Copy Only",
-                desc: "Whisper → Clipboard Only",
-              },
-            ].map((mode) => (
+          <span className="label">Pipeline mode</span>
+          <div className="segmented grid-cols-1 sm:grid-cols-3">
+            {MODES.map((mode) => (
               <button
                 key={mode.id}
+                type="button"
                 onClick={() => handleRefinementModeChange(mode.id)}
                 disabled={saving === "refinementMode"}
-                className={`p-4 rounded-xl border-4 text-left transition-all focus:outline-none flex flex-col justify-between ${
-                  (config.refinement_mode || "refine") === mode.id
-                    ? "border-primary bg-primary/5 text-primary shadow-[4px_4px_0px_var(--primary)]"
-                    : "border-border bg-secondary text-text hover:border-tertiary"
-                }`}
+                className="segmented-item"
+                data-active={active === mode.id ? "true" : "false"}
               >
-                <span className="font-bold text-sm uppercase tracking-tight">
-                  {mode.name}
-                </span>
-                <span className="text-[10px] text-tertiary mt-2 font-bold leading-tight">
+                <span className="text-sm font-medium block">{mode.name}</span>
+                <span className="text-xs text-secondary mt-1 block">
                   {mode.desc}
                 </span>
               </button>
             ))}
           </div>
           {saving === "refinementMode" && (
-            <span className="text-xs text-tertiary mt-2 block font-bold animate-pulse">
-              Saving...
-            </span>
+            <p className="hint animate-pulse-soft">Saving…</p>
           )}
           {success === "refinementMode" && (
-            <span className="text-xs text-green-500 mt-2 block font-bold">
-              ✓ Saved
-            </span>
+            <p className="hint text-[var(--success)]">Saved</p>
           )}
         </div>
 
-        {/* Mute System Audio Switch */}
-        <div className="flex items-start justify-between pt-6 border-t-4 border-border">
-          <div className="flex-1 pr-4">
-            <label className="block text-sm font-bold text-text mb-1">
-              Mute System Audio During Recording
-            </label>
-            <p className="text-xs text-tertiary font-bold leading-normal">
-              Automatically mute speakers/headphones while recording starts to prevent microphone feedback or background sound capture, then restore previous volume upon completion.
+        <div className="flex items-start justify-between gap-4 pt-5 border-t border-border">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-text">
+              Mute system audio while recording
+            </p>
+            <p className="text-sm text-secondary mt-1 leading-relaxed">
+              Temporarily mute speakers to reduce feedback, then restore volume
+              when done.
             </p>
             {saving === "muteSystemAudio" && (
-              <span className="text-xs text-tertiary mt-2 block font-bold animate-pulse">
-                Saving...
-              </span>
+              <p className="hint animate-pulse-soft">Saving…</p>
             )}
             {success === "muteSystemAudio" && (
-              <span className="text-xs text-green-500 mt-2 block font-bold">
-                ✓ Saved
-              </span>
+              <p className="hint text-[var(--success)]">Saved</p>
             )}
           </div>
           <button
+            type="button"
+            role="switch"
+            aria-checked={config.mute_system_audio}
+            disabled={saving === "muteSystemAudio"}
+            className="toggle"
+            data-on={config.mute_system_audio ? "true" : "false"}
             onClick={() =>
               handleMuteSystemAudioChange(!config.mute_system_audio)
             }
-            disabled={saving === "muteSystemAudio"}
-            className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 border-2 border-border focus:outline-none ${
-              config.mute_system_audio ? "bg-primary" : "bg-secondary"
-            }`}
           >
-            <div
-              className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ${
-                config.mute_system_audio ? "translate-x-6" : "translate-x-0"
-              }`}
-            />
+            <span className="toggle-thumb" />
           </button>
         </div>
       </div>
-    </section>
+    </SettingsSection>
   );
 }

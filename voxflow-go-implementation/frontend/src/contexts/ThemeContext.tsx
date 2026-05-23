@@ -18,20 +18,24 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_KEY = "voxflow-theme";
 
+function getSystemTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // Check localStorage first
     const stored = localStorage.getItem(THEME_KEY);
     if (stored === "light" || stored === "dark") {
       return stored;
     }
-    // Default to dark theme
-    return "dark";
+    return getSystemTheme();
   });
 
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
-    // Update document class for Tailwind
     document.documentElement.classList.remove("light", "dark");
     document.documentElement.classList.add(theme);
   }, [theme]);

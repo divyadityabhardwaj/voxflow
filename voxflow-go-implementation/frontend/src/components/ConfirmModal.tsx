@@ -24,25 +24,19 @@ export default function ConfirmModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-background border-2 border-border rounded-[1.5rem] p-5 w-full max-w-md shadow-soft-lg animate-scale-in">
-        <h3 className="text-lg font-bold text-text mb-2">{title}</h3>
-        <p className="text-sm text-secondary font-medium mb-5">{message}</p>
+    <div className="modal-overlay">
+      <div className="modal-panel" role="dialog" aria-modal="true">
+        <h3 className="text-lg font-semibold text-text mb-2">{title}</h3>
+        <p className="text-sm text-secondary mb-5">{message}</p>
 
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-bold text-text hover:bg-secondary rounded-xl transition-colors"
-          >
+        <div className="flex gap-2 justify-end">
+          <button type="button" onClick={onCancel} className="btn btn-secondary">
             {cancelText}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-bold rounded-xl transition-all ${
-              isDestructive
-                ? "bg-red-500 hover:bg-red-400 text-white"
-                : "bg-primary hover:bg-accent-hover text-white"
-            }`}
+            className={`btn ${isDestructive ? "btn-danger" : "btn-primary"}`}
           >
             {confirmText}
           </button>
@@ -52,7 +46,6 @@ export default function ConfirmModal({
   );
 }
 
-// Hook for easier usage
 export function useConfirmModal() {
   const [state, setState] = useState<{
     isOpen: boolean;

@@ -229,7 +229,7 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-full min-h-0 flex bg-background">
       {/* Recording pill - shows at top when recording in full app mode */}
       <RecordingPill />
 
@@ -238,18 +238,18 @@ function AppContent() {
         {/* Draggable Titlebar Area */}
         <Tooltip content="Move" position="bottom">
           <div
-            className="w-full h-10 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-background hover:bg-secondary transition-colors border-b-2 border-border"
+            className="w-full h-9 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-surface hover:bg-surface-hover transition-colors border-b border-border"
             style={{ "--wails-draggable": "drag" } as unknown as CSSProperties}
           >
             {/* Grip dots - macOS style */}
-            <div className="flex flex-col gap-[3px] opacity-40 group-hover:opacity-70 transition-opacity">
+            <div className="flex flex-col gap-[2px] opacity-30 group-hover:opacity-60 transition-opacity text-tertiary">
               <div className="flex gap-[3px]">
-                <div className="w-[5px] h-[5px] rounded-full bg-current" />
-                <div className="w-[5px] h-[5px] rounded-full bg-current" />
+                <div className="w-1 h-1 rounded-full bg-current" />
+                <div className="w-1 h-1 rounded-full bg-current" />
               </div>
-              <div className="flex gap-[3px]">
-                <div className="w-[5px] h-[5px] rounded-full bg-current" />
-                <div className="w-[5px] h-[5px] rounded-full bg-current" />
+              <div className="flex gap-[2px]">
+                <div className="w-1 h-1 rounded-full bg-current" />
+                <div className="w-1 h-1 rounded-full bg-current" />
               </div>
             </div>
           </div>
@@ -318,12 +318,12 @@ function AppContent() {
             </button>
           </Tooltip>
 
-          <div className="h-px w-8 bg-border/40 my-1" />
+          <div className="h-px w-6 bg-border my-1" />
 
           <Tooltip content="Quit" position="right">
             <button
               onClick={() => Quit()}
-              className="sidebar-btn no-drag hover:!bg-red-500/10 hover:!text-red-500"
+              className="sidebar-btn no-drag hover:!text-[var(--danger)] hover:!bg-[var(--danger)]/10"
             >
               <CloseIcon />
             </button>

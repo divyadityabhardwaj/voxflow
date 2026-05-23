@@ -1,3 +1,5 @@
+import SettingsSection from "../ui/SettingsSection";
+
 interface Config {
   hands_free_hotkey: string;
   push_to_talk_hotkey: string;
@@ -11,6 +13,47 @@ interface HotkeySettingsProps {
   formatHotkey: (hotkey: string) => string;
 }
 
+function HotkeyRow({
+  title,
+  description,
+  value,
+  onEdit,
+  saving,
+  success,
+  saveKey,
+}: {
+  title: string;
+  description: string;
+  value: string;
+  onEdit: () => void;
+  saving: string | null;
+  success: string | null;
+  saveKey: string;
+}) {
+  return (
+    <div>
+      <p className="text-sm font-medium text-text">{title}</p>
+      <p className="text-sm text-secondary mt-0.5 mb-3">{description}</p>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border border-border bg-background hover:border-border-hover hover:bg-surface-hover transition-colors text-left"
+      >
+        <span className="font-mono text-sm text-text">
+          {value || "Not set"}
+        </span>
+        <span className="text-xs text-tertiary shrink-0">Change</span>
+      </button>
+      {saving === saveKey && (
+        <p className="hint animate-pulse-soft">Saving…</p>
+      )}
+      {success === saveKey && (
+        <p className="hint text-[var(--success)]">Saved</p>
+      )}
+    </div>
+  );
+}
+
 export default function HotkeySettings({
   config,
   saving,
@@ -19,82 +62,32 @@ export default function HotkeySettings({
   formatHotkey,
 }: HotkeySettingsProps) {
   return (
-    <section className="space-y-6">
-      {/* Push to Talk */}
-      <div className="card p-6 brutal-card">
-        <h3 className="font-black text-xl uppercase tracking-tighter text-primary mb-4">
-          Push-to-Talk Hotkey
-        </h3>
-        <p className="text-sm text-tertiary mb-4 font-bold">
-          Hold this shortcut to record. Release to process.
-        </p>
-        <div className="flex gap-3 items-center">
-          <div
-            onClick={() =>
-              openHotkeyModal("ptt", config.push_to_talk_hotkey)
-            }
-            className="flex-1 px-4 py-2.5 bg-secondary border-4 border-border rounded-[2rem]
-                     text-text cursor-pointer hover:border-primary transition-colors
-                     flex items-center justify-between group"
-          >
-            <span className="font-mono font-bold text-sm">
-              {formatHotkey(config.push_to_talk_hotkey || "None")}
-            </span>
-            <span className="text-xs text-tertiary group-hover:text-primary transition-colors font-bold">
-              Click to edit
-            </span>
-          </div>
-
-          {saving === "ptt" && (
-            <span className="flex items-center text-xs text-tertiary font-bold animate-pulse">
-              Saving...
-            </span>
-          )}
-          {success === "ptt" && (
-            <span className="flex items-center text-xs text-green-500 font-bold">
-              ✓ Saved
-            </span>
-          )}
-        </div>
+    <SettingsSection
+      title="Keyboard shortcuts"
+      description="Configure how you start and stop dictation."
+    >
+      <div className="space-y-6">
+        <HotkeyRow
+          title="Push-to-talk"
+          description="Hold to record; release to process."
+          value={formatHotkey(config.push_to_talk_hotkey)}
+          onEdit={() => openHotkeyModal("ptt", config.push_to_talk_hotkey)}
+          saving={saving}
+          success={success}
+          saveKey="ptt"
+        />
+        <HotkeyRow
+          title="Hands-free"
+          description="Press once to start, again to stop."
+          value={formatHotkey(config.hands_free_hotkey)}
+          onEdit={() =>
+            openHotkeyModal("handsFree", config.hands_free_hotkey)
+          }
+          saving={saving}
+          success={success}
+          saveKey="handsFree"
+        />
       </div>
-
-      {/* Hands Free */}
-      <div className="card p-6 brutal-card">
-        <h3 className="font-black text-xl uppercase tracking-tighter text-primary mb-4">
-          Hands-Free Hotkey
-        </h3>
-        <p className="text-sm text-tertiary mb-4 font-bold">
-          Press once to start recording. Press again to stop.
-        </p>
-        <div className="flex gap-3 items-center">
-          <div
-            onClick={() =>
-              openHotkeyModal("handsFree", config.hands_free_hotkey)
-            }
-            className="flex-1 px-4 py-2.5 bg-secondary border-4 border-border rounded-[2rem]
-                     text-text cursor-pointer hover:border-primary transition-colors
-                     flex items-center justify-between group"
-          >
-            <span className="font-mono font-bold text-sm">
-              {formatHotkey(config.hands_free_hotkey || "None")}
-            </span>
-            <span className="text-xs text-tertiary group-hover:text-primary transition-colors font-bold">
-              Click to edit
-            </span>
-          </div>
-
-          {saving === "handsFree" && (
-            <span className="flex items-center text-xs text-tertiary font-bold animate-pulse">
-              Saving...
-            </span>
-          )}
-          {success === "handsFree" && (
-            <span className="flex items-center text-xs text-green-500 font-bold">
-              ✓ Saved
-            </span>
-          )}
-        </div>
-      </div>
-    </section>
+    </SettingsSection>
   );
 }

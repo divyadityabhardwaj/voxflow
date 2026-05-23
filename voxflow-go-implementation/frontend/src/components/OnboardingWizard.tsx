@@ -67,8 +67,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-8">
-      <div className="max-w-lg w-full card p-8 brutal-card">
+    <div className="h-full bg-background flex items-center justify-center p-8">
+      <div className="max-w-lg w-full settings-card p-8">
         <div className="flex gap-2 mb-8">
           {STEPS.map((s, i) => (
             <div
@@ -82,10 +82,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
         {step === "welcome" && (
           <>
-            <h1 className="text-2xl font-black uppercase tracking-tighter text-primary mb-3">
+            <h1 className="text-2xl font-semibold text-text mb-3">
               Welcome to VoxFlow
             </h1>
-            <p className="text-sm text-tertiary font-bold mb-6 leading-relaxed">
+            <p className="text-sm text-secondary mb-6 leading-relaxed">
               A quick setup covers permissions, the local Whisper model, and an
               optional Gemini API key for text refinement.
             </p>
@@ -101,10 +101,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
         {step === "accessibility" && (
           <>
-            <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-3">
+            <h2 className="text-lg font-semibold text-text mb-3">
               Accessibility
             </h2>
-            <p className="text-sm text-tertiary font-bold mb-6">
+            <p className="text-sm text-secondary mb-6">
               VoxFlow pastes transcribed text into other apps. macOS requires
               Accessibility permission for simulated Cmd+V.
             </p>
@@ -134,10 +134,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
         {step === "model" && !modelReady && (
           <>
-            <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-3">
+            <h2 className="text-lg font-semibold text-text mb-3">
               Download speech model
             </h2>
-            <p className="text-sm text-tertiary font-bold mb-4">
+            <p className="text-sm text-secondary mb-4">
               VoxFlow runs Whisper locally. This one-time download is required
               before your first dictation.
             </p>
@@ -174,10 +174,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
         {step === "model" && modelReady && (
           <>
-            <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-3">
+            <h2 className="text-lg font-semibold text-text mb-3">
               Model ready
             </h2>
-            <p className="text-sm text-tertiary font-bold mb-6">
+            <p className="text-sm text-secondary mb-6">
               Whisper is installed. You can add an API key next or finish setup.
             </p>
             <button
@@ -192,10 +192,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
         {step === "api" && (
           <>
-            <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-3">
+            <h2 className="text-lg font-semibold text-text mb-3">
               Gemini API key (optional)
             </h2>
-            <p className="text-sm text-tertiary font-bold mb-4">
+            <p className="text-sm text-secondary mb-4">
               Refinement polishes dictation with an LLM. You can also set this
               later in Settings.
             </p>
@@ -227,10 +227,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
 
         {step === "done" && (
           <>
-            <h2 className="text-xl font-black uppercase tracking-tighter text-primary mb-3">
+            <h2 className="text-lg font-semibold text-text mb-3">
               You are all set
             </h2>
-            <p className="text-sm text-tertiary font-bold mb-4">
+            <p className="text-sm text-secondary mb-4">
               Use your configured hotkeys to dictate from anywhere. Open the full
               app from the mini pill to change settings anytime.
             </p>

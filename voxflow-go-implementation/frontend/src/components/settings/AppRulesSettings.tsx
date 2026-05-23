@@ -5,6 +5,8 @@ import {
   RemoveAppRule,
   SetAppRule,
 } from "../../../wailsjs/go/main/App";
+import SettingsSection from "../ui/SettingsSection";
+
 interface AppRuleRow {
   bundle_id: string;
   app_name?: string;
@@ -68,22 +70,18 @@ export default function AppRulesSettings() {
   };
 
   return (
-    <section className="card p-6 brutal-card mt-6">
-      <h3 className="font-black text-xl uppercase tracking-tighter text-primary mb-2">
-        Per-app rules
-      </h3>
-      <p className="text-sm text-tertiary mb-6 font-bold">
-        Override refinement or injection for specific apps. Focus the target app,
-        then add a rule below.
-      </p>
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
+    <SettingsSection
+      title="Per-app rules"
+      description="Override refinement or injection for specific apps. Focus the target app, then add a rule."
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
-          <label className="block text-xs font-black uppercase text-tertiary mb-1">
+          <label className="label" htmlFor="rule-refinement">
             Refinement
           </label>
           <select
-            className="input w-full"
+            id="rule-refinement"
+            className="select"
             value={refinementMode}
             onChange={(e) => setRefinementMode(e.target.value)}
           >
@@ -94,15 +92,16 @@ export default function AppRulesSettings() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-black uppercase text-tertiary mb-1">
+          <label className="label" htmlFor="rule-inject">
             Injection
           </label>
           <select
-            className="input w-full"
+            id="rule-inject"
+            className="select"
             value={injectMethod}
             onChange={(e) => setInjectMethod(e.target.value)}
           >
-            <option value="paste">Paste (Cmd+V)</option>
+            <option value="paste">Paste (⌘V)</option>
             <option value="clipboard">Clipboard only</option>
           </select>
         </div>
@@ -110,7 +109,7 @@ export default function AppRulesSettings() {
 
       <button
         type="button"
-        className="btn-primary w-full mb-4"
+        className="btn btn-primary w-full mb-4"
         disabled={saving}
         onClick={addRuleForFrontmost}
       >
@@ -118,30 +117,32 @@ export default function AppRulesSettings() {
       </button>
 
       {error && (
-        <p className="text-xs text-red-500 font-bold mb-3">{error}</p>
+        <p className="text-sm text-[var(--danger)] mb-3">{error}</p>
       )}
 
       {loading ? (
-        <p className="text-xs text-tertiary font-bold">Loading rules…</p>
+        <p className="text-sm text-tertiary">Loading rules…</p>
       ) : rules.length === 0 ? (
-        <p className="text-xs text-tertiary font-bold">No per-app rules yet.</p>
+        <p className="text-sm text-tertiary">No per-app rules yet.</p>
       ) : (
         <ul className="space-y-2">
           {rules.map((rule) => (
             <li
               key={rule.bundle_id}
-              className="flex items-center justify-between gap-3 p-3 border-2 border-border rounded-lg bg-secondary"
+              className="flex items-center justify-between gap-3 p-3 rounded-md border border-border bg-background"
             >
               <div className="min-w-0">
-                <p className="text-sm font-bold truncate">{rule.bundle_id}</p>
-                <p className="text-[10px] text-tertiary font-bold">
+                <p className="text-sm font-medium truncate text-text">
+                  {rule.app_name || rule.bundle_id}
+                </p>
+                <p className="text-xs text-tertiary mt-0.5">
                   {rule.refinement_mode || "default"} ·{" "}
                   {rule.inject_method || "paste"}
                 </p>
               </div>
               <button
                 type="button"
-                className="text-xs font-bold text-red-500 shrink-0"
+                className="btn btn-ghost text-[var(--danger)] shrink-0 !py-1.5 !px-2"
                 disabled={saving}
                 onClick={() => removeRule(rule.bundle_id)}
               >
@@ -151,6 +152,6 @@ export default function AppRulesSettings() {
           ))}
         </ul>
       )}
-    </section>
+    </SettingsSection>
   );
 }

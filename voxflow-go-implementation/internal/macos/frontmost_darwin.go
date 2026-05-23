@@ -2,56 +2,45 @@
 
 package macos
 
-/*
-#cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework Cocoa
-
-#import <Cocoa/Cocoa.h>
-#import <stdlib.h>
-
-// Returns bundle ID and localized name of the frontmost application.
-// Caller must free both returned C strings with free().
-static void frontmostApp(char** outBundle, char** outName) {
-    *outBundle = NULL;
-    *outName = NULL;
-    NSRunningApplication *app = [[NSWorkspace sharedWorkspace] frontmostApplication];
-    if (!app) return;
-    NSString *bundle = [app bundleIdentifier];
-    NSString *name = [app localizedName];
-    if (bundle) {
-        *outBundle = strdup([[bundle UTF8String] UTF8String]);
-    }
-    if (name) {
-        *outName = strdup([[name UTF8String] UTF8String]);
-    }
-}
-*/
-import "C"
-
 import (
 	"errors"
-	"unsafe"
+	"os/exec"
+	"strings"
+	"sync"
 )
 
-// FrontmostApp returns the bundle identifier and display name of the active app.
-func FrontmostApp() (bundleID, name string, err error) {
-	var cBundle, cName *C.char
-	C.frontmostApp(&cBundle, &cName)
-	defer func() {
-		if cBundle != nil {
-			C.free(unsafe.Pointer(cBundle))
-		}
-		if cName != nil {
-			C.free(unsafe.Pointer(cName))
-		}
-	}()
+// frontmostMu serializes osascript calls (System Events is not re-entrant safe under load).
+var frontmostMu sync.Mutex
 
-	if cBundle == nil {
+// FrontmostApp returns the bundle identifier and display name of the active app.
+// Uses osascript so it is safe to call from hotkey/background goroutines (no AppKit on wrong thread).
+func FrontmostApp() (bundleID, name string, err error) {
+	frontmostMu.Lock()
+	defer frontmostMu.Unlock()
+
+	bundleID, err = runOSA(
+		`tell application "System Events" to get bundle identifier of first application process whose frontmost is true`,
+	)
+	if err != nil {
+		return "", "", err
+	}
+	bundleID = strings.TrimSpace(bundleID)
+	if bundleID == "" {
 		return "", "", errors.New("no frontmost application")
 	}
-	bundleID = C.GoString(cBundle)
-	if cName != nil {
-		name = C.GoString(cName)
-	}
+
+	name, _ = runOSA(
+		`tell application "System Events" to get name of first application process whose frontmost is true`,
+	)
+	name = strings.TrimSpace(name)
+
 	return bundleID, name, nil
+}
+
+func runOSA(script string) (string, error) {
+	out, err := exec.Command("osascript", "-e", script).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
