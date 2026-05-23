@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Config holds the application configuration
@@ -558,3 +559,81 @@ func (c *Config) SetMuteSystemAudio(val bool) {
 	defer c.mu.Unlock()
 	c.MuteSystemAudio = &val
 }
+
+// CachedModelList holds a list of models and the time they were fetched.
+type CachedModelList struct {
+	Models    []string  `json:"models"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// ModelCache maps provider names to their cached model lists.
+type ModelCache map[string]CachedModelList
+
+const modelCacheTTL = 24 * time.Hour
+
+// LoadModelCache reads the model list for the given provider from disk if it hasn't expired.
+func LoadModelCache(provider string) ([]string, bool) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return nil, false
+	}
+	cachePath := filepath.Join(configDir, "models_cache.json")
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		return nil, false
+	}
+	var cache ModelCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, false
+	}
+	cached, ok := cache[provider]
+	if !ok {
+		return nil, false
+	}
+	if time.Since(cached.Timestamp) > modelCacheTTL {
+		return nil, false
+	}
+	return cached.Models, true
+}
+
+// SaveModelCache persists a list of models for the given provider to disk.
+func SaveModelCache(provider string, models []string) error {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return err
+	}
+	cachePath := filepath.Join(configDir, "models_cache.json")
+	cache := make(ModelCache)
+	if data, err := os.ReadFile(cachePath); err == nil {
+		_ = json.Unmarshal(data, &cache)
+	}
+	cache[provider] = CachedModelList{
+		Models:    models,
+		Timestamp: time.Now(),
+	}
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(cachePath, data, 0644)
+}
+
+// ClearModelCache invalidates the cached model list for a given provider.
+func ClearModelCache(provider string) error {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return err
+	}
+	cachePath := filepath.Join(configDir, "models_cache.json")
+	cache := make(ModelCache)
+	if data, err := os.ReadFile(cachePath); err == nil {
+		_ = json.Unmarshal(data, &cache)
+	}
+	delete(cache, provider)
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(cachePath, data, 0644)
+}
+

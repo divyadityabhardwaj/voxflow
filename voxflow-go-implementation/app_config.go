@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"voxflow/internal/cerebras"
+	"voxflow/internal/config"
 	"voxflow/internal/groq"
 	"voxflow/internal/logger"
 	"voxflow/internal/openrouter"
@@ -61,6 +62,7 @@ func (a *App) GetConfig() *ConfigResponse {
 func (a *App) SetAPIKey(key string) error {
 	a.config.SetGeminiAPIKey(key)
 	a.geminiClient.SetAPIKey(key)
+	_ = config.ClearModelCache("gemini")
 	return a.config.Save()
 }
 
@@ -150,7 +152,14 @@ type CheckResult struct {
 
 // GetGeminiModels returns all available Gemini models
 func (a *App) GetGeminiModels() ([]string, error) {
-	return a.geminiClient.ListModels()
+	if cached, ok := config.LoadModelCache("gemini"); ok {
+		return cached, nil
+	}
+	models, err := a.geminiClient.ListModels()
+	if err == nil && len(models) > 0 {
+		_ = config.SaveModelCache("gemini", models)
+	}
+	return models, err
 }
 
 // CheckGeminiModel tests a Gemini model and returns latency and TPS
@@ -164,7 +173,14 @@ func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
 
 // GetOpenRouterModels returns all available free OpenRouter models
 func (a *App) GetOpenRouterModels() ([]string, error) {
-	return a.openRouterClient.GetFreeModels()
+	if cached, ok := config.LoadModelCache("openrouter"); ok {
+		return cached, nil
+	}
+	models, err := a.openRouterClient.GetFreeModels()
+	if err == nil && len(models) > 0 {
+		_ = config.SaveModelCache("openrouter", models)
+	}
+	return models, err
 }
 
 // GetOpenRouterModelDescriptions returns descriptions for all OpenRouter models
@@ -185,6 +201,7 @@ func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
 func (a *App) SetOpenRouterAPIKey(key string) error {
 	a.config.SetOpenRouterAPIKey(key)
 	a.openRouterClient.SetAPIKey(key)
+	_ = config.ClearModelCache("openrouter")
 	return a.config.Save()
 }
 
@@ -213,7 +230,14 @@ func (a *App) GetOpenRouterModel() string {
 
 // GetGroqModels returns all available Groq models
 func (a *App) GetGroqModels() ([]string, error) {
-	return a.groqClient.GetModels()
+	if cached, ok := config.LoadModelCache("groq"); ok {
+		return cached, nil
+	}
+	models, err := a.groqClient.GetModels()
+	if err == nil && len(models) > 0 {
+		_ = config.SaveModelCache("groq", models)
+	}
+	return models, err
 }
 
 // GetGroqModelDescriptions returns descriptions for all Groq models
@@ -235,6 +259,7 @@ func (a *App) SetGroqAPIKey(key string) error {
 	a.config.SetGroqAPIKey(key)
 	a.groqClient.SetAPIKey(key)
 	a.groqClient.ClearModelsCache()
+	_ = config.ClearModelCache("groq")
 	return a.config.Save()
 }
 
@@ -251,7 +276,14 @@ func (a *App) GetGroqModel() string {
 
 // GetCerebrasModels returns all available Cerebras models
 func (a *App) GetCerebrasModels() ([]string, error) {
-	return a.cerebrasClient.GetModels()
+	if cached, ok := config.LoadModelCache("cerebras"); ok {
+		return cached, nil
+	}
+	models, err := a.cerebrasClient.GetModels()
+	if err == nil && len(models) > 0 {
+		_ = config.SaveModelCache("cerebras", models)
+	}
+	return models, err
 }
 
 // GetCerebrasModelDescriptions returns descriptions for all Cerebras models
@@ -306,6 +338,7 @@ func (a *App) SetCerebrasAPIKey(key string) error {
 	a.config.SetCerebrasAPIKey(key)
 	a.cerebrasClient.SetAPIKey(key)
 	a.cerebrasClient.ClearModelsCache()
+	_ = config.ClearModelCache("cerebras")
 	return a.config.Save()
 }
 

@@ -378,15 +378,19 @@ func (s *Service) GetCount() (int, error) {
 // parseTimestamp attempts to parse a timestamp string from multiple formats
 func parseTimestamp(ts string) time.Time {
 	formats := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05.999999999",
 		"2006-01-02 15:04:05",
 		"2006-01-02T15:04:05Z",
-		time.RFC3339,
 	}
 	for _, f := range formats {
 		if t, err := time.Parse(f, ts); err == nil {
 			return t
 		}
 	}
-	logger.Warnf("Warning: Failed to parse timestamp '%s', using current time", ts)
+	logger.Debugf("Failed to parse timestamp '%s', using current time", ts)
 	return time.Now()
 }
