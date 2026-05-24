@@ -34,6 +34,9 @@ func main() {
 	fileMenu.AddText("Open Full App", keys.CmdOrCtrl("o"), func(cd *menu.CallbackData) {
 		app.HideMiniMode()
 	})
+	fileMenu.AddText("Reset Window Position", nil, func(cd *menu.CallbackData) {
+		app.ResetWindowPosition()
+	})
 	fileMenu.AddText("View History", keys.CmdOrCtrl("h"), func(cd *menu.CallbackData) {
 		app.OpenHistoryWindow()
 	})

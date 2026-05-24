@@ -4,13 +4,13 @@ import "voxflow/internal/hotkey"
 
 func (a *App) onHotkeyPressed(state hotkey.State) {
 	if state == hotkey.StateRecording {
-		a.pipeline.CaptureRecordingTarget()
+		go a.pipeline.CaptureRecordingTarget()
 	}
 	a.pipeline.HandleHotkeyState(state)
 }
 
 func (a *App) StartRecording() error {
-	a.pipeline.CaptureRecordingTarget()
+	go a.pipeline.CaptureRecordingTarget()
 	return a.pipeline.StartRecording()
 }
 

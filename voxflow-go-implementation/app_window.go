@@ -11,3 +11,7 @@ func (a *App) HideMiniMode() {
 func (a *App) SetMiniModeExpanded(expanded bool, height int) {
 	a.windowMgr.SetMiniExpanded(expanded, height)
 }
+
+func (a *App) ResetWindowPosition() {
+	a.windowMgr.ResetPosition()
+}

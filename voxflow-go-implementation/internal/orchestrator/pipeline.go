@@ -150,11 +150,23 @@ func (p *Pipeline) StartRecording() error {
 	p.startStreamingTranscription()
 
 	if p.config.GetMuteSystemAudio() {
+		p.volumeMu.Lock()
+		p.savedVolume = -2 // Mute is in progress
+		p.volumeMu.Unlock()
+
 		go func() {
 			vol := audio.MuteSystemAudio()
 			p.volumeMu.Lock()
-			p.savedVolume = vol
-			p.volumeMu.Unlock()
+			defer p.volumeMu.Unlock()
+			if p.savedVolume == -1 {
+				// The pipeline has already stopped/errored out and restoreVolume was called.
+				// We must immediately restore the volume.
+				if vol >= 0 {
+					go audio.UnmuteSystemAudio(vol)
+				}
+			} else {
+				p.savedVolume = vol
+			}
 		}()
 	}
 
@@ -225,15 +237,7 @@ func (p *Pipeline) startStreamingTranscription() {
 }
 
 func (p *Pipeline) processRecording() {
-	defer func() {
-		p.volumeMu.Lock()
-		vol := p.savedVolume
-		p.savedVolume = -1
-		p.volumeMu.Unlock()
-		if vol >= 0 {
-			audio.UnmuteSystemAudio(vol)
-		}
-	}()
+	defer p.restoreVolume()
 
 	processingStartTime := time.Now()
 
@@ -476,6 +480,17 @@ func (p *Pipeline) emitToast(message, toastType string) {
 	})
 }
 
+func (p *Pipeline) restoreVolume() {
+	p.volumeMu.Lock()
+	vol := p.savedVolume
+	p.savedVolume = -1
+	p.volumeMu.Unlock()
+
+	if vol >= 0 {
+		go audio.UnmuteSystemAudio(vol)
+	}
+}
+
 func (p *Pipeline) resetToIdle() {
 	p.setState(hotkey.StateIdle)
 	if p.hotkeyManager != nil {
@@ -483,15 +498,7 @@ func (p *Pipeline) resetToIdle() {
 	}
 	runtime.EventsEmit(p.ctx, events.StateChanged, "Idle")
 
-	p.volumeMu.Lock()
-	vol := p.savedVolume
-	p.savedVolume = -1
-	p.volumeMu.Unlock()
-	if vol >= 0 {
-		go func() {
-			audio.UnmuteSystemAudio(vol)
-		}()
-	}
+	p.restoreVolume()
 }
 
 // ToggleRecording toggles between recording and idle.

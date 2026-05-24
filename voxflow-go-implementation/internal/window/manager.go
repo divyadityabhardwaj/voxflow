@@ -58,7 +58,10 @@ func (m *Manager) StartupMiniMode() {
 		runtime.WindowSetMinSize(m.ctx, 200, 60)
 		runtime.WindowSetMaxSize(m.ctx, 200, 60)
 		runtime.WindowSetSize(m.ctx, 200, 60)
+	} else {
+		runtime.WindowCenter(m.ctx)
 	}
+	ConstrainWindow()
 	m.startPositionWatch()
 }
 
@@ -79,7 +82,10 @@ func (m *Manager) ShowMini() {
 	x, y := m.config.GetMiniModePosition()
 	if x != 0 || y != 0 {
 		runtime.WindowSetPosition(m.ctx, x, y)
+	} else {
+		runtime.WindowCenter(m.ctx)
 	}
+	ConstrainWindow()
 
 	runtime.WindowSetAlwaysOnTop(m.ctx, true)
 	runtime.EventsEmit(m.ctx, events.MiniMode, true)
@@ -228,6 +234,27 @@ func (m *Manager) Shutdown() {
 	if m.isMiniMode {
 		m.saveCurrentMiniPosition()
 	}
+}
+
+// ResetPosition centers the window and clears saved positions.
+func (m *Manager) ResetPosition() {
+	m.config.SetMiniModePosition(0, 0)
+	m.config.SetMaximizedWindowPosition(0, 0)
+	m.config.SetMaximizedWindowSize(900, 600)
+	m.config.Save()
+
+	runtime.WindowSetMinSize(m.ctx, 800, 600)
+	runtime.WindowSetMaxSize(m.ctx, 0, 0)
+	runtime.WindowSetSize(m.ctx, 900, 600)
+	runtime.WindowCenter(m.ctx)
+
+	m.isMiniMode = false
+	m.userExplicitlyMaximized = true
+	ResetBehavior()
+	runtime.WindowSetAlwaysOnTop(m.ctx, false)
+	runtime.EventsEmit(m.ctx, events.MiniMode, false)
+	m.startMaximizedPositionWatch()
+	logger.Infof("[Window] Reset window position to center")
 }
 
 func (m *Manager) startWindowWatch(isMini bool) {

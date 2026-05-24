@@ -112,6 +112,8 @@ export function RemoveAppRule(arg1:string):Promise<void>;
 
 export function RequestAccessibilityPermission():Promise<void>;
 
+export function ResetWindowPosition():Promise<void>;
+
 export function RetryRefinement(arg1:number,arg2:string):Promise<string>;
 
 export function RetryWithGemini(arg1:number,arg2:string):Promise<string>;

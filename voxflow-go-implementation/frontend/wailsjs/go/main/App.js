@@ -218,6 +218,10 @@ export function RequestAccessibilityPermission() {
   return window['go']['main']['App']['RequestAccessibilityPermission']();
 }
 
+export function ResetWindowPosition() {
+  return window['go']['main']['App']['ResetWindowPosition']();
+}
+
 export function RetryRefinement(arg1, arg2) {
   return window['go']['main']['App']['RetryRefinement'](arg1, arg2);
 }
