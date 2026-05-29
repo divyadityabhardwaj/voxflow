@@ -64,3 +64,9 @@ Thumbs.db
 .cache/
 __pycache__/
 *.pyc
+
+# =========================
+# AI / Agent Rules
+# =========================
+AGENTS.md
+

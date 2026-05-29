@@ -18,8 +18,23 @@ func TestMergeStreamingChunks_dedupesOverlap(t *testing.T) {
 }
 
 func TestCleanWhisperText_stripsNoiseMarkers(t *testing.T) {
-	got := cleanWhisperText("hello [MUSIC] world")
-	if got != "hello world" {
-		t.Fatalf("cleanWhisperText() = %q, want %q", got, "hello world")
+	testCases := []struct {
+		input string
+		want  string
+	}{
+		{"hello [MUSIC] world", "hello world"},
+		{"hello [BLANK_AUDIO] world", "hello world"},
+		{"do so. [BLANK_AUDIO]", "do so."},
+		{"hello (blank audio) world", "hello world"},
+		{"hello [NO_SPEECH] world", "hello world"},
+		{"hello [NO SPEECH] world", "hello world"},
+		{"[NOISE] hello", "hello"},
+	}
+
+	for _, tc := range testCases {
+		got := cleanWhisperText(tc.input)
+		if got != tc.want {
+			t.Errorf("cleanWhisperText(%q) = %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }

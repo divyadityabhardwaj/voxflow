@@ -8,8 +8,8 @@ import (
 )
 
 var whisperNoiseMarkerRe = regexp.MustCompile(
-	`(?i)(^|\s)[\[(](audio|music|applause|noise|silence|laughter)[\])](?:\s|$)` +
-		`|(^|\s)\[[A-Z]{2,}(?:\s[A-Z]{2,})+\](?:\s|$)`,
+	`(?i)[\[(](audio|music|applause|noise|silence|laughter|blank_audio|blank audio|no speech|no_speech|sigh|cough|gasp|snort|groan|grunt|whispering|bell|buzz|chuckle|throat-clearing)[\])]` +
+		`|\[[A-Z_]{2,}(?:[\s_][A-Z_]{2,})*\]`,
 )
 
 type streamChunk struct {
