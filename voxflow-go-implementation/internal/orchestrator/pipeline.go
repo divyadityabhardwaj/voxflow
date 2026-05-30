@@ -49,6 +49,9 @@ type Pipeline struct {
 	streamTextMu sync.Mutex
 	streamText   string
 	streamChunks []streamChunk
+	streamJobs   chan streamJob
+	streamWG     sync.WaitGroup
+	lastEmitTime time.Time
 
 	recordingBundleID string
 	recordingAppName  string
@@ -205,34 +208,72 @@ func (p *Pipeline) StopRecording() {
 	go p.processRecording()
 }
 
+type streamJob struct {
+	Samples   []int16
+	StartTime time.Duration
+	IsFinal   bool
+}
+
+func (p *Pipeline) streamingWorker() {
+	defer p.streamWG.Done()
+
+	for job := range p.streamJobs {
+		samples := job.Samples
+		if len(samples) < 1600 {
+			if !job.IsFinal {
+				audio.RecycleChunk(samples)
+			}
+			continue
+		}
+
+		text, err := p.whisperService.TranscribeSamples(samples)
+		if !job.IsFinal {
+			audio.RecycleChunk(samples)
+		}
+
+		if err != nil || text == "" {
+			continue
+		}
+
+		text = cleanWhisperText(text)
+
+		p.streamTextMu.Lock()
+		p.streamChunks = append(p.streamChunks, streamChunk{Start: job.StartTime, Text: text})
+		p.streamText = mergeStreamingChunks(p.streamChunks)
+		currentText := p.streamText
+		
+		// Rate-limit/throttle partial transcript event emissions to prevent visual UI lag (max 10 events/sec)
+		shouldEmit := job.IsFinal || time.Since(p.lastEmitTime) >= 100*time.Millisecond
+		if shouldEmit {
+			p.lastEmitTime = time.Now()
+		}
+		p.streamTextMu.Unlock()
+
+		if shouldEmit {
+			runtime.EventsEmit(p.ctx, events.PartialTranscript, map[string]interface{}{
+				"text":      currentText,
+				"timestamp": time.Now().Unix(),
+			})
+		}
+	}
+}
+
 func (p *Pipeline) startStreamingTranscription() {
 	p.streamTextMu.Lock()
 	p.streamText = ""
 	p.streamChunks = make([]streamChunk, 0)
 	p.streamTextMu.Unlock()
 
+	p.streamJobs = make(chan streamJob, 64)
+	p.streamWG.Add(1)
+	go p.streamingWorker()
+
 	p.audioRecorder.SetChunkCallback(func(samples []int16, startTime time.Duration, isFinal bool) {
-		if len(samples) < 1600 {
-			return
+		p.streamJobs <- streamJob{
+			Samples:   samples,
+			StartTime: startTime,
+			IsFinal:   isFinal,
 		}
-
-		text, err := p.whisperService.TranscribeSamples(samples)
-		if err != nil || text == "" {
-			return
-		}
-
-		text = cleanWhisperText(text)
-
-		p.streamTextMu.Lock()
-		p.streamChunks = append(p.streamChunks, streamChunk{Start: startTime, Text: text})
-		p.streamText = mergeStreamingChunks(p.streamChunks)
-		currentText := p.streamText
-		p.streamTextMu.Unlock()
-
-		runtime.EventsEmit(p.ctx, events.PartialTranscript, map[string]interface{}{
-			"text":      currentText,
-			"timestamp": time.Now().Unix(),
-		})
 	})
 }
 
@@ -240,15 +281,6 @@ func (p *Pipeline) processRecording() {
 	defer p.restoreVolume()
 
 	processingStartTime := time.Now()
-
-	p.streamTextMu.Lock()
-	streamText := p.streamText
-	streamChunkCount := len(p.streamChunks)
-	p.streamTextMu.Unlock()
-
-	if streamChunkCount > 0 {
-		logger.Infof("[Pipeline] Streaming transcription: %d chunks, %d chars", streamChunkCount, len(streamText))
-	}
 
 	var stopAndWavDuration time.Duration
 	var cleanTextDuration time.Duration
@@ -259,6 +291,21 @@ func (p *Pipeline) processRecording() {
 	stopAndWavStart := time.Now()
 	wavPath, err := p.audioRecorder.Stop()
 	stopAndWavDuration = time.Since(stopAndWavStart)
+
+	// Close the streaming worker channel and wait for any remaining transcriptions to finish.
+	if p.streamJobs != nil {
+		close(p.streamJobs)
+		p.streamWG.Wait()
+	}
+
+	p.streamTextMu.Lock()
+	streamText := p.streamText
+	streamChunkCount := len(p.streamChunks)
+	p.streamTextMu.Unlock()
+
+	if streamChunkCount > 0 {
+		logger.Infof("[Pipeline] Streaming transcription: %d chunks, %d chars", streamChunkCount, len(streamText))
+	}
 	if err != nil {
 		p.emitToast("Failed to stop recording: "+err.Error(), "error")
 		p.resetToIdle()

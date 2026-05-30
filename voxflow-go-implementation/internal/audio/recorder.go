@@ -23,6 +23,19 @@ const (
 	ChunkDuration   = 8 // seconds per chunk for streaming transcription
 )
 
+var chunkPool = sync.Pool{
+	New: func() interface{} {
+		return make([]int16, SampleRate*ChunkDuration)
+	},
+}
+
+// RecycleChunk returns a chunk buffer to the pool for reuse.
+func RecycleChunk(samples []int16) {
+	if cap(samples) == SampleRate*ChunkDuration {
+		chunkPool.Put(samples)
+	}
+}
+
 // ChunkCallback is called with audio chunks during recording
 type ChunkCallback func(samples []int16, startTime time.Duration, isFinal bool)
 
@@ -194,29 +207,31 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 			continue
 		}
 
-		// Append samples to the persistent buffer (mu required for Stop() reader).
-		samples := make([]int16, len(inputBuffer))
-		copy(samples, inputBuffer)
-
+		// Append inputBuffer directly to the persistent buffer (mu required for Stop() reader).
 		r.mu.Lock()
 		if r.recording.Load() {
-			r.buffer = append(r.buffer, samples...)
+			r.buffer = append(r.buffer, inputBuffer...)
 		}
 		r.mu.Unlock()
 
 		// Accumulate chunk buffer and fire callback when full — no lock needed
 		// because chunkBuffer is local to this goroutine.
-		chunkBuffer = append(chunkBuffer, samples...)
+		chunkBuffer = append(chunkBuffer, inputBuffer...)
 		if len(chunkBuffer) >= chunkSize {
 			if cb := r.loadCallback(); cb != nil {
-				chunkSamples := make([]int16, chunkSize)
+				// Rent a buffer from the pool to avoid allocations
+				chunkSamples := chunkPool.Get().([]int16)
 				copy(chunkSamples, chunkBuffer[:chunkSize])
-				remaining := make([]int16, len(chunkBuffer)-chunkSize)
-				copy(remaining, chunkBuffer[chunkSize:])
+				var remaining []int16
+				if len(chunkBuffer) > chunkSize {
+					remaining = make([]int16, len(chunkBuffer)-chunkSize)
+					copy(remaining, chunkBuffer[chunkSize:])
+				}
 				chunkBuffer = remaining
 				start := chunkStartTime
 				chunkStartTime += time.Duration(ChunkDuration) * time.Second
-				go cb(chunkSamples, start, false)
+				// Invoke callback synchronously (it will queue to a channel in O(1))
+				cb(chunkSamples, start, false)
 			}
 		}
 	}

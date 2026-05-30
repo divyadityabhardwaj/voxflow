@@ -781,10 +781,8 @@ func createSyntheticWav(d time.Duration) (string, error) {
 		return "", err
 	}
 
-	for _, s := range samples {
-		if err := binary.Write(file, binary.LittleEndian, s); err != nil {
-			return "", err
-		}
+	if err := binary.Write(file, binary.LittleEndian, samples); err != nil {
+		return "", err
 	}
 
 	return file.Name(), nil
