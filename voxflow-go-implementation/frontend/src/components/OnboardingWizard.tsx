@@ -25,6 +25,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [downloadedMB, setDownloadedMB] = useState(0);
+  const [totalMB, setTotalMB] = useState(0);
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -42,8 +44,14 @@ export default function OnboardingWizard({ onComplete }: Props) {
     checkAccess();
     window.addEventListener("focus", checkAccess);
 
-    const unsubDownload = EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
+    const unsubDownload = EventsOn(Events.ModelDownloadProgress, (data: { progress: number; downloaded?: number; total?: number }) => {
       setProgress(Math.round(data.progress));
+      if (data.downloaded !== undefined) {
+        setDownloadedMB(Number((data.downloaded / (1024 * 1024)).toFixed(1)));
+      }
+      if (data.total !== undefined) {
+        setTotalMB(Number((data.total / (1024 * 1024)).toFixed(1)));
+      }
     });
 
     const unsubModel = EventsOn(
@@ -181,7 +189,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
                   />
                 </div>
                 <p className="text-xs text-tertiary font-bold mt-2">
-                  {progress}% complete
+                  {progress}% complete {totalMB > 0 ? `(${downloadedMB} MB / ${totalMB} MB)` : ""}
                 </p>
               </div>
             ) : (
