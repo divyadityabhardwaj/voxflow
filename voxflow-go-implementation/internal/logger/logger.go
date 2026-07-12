@@ -32,7 +32,7 @@ var (
 )
 
 func init() {
-	Setup(os.Stdout, DEBUG)
+	Setup(os.Stdout, INFO)
 }
 
 func Setup(w io.Writer, lvl Level) {
@@ -229,7 +229,7 @@ func File(path string, lvl Level) error {
 		logFile.Close()
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
 	}
