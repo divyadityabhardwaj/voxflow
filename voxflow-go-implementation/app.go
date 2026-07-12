@@ -163,6 +163,10 @@ func (a *App) startup(ctx context.Context) {
 	if err := whisper.CleanupPartialDownloads(); err != nil {
 		logger.Warnf("Warning: Failed to cleanup partial downloads: %v", err)
 	}
+
+	if err := audio.CleanupTempFiles(); err != nil {
+		logger.Warnf("Warning: Failed to cleanup stale temp audio files: %v", err)
+	}
 	go a.checkModelStatus()
 
 	hfHotkey := a.config.GetHandsFreeHotkey()

@@ -299,29 +299,20 @@ func (r *Recorder) saveToWav() (string, error) {
 	return filepath, nil
 }
 
-// writeSamplesToWav writes int16 PCM mono samples to a temp WAV file.
-func (r *Recorder) writeSamplesToWav(samples []int16) (string, error) {
-	if len(samples) == 0 {
-		return "", fmt.Errorf("no samples")
-	}
+// CleanupTempFiles deletes stale voxflow_*.wav files from previous sessions in os.TempDir().
+func CleanupTempFiles() error {
 	tempDir := os.TempDir()
-	filename := fmt.Sprintf("voxflow_segment_%d.wav", time.Now().UnixNano())
-	filepath := filepath.Join(tempDir, filename)
-
-	file, err := os.Create(filepath)
+	pattern := filepath.Join(tempDir, "voxflow_*.wav")
+	matches, err := filepath.Glob(pattern)
 	if err != nil {
-		return "", fmt.Errorf("failed to create WAV file: %w", err)
+		return err
 	}
-	defer file.Close()
 
-	if err := r.writeWavHeader(file, len(samples)); err != nil {
-		return "", fmt.Errorf("failed to write WAV header: %w", err)
+	for _, f := range matches {
+		logger.Infof("[Audio] Cleaning up stale temp WAV file: %s", filepath.Base(f))
+		_ = os.Remove(f)
 	}
-	// Write all samples in a single call
-	if err := binary.Write(file, binary.LittleEndian, samples); err != nil {
-		return "", fmt.Errorf("failed to write audio data: %w", err)
-	}
-	return filepath, nil
+	return nil
 }
 
 // writeWavHeader writes a WAV file header
