@@ -47,16 +47,9 @@ func (s *Service) Inject(text string) error {
 		originalClipboard = clipboard.Read(clipboard.FmtText)
 	}
 
-	defer func() {
-		if s.preserveClipboard && len(originalClipboard) > 0 {
-			time.Sleep(200 * time.Millisecond)
-			clipboard.Write(clipboard.FmtText, originalClipboard)
-		}
-	}()
-
 	clipboard.Write(clipboard.FmtText, []byte(text))
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
 
 	// Simulate Cmd+V using CoreGraphics CGEventPost (requires Accessibility permission
 	// to be granted to this app, NOT to osascript/System Events).
@@ -64,7 +57,18 @@ func (s *Service) Inject(text string) error {
 		return err
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+
+	// Restore clipboard asynchronously so Inject returns immediately.
+	if s.preserveClipboard {
+		go func() {
+			time.Sleep(150 * time.Millisecond)
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			// Always restore — even if original was empty, clear the pasted text from clipboard.
+			clipboard.Write(clipboard.FmtText, originalClipboard)
+		}()
+	}
 
 	return nil
 }
