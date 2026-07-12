@@ -126,3 +126,10 @@ func (c *Client) RetryWithInstruction(text, instruction, model string) (string, 
 	}
 	return c.openai.RetryWithInstruction(text, instruction, model)
 }
+
+// Prewarm initiates background connection pre-warming.
+func (c *Client) Prewarm(model string) {
+	if c.apiKey != "" {
+		c.openai.Prewarm(model)
+	}
+}

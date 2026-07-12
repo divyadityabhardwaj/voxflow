@@ -2,9 +2,12 @@ package gemini
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -26,6 +29,22 @@ type Client struct {
 	modelsMu   sync.Mutex
 }
 
+// newTunedTransport returns an http.Transport optimised for low-latency API
+// calls.
+func newTunedTransport() *http.Transport {
+	return &http.Transport{
+		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		ForceAttemptHTTP2:   true,
+		MaxIdleConnsPerHost: 4,
+		MaxIdleConns:        8,
+		IdleConnTimeout:     120 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+	}
+}
+
 // NewClient creates a new Gemini client
 func NewClient(apiKey string, modelName string) *Client {
 	if modelName == "" {
@@ -35,7 +54,8 @@ func NewClient(apiKey string, modelName string) *Client {
 		apiKey:    apiKey,
 		modelName: modelName,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   15 * time.Second,
+			Transport: newTunedTransport(),
 		},
 	}
 }
@@ -435,4 +455,25 @@ func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 	}
 
 	return latency, tps, nil
+}
+
+// Prewarm initiates a background HEAD request to baseAPIURL to warm up the
+// TLS/HTTP2 connection.
+func (c *Client) Prewarm(model string) {
+	if c.apiKey == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "HEAD", baseAPIURL, nil)
+		if err != nil {
+			return
+		}
+		resp, err := c.httpClient.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
 }

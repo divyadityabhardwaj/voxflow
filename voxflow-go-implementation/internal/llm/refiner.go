@@ -16,4 +16,7 @@ type Refiner interface {
 
 	// RetryWithInstruction re-processes text with a custom instruction.
 	RetryWithInstruction(text, instruction, model string) (string, error)
+
+	// Prewarm initiates a background TLS connection pre-warm.
+	Prewarm(model string)
 }

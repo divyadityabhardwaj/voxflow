@@ -42,3 +42,8 @@ func (c *Client) CheckModel(model string) (int64, float64, error) {
 func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
 	return c.openai.RetryWithInstruction(text, instruction, model)
 }
+
+// Prewarm initiates background connection pre-warming.
+func (c *Client) Prewarm(model string) {
+	c.openai.Prewarm(model)
+}

@@ -152,6 +152,15 @@ func (p *Pipeline) StartRecording() error {
 
 	p.startStreamingTranscription()
 
+	// Pre-warm the active provider's TLS connection in the background while the user is talking.
+	if p.refiner != nil {
+		activeModel := ""
+		if p.activeLLMModel != nil {
+			activeModel = p.activeLLMModel()
+		}
+		go p.refiner().Prewarm(activeModel)
+	}
+
 	if p.config.GetMuteSystemAudio() {
 		p.volumeMu.Lock()
 		p.savedVolume = -2 // Mute is in progress

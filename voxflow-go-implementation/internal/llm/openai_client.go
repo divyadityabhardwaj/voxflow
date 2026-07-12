@@ -2,9 +2,12 @@ package llm
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sort"
 	"time"
@@ -12,8 +15,8 @@ import (
 
 const (
 	retryMaxAttempts = 3
-	retryBaseDelay   = time.Second
-	retryMaxDelay    = 30 * time.Second
+	retryBaseDelay   = 250 * time.Millisecond
+	retryMaxDelay    = 5 * time.Second
 )
 
 func isRetryableStatus(code int) bool {
@@ -63,14 +66,31 @@ type OpenAIClient struct {
 	HTTPClient   *http.Client
 }
 
-// NewOpenAIClient creates a new OpenAIClient with a 60-second HTTP timeout.
+// newTunedTransport returns an http.Transport optimised for low-latency API
+// calls: HTTP/2, pre-warmed TLS, long idle timeouts, multiple idle conns.
+func newTunedTransport() *http.Transport {
+	return &http.Transport{
+		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
+		ForceAttemptHTTP2:   true,
+		MaxIdleConnsPerHost: 4,
+		MaxIdleConns:        8,
+		IdleConnTimeout:     120 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+	}
+}
+
+// NewOpenAIClient creates a new OpenAIClient with a tuned HTTP transport.
 func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *OpenAIClient {
 	return &OpenAIClient{
 		BaseURL:      baseURL,
 		APIKey:       apiKey,
 		ExtraHeaders: extraHeaders,
 		HTTPClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout:   15 * time.Second,
+			Transport: newTunedTransport(),
 		},
 	}
 }
@@ -343,4 +363,24 @@ func (c *OpenAIClient) GetModels(filter func(id string) bool) ([]string, error) 
 
 	sort.Strings(models)
 	return models, nil
+}
+
+// Prewarm performs a fast background request to the API base URL to warm up
+// the TCP/TLS connection pool.
+func (c *OpenAIClient) Prewarm(model string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "HEAD", c.BaseURL, nil)
+		if err != nil {
+			return
+		}
+		c.applyHeaders(req)
+
+		resp, err := c.HTTPClient.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
 }
