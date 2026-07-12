@@ -29,7 +29,7 @@ type Client struct {
 // NewClient creates a new Gemini client
 func NewClient(apiKey string, modelName string) *Client {
 	if modelName == "" {
-		modelName = "gemini-1.5-flash"
+		modelName = "gemini-2.0-flash-lite"
 	}
 	return &Client{
 		apiKey:    apiKey,

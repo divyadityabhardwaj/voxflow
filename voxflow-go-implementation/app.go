@@ -110,7 +110,7 @@ func (a *App) activeLLMModel() string {
 	default:
 		model := a.config.GetGeminiModel()
 		if model == "" {
-			model = "gemini-1.5-flash"
+			model = "gemini-2.0-flash-lite"
 		}
 		return model
 	}

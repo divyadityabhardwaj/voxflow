@@ -27,6 +27,7 @@ type chatRequest struct {
 	Model       string        `json:"model"`
 	Messages    []chatMessage `json:"messages"`
 	Temperature float64       `json:"temperature,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
 }
 
 // chatMessage is a single message in a chat conversation.
@@ -174,6 +175,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 			{Role: "user", Content: "Transcription to refine:\n" + rawText},
 		},
 		Temperature: 0.3,
+		MaxTokens:   768,
 	}
 
 	reqBody, err := json.Marshal(req)
