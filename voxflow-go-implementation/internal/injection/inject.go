@@ -65,8 +65,12 @@ func (s *Service) Inject(text string) error {
 			time.Sleep(150 * time.Millisecond)
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			// Always restore — even if original was empty, clear the pasted text from clipboard.
-			clipboard.Write(clipboard.FmtText, originalClipboard)
+			// Verify the clipboard still has the text we pasted.
+			// If the user has copied something else in the meantime, do not overwrite it.
+			current := clipboard.Read(clipboard.FmtText)
+			if string(current) == text {
+				clipboard.Write(clipboard.FmtText, originalClipboard)
+			}
 		}()
 	}
 
