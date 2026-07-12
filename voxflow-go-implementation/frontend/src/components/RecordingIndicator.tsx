@@ -368,7 +368,7 @@ export default function RecordingIndicator() {
           {/* Middle: Shortened message summary */}
           <div className="flex-1 px-1 min-w-0 flex items-center justify-center">
             <span
-              className="text-[7px] font-semibold uppercase tracking-[0.08em] truncate whitespace-nowrap text-center animate-fade-in"
+              className="text-[11px] font-semibold uppercase tracking-[0.08em] truncate whitespace-nowrap text-center animate-fade-in"
               style={{ color: toastForegroundColor }}
             >
               {getShortErrorMessage(activeToast.message)}
@@ -467,7 +467,7 @@ export default function RecordingIndicator() {
           >
             {status === "Recording" && (
               <div
-                className="text-[7px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[11px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--recording)" }}
               >
                 Recording
@@ -475,7 +475,7 @@ export default function RecordingIndicator() {
             )}
             {status === "Processing" && (
               <div
-                className="text-[7px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[11px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--processing)" }}
               >
                 Processing
