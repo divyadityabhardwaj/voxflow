@@ -445,7 +445,7 @@ func (p *Pipeline) processRecording() {
 	cleanTextDuration = time.Since(cleanStart)
 	whisperDuration = time.Since(whisperStart)
 
-	logger.Debugf("[Pipeline] Whisper raw output (%d chars):\n%s", len(rawText), rawText)
+	logger.Debugf("[Pipeline] Whisper raw output: %d chars", len(rawText))
 
 	if rawText == "" {
 		p.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
@@ -533,7 +533,7 @@ func (p *Pipeline) processRecording() {
 		}
 	}
 
-	logger.Debugf("[Pipeline] Output (%d chars):\n%s", len(polishedText), polishedText)
+	logger.Debugf("[Pipeline] Output: %d chars", len(polishedText))
 
 	llmName := providerDisplayName(llmProvider)
 	output := fmt.Sprintf(

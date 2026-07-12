@@ -129,7 +129,7 @@ type APIError struct {
 // RefineText satisfies llm.Refiner. If model is non-empty it overrides the
 // client's configured model for this call only.
 func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
-	logger.Debugf("[Gemini] Refining text: %s", rawText)
+	logger.Debugf("[Gemini] Refining text: %d chars", len(rawText))
 	if c.apiKey == "" {
 		return "", 0, false, fmt.Errorf("API key not set")
 	}
@@ -210,7 +210,7 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	result := geminiResp.Candidates[0].Content.Parts[0].Text
 
 	// Debug logging
-	logger.Debugf("[Gemini] Raw output (%d chars):\n%s", len(result), result)
+	logger.Debugf("[Gemini] Raw output: %d chars", len(result))
 
 	// Extract token count
 	var tokenCount int
