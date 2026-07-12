@@ -241,7 +241,11 @@ func (p *Pipeline) streamingWorker() {
 			audio.RecycleChunk(samples)
 		}
 
-		if err != nil || text == "" {
+		if err != nil {
+			logger.Errorf("[Pipeline] Streaming chunk transcription error: %v", err)
+			continue
+		}
+		if text == "" {
 			continue
 		}
 
