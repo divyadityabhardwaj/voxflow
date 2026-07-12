@@ -235,6 +235,7 @@ func (p *Pipeline) streamingWorker() {
 			continue
 		}
 
+		chunkDuration := time.Duration(float64(len(samples)) / 16000.0 * float64(time.Second))
 		text, err := p.whisperService.TranscribeSamples(samples)
 		if !job.IsFinal {
 			audio.RecycleChunk(samples)
@@ -247,7 +248,7 @@ func (p *Pipeline) streamingWorker() {
 		text = cleanWhisperText(text)
 
 		p.streamTextMu.Lock()
-		p.streamChunks = append(p.streamChunks, streamChunk{Start: job.StartTime, Text: text})
+		p.streamChunks = append(p.streamChunks, streamChunk{Start: job.StartTime, Duration: chunkDuration, Text: text})
 		p.streamText = mergeStreamingChunks(p.streamChunks)
 		currentText := p.streamText
 		
@@ -335,7 +336,16 @@ func (p *Pipeline) processRecording() {
 	var rawText string
 	var whisperDuration time.Duration
 
-	streamCoversSec := float64(streamChunkCount) * audio.ChunkDuration
+	// Calculate real covered seconds from processed chunks
+	var streamCoversSec float64
+	p.streamTextMu.Lock()
+	for _, chunk := range p.streamChunks {
+		streamCoversSec += chunk.Duration.Seconds()
+	}
+	streamText := p.streamText
+	streamChunkCount := len(p.streamChunks)
+	p.streamTextMu.Unlock()
+
 	audioSec := audioDuration.Seconds()
 	hasFullCoverage := streamChunkCount > 0 &&
 		streamText != "" &&
@@ -347,20 +357,61 @@ func (p *Pipeline) processRecording() {
 			streamChunkCount, streamCoversSec, audioSec)
 		rawText = streamText
 	} else {
-		maxRetries := 3
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			rawText, err = p.whisperService.Transcribe(wavPath)
-			if err != nil {
-				p.emitToast("Transcription failed: "+err.Error(), "error")
-				p.resetToIdle()
-				return
-			}
-			if rawText != "" {
-				break
-			}
-			if attempt < maxRetries {
-				logger.Infof("[Pipeline] No speech detected, retrying (%d/%d)...", attempt, maxRetries)
+		// Gap-fill needed: transcribe only the uncovered tail.
+		fullSamples := p.audioRecorder.GetBuffer()
+		startIndex := int(streamCoversSec * 16000)
+		if startIndex < 0 {
+			startIndex = 0
+		}
+		if startIndex > len(fullSamples) {
+			startIndex = len(fullSamples)
+		}
+		tailSamples := fullSamples[startIndex:]
+
+		var tailText string
+		if len(tailSamples) >= 1600 {
+			logger.Infof("[Pipeline] Transcribing uncovered tail from %.1fs to %.1fs (%.1fs segment)",
+				streamCoversSec, audioSec, float64(len(tailSamples))/16000.0)
+			maxRetries := 3
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				tailText, err = p.whisperService.TranscribeSamples(tailSamples)
+				if err != nil {
+					p.emitToast("Tail transcription failed: "+err.Error(), "error")
+					p.resetToIdle()
+					return
+				}
+				if tailText != "" || attempt == maxRetries {
+					break
+				}
+				logger.Infof("[Pipeline] No speech detected in tail, retrying (%d/%d)...", attempt, maxRetries)
 				time.Sleep(200 * time.Millisecond)
+			}
+		}
+
+		if streamText != "" {
+			rawText = strings.TrimSpace(streamText + " " + cleanWhisperText(tailText))
+		} else {
+			rawText = cleanWhisperText(tailText)
+		}
+
+		// Fallback to full file if still completely empty and activity detected
+		if rawText == "" && len(fullSamples) > 0 {
+			logger.Infof("[Pipeline] Tail transcription empty, falling back to transcribing full WAV file")
+			maxRetries := 3
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				rawText, err = p.whisperService.Transcribe(wavPath)
+				if err != nil {
+					p.emitToast("Full transcription fallback failed: "+err.Error(), "error")
+					p.resetToIdle()
+					return
+				}
+				if rawText != "" {
+					break
+				}
+				if attempt < maxRetries {
+					logger.Infof("[Pipeline] No speech detected in full fallback, retrying (%d/%d)...", attempt, maxRetries)
+					time.Sleep(200 * time.Millisecond)
+				}
 			}
 		}
 	}

@@ -13,8 +13,9 @@ var whisperNoiseMarkerRe = regexp.MustCompile(
 )
 
 type streamChunk struct {
-	Start time.Duration
-	Text  string
+	Start    time.Duration
+	Duration time.Duration
+	Text     string
 }
 
 func cleanWhisperText(text string) string {

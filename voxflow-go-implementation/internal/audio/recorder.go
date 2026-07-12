@@ -420,3 +420,12 @@ func (r *Recorder) HasAudioActivity() bool {
 	// Setting threshold to 100 is highly safe, fast, and conservative.
 	return maxRMS > 100
 }
+
+// GetBuffer returns a copy of the recorded samples.
+func (r *Recorder) GetBuffer() []int16 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	buf := make([]int16, len(r.buffer))
+	copy(buf, r.buffer)
+	return buf
+}
