@@ -98,6 +98,13 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Global focus-visible ring for keyboard accessibility (WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 body {
   background-color: var(--background);
   color: var(--text);
