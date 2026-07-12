@@ -122,7 +122,7 @@ func (s *Service) initDB() error {
 	return nil
 }
 
-// Save saves a new transcript
+// Save saves a new transcript and returns the full row (includes a GetByID round-trip).
 func (s *Service) Save(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) (*Transcript, error) {
 	result, err := s.db.Exec(
 		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -138,6 +138,19 @@ func (s *Service) Save(appName, rawText, polishedText, provider, model string, t
 	}
 
 	return s.GetByID(id)
+}
+
+// SaveAsync saves a transcript without returning the row (no redundant GetByID SELECT).
+// Use this on the hot path when the caller doesn't need the result.
+func (s *Service) SaveAsync(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) error {
+	_, err := s.db.Exec(
+		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		appName, rawText, polishedText, "", provider, model, timeMs, tps, wps,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to save transcript: %w", err)
+	}
+	return nil
 }
 
 // GetByID retrieves a transcript by ID

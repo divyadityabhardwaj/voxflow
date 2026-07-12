@@ -424,20 +424,12 @@ func (p *Pipeline) processRecording() {
 		effectiveWPS = float64(wordCount) / totalTimeFromStart.Seconds()
 	}
 
-	var historyDuration time.Duration
+	// Fire-and-forget history save — off the critical path.
 	if p.historyService != nil {
-		historyStart := time.Now()
-		_, err := p.historyService.Save("", rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS)
-		historyDuration = time.Since(historyStart)
-		if err != nil {
-			logger.Errorf("Failed to save to history: %v", err)
-		}
-	}
-
-	if p.injectionService != nil {
 		go func() {
-			_ = p.injectionService.CopyToClipboard(polishedText)
-			logger.Infof("Text copied to clipboard")
+			if err := p.historyService.SaveAsync("", rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
+				logger.Errorf("Failed to save to history: %v", err)
+			}
 		}()
 	}
 
@@ -447,8 +439,13 @@ func (p *Pipeline) processRecording() {
 			logger.Warnf("Could not inject text: %v", err)
 			p.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
 		}
-	} else if mode != "copy-only" && !shouldPaste {
-		logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", p.recordingBundleID)
+	} else if p.injectionService != nil {
+		// Copy-only or paste disabled — just copy to clipboard.
+		_ = p.injectionService.CopyToClipboard(polishedText)
+		logger.Infof("Text copied to clipboard")
+		if mode != "copy-only" && !shouldPaste {
+			logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", p.recordingBundleID)
+		}
 	}
 
 	logger.Debugf("[Pipeline] Output (%d chars):\n%s", len(polishedText), polishedText)
@@ -462,7 +459,6 @@ func (p *Pipeline) processRecording() {
 			"Whisper transcription: %.2fs\n"+
 			"Whisper text cleanup:  %.2fs\n"+
 			"%s refinement:     %.2fs\n"+
-			"History DB write:      %.2fs\n"+
 			"Tokens per second:     %.1f t/s\n"+
 			"Words per second:      %.2f w/s\n"+
 			"Total processing:      %.2fs\n"+
@@ -474,7 +470,6 @@ func (p *Pipeline) processRecording() {
 		cleanTextDuration.Seconds(),
 		llmName,
 		llmDuration.Seconds(),
-		historyDuration.Seconds(),
 		tps,
 		effectiveWPS,
 		totalProcessingTime.Seconds(),
@@ -499,7 +494,6 @@ func (p *Pipeline) processRecording() {
 			"whisper":    whisperDuration.Seconds(),
 			"clean_text": cleanTextDuration.Seconds(),
 			"llm":        llmDuration.Seconds(),
-			"history":    historyDuration.Seconds(),
 			"wav_mb":     float64(wavBytes) / (1024.0 * 1024.0),
 		},
 	})
