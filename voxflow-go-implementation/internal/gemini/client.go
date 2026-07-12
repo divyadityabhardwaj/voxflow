@@ -149,7 +149,7 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 		Contents: []Content{
 			{
 				Role:  "user",
-				Parts: []Part{{Text: rawText}},
+				Parts: []Part{{Text: "<transcription>\n" + rawText + "\n</transcription>"}},
 			},
 		},
 		GenerationConfig: GenerationConfig{

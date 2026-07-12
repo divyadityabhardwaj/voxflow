@@ -192,7 +192,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 		Model: model,
 		Messages: []chatMessage{
 			{Role: "system", Content: BuildSystemPrompt()},
-			{Role: "user", Content: "Transcription to refine:\n" + rawText},
+			{Role: "user", Content: "Transcription to refine:\n<transcription>\n" + rawText + "\n</transcription>"},
 		},
 		Temperature: 0.3,
 		MaxTokens:   768,
