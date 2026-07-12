@@ -36,6 +36,10 @@ interface LLMProviderSettingsProps {
   handleSaveOpenRouterApiKey: () => Promise<void>;
   handleSaveGroqApiKey: () => Promise<void>;
   handleSaveCerebrasApiKey: () => Promise<void>;
+  handleDeleteApiKey?: () => Promise<void>;
+  handleDeleteOpenRouterApiKey?: () => Promise<void>;
+  handleDeleteGroqApiKey?: () => Promise<void>;
+  handleDeleteCerebrasApiKey?: () => Promise<void>;
 }
 
 const PROVIDERS = [
@@ -56,6 +60,7 @@ function ApiKeyBlock({
   onChange,
   isSet,
   onSave,
+  onDelete,
   saving,
   success,
   saveKey,
@@ -69,6 +74,7 @@ function ApiKeyBlock({
   onChange: (v: string) => void;
   isSet: boolean;
   onSave: () => void;
+  onDelete?: () => void;
   saving: string | null;
   success: string | null;
   saveKey: string;
@@ -114,6 +120,17 @@ function ApiKeyBlock({
               ? "Saved"
               : "Save"}
         </button>
+        {isSet && onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={saving === saveKey}
+            className="btn btn-secondary shrink-0"
+            title="Delete saved API key"
+          >
+            Delete
+          </button>
+        )}
       </div>
     </div>
   );
@@ -146,6 +163,10 @@ export default function LLMProviderSettings({
   handleSaveOpenRouterApiKey,
   handleSaveGroqApiKey,
   handleSaveCerebrasApiKey,
+  handleDeleteApiKey,
+  handleDeleteOpenRouterApiKey,
+  handleDeleteGroqApiKey,
+  handleDeleteCerebrasApiKey,
 }: LLMProviderSettingsProps) {
   const provider = config.llm_provider || "gemini";
 
@@ -275,6 +296,7 @@ export default function LLMProviderSettings({
           onChange={setApiKey}
           isSet={config.api_key_set}
           onSave={handleSaveApiKey}
+          onDelete={handleDeleteApiKey}
           saving={saving}
           success={success}
           saveKey="apiKey"
@@ -292,6 +314,7 @@ export default function LLMProviderSettings({
           onChange={setOpenRouterApiKey}
           isSet={config.openrouter_api_key_set}
           onSave={handleSaveOpenRouterApiKey}
+          onDelete={handleDeleteOpenRouterApiKey}
           saving={saving}
           success={success}
           saveKey="openRouterApiKey"
@@ -309,6 +332,7 @@ export default function LLMProviderSettings({
           onChange={setGroqApiKey}
           isSet={config.groq_api_key_set}
           onSave={handleSaveGroqApiKey}
+          onDelete={handleDeleteGroqApiKey}
           saving={saving}
           success={success}
           saveKey="groqApiKey"
@@ -326,6 +350,7 @@ export default function LLMProviderSettings({
           onChange={setCerebrasApiKey}
           isSet={config.cerebras_api_key_set}
           onSave={handleSaveCerebrasApiKey}
+          onDelete={handleDeleteCerebrasApiKey}
           saving={saving}
           success={success}
           saveKey="cerebrasApiKey"

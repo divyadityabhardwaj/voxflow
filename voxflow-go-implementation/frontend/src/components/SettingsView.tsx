@@ -496,6 +496,70 @@ export default function SettingsView() {
     }
   };
 
+  const handleDeleteApiKey = async () => {
+    setSaving("apiKey");
+    try {
+      await SetAPIKey("");
+      setConfig((prev) => (prev ? { ...prev, api_key_set: false } : null));
+      setApiKey("");
+      showSuccess("apiKey");
+      setGeminiModels([]);
+    } catch (err) {
+      console.error("Failed to delete API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleDeleteOpenRouterApiKey = async () => {
+    setSaving("openRouterApiKey");
+    try {
+      await SetOpenRouterAPIKey("");
+      setConfig((prev) =>
+        prev ? { ...prev, openrouter_api_key_set: false } : null,
+      );
+      setOpenRouterApiKey("");
+      showSuccess("openRouterApiKey");
+      setOpenRouterModels([]);
+    } catch (err) {
+      console.error("Failed to delete OpenRouter API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleDeleteGroqApiKey = async () => {
+    setSaving("groqApiKey");
+    try {
+      await SetGroqAPIKey("");
+      setConfig((prev) => (prev ? { ...prev, groq_api_key_set: false } : null));
+      setGroqApiKey("");
+      showSuccess("groqApiKey");
+      setGroqModels([]);
+    } catch (err) {
+      console.error("Failed to delete Groq API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleDeleteCerebrasApiKey = async () => {
+    setSaving("cerebrasApiKey");
+    try {
+      await SetCerebrasAPIKey("");
+      setConfig((prev) =>
+        prev ? { ...prev, cerebras_api_key_set: false } : null,
+      );
+      setCerebrasApiKey("");
+      showSuccess("cerebrasApiKey");
+      setCerebrasModels([]);
+    } catch (err) {
+      console.error("Failed to delete Cerebras API key:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const handleSaveLocalURL = async () => {
     setSaving("localURL");
     try {
@@ -824,6 +888,10 @@ export default function SettingsView() {
           handleSaveOpenRouterApiKey={handleSaveOpenRouterApiKey}
           handleSaveGroqApiKey={handleSaveGroqApiKey}
           handleSaveCerebrasApiKey={handleSaveCerebrasApiKey}
+          handleDeleteApiKey={handleDeleteApiKey}
+          handleDeleteOpenRouterApiKey={handleDeleteOpenRouterApiKey}
+          handleDeleteGroqApiKey={handleDeleteGroqApiKey}
+          handleDeleteCerebrasApiKey={handleDeleteCerebrasApiKey}
         />
 
         {/* Model Dropdown List Selection */}
