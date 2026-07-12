@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import {
   DeleteTranscript,
   ClearAllHistory,
@@ -48,6 +48,59 @@ const highlightText = (text: string, highlight: string) => {
     </span>
   );
 };
+
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const formatDate = (timestamp: string) => {
+  try {
+    return dateFormatter.format(new Date(timestamp));
+  } catch {
+    return timestamp;
+  }
+};
+
+const truncate = (text: string, length: number) => {
+  if (!text) return "";
+  if (text.length <= length) return text;
+  return text.substring(0, length) + "...";
+};
+
+interface HistoryItemProps {
+  transcript: Transcript;
+  isSelected: boolean;
+  searchQuery: string;
+  onClick: () => void;
+}
+
+const HistoryItem = memo(function HistoryItem({
+  transcript,
+  isSelected,
+  searchQuery,
+  onClick,
+}: HistoryItemProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full p-4 text-left transition-all border-b-2 border-border ${
+        isSelected
+          ? "bg-accent-soft border-l-4 border-l-primary"
+          : "hover:bg-secondary border-l-4 border-l-transparent"
+      }`}
+    >
+      <p className="text-xs text-tertiary mb-1 font-medium">
+        {formatDate(transcript.timestamp)}
+      </p>
+      <p className="text-sm text-text font-medium line-clamp-2">
+        {highlightText(truncate(transcript.polished_text || transcript.raw_text, 80), searchQuery)}
+      </p>
+    </button>
+  );
+});
 
 export default function HistoryView() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
@@ -179,21 +232,6 @@ export default function HistoryView() {
     }
   };
 
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const truncate = (text: string, length: number) => {
-    if (text.length <= length) return text;
-    return text.substring(0, length) + "...";
-  };
-
   return (
     <div className="flex h-full min-h-0 animate-fade-in">
       <div className="w-72 shrink-0 border-r border-border flex flex-col bg-surface">
@@ -276,22 +314,13 @@ export default function HistoryView() {
           ) : (
             <div>
               {transcripts.map((t) => (
-                <button
+                <HistoryItem
                   key={t.id}
+                  transcript={t}
+                  isSelected={selectedId === t.id}
+                  searchQuery={searchQuery}
                   onClick={() => setSelectedId(t.id)}
-                  className={`w-full p-4 text-left transition-all border-b-2 border-border ${
-                    selectedId === t.id
-                      ? "bg-accent-soft border-l-4 border-l-primary"
-                      : "hover:bg-secondary border-l-4 border-l-transparent"
-                  }`}
-                >
-                  <p className="text-xs text-tertiary mb-1 font-medium">
-                    {formatDate(t.timestamp)}
-                  </p>
-                  <p className="text-sm text-text font-medium line-clamp-2">
-                    {highlightText(truncate(t.polished_text || t.raw_text, 80), searchQuery)}
-                  </p>
-                </button>
+                />
               ))}
               {/* sentinel for infinite scroll */}
               <div ref={sentinelRef} />
