@@ -112,7 +112,10 @@ export default function RecordingIndicator() {
   const targetHeight = hasToast ? 84 : 32;
 
   useEffect(() => {
-    SetMiniModeExpanded(uiExpanded, targetHeight);
+    const timer = setTimeout(() => {
+      SetMiniModeExpanded(uiExpanded, targetHeight);
+    }, 50);
+    return () => clearTimeout(timer);
   }, [uiExpanded, targetHeight]);
 
   useEffect(() => {
