@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { ToggleRecording, GetStatus } from "../../wailsjs/go/main/App";
+import { ToggleRecording, GetStatus, GetConfig } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
 
 type Status = "Idle" | "Recording" | "Processing";
 
 export default function MainView() {
   const [status, setStatus] = useState<Status>("Idle");
+  const [handsFreeHotkey, setHandsFreeHotkey] = useState<string>("");
+  const [pttHotkey, setPttHotkey] = useState<string>("");
   const [lastTranscription, setLastTranscription] = useState<string | null>(
     null,
   );
@@ -19,6 +21,12 @@ export default function MainView() {
 
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
+    GetConfig().then((cfg) => {
+      if (cfg) {
+        setHandsFreeHotkey(cfg.hands_free_hotkey || cfg.hotkey || "");
+        setPttHotkey(cfg.push_to_talk_hotkey || "");
+      }
+    });
 
     const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
@@ -101,9 +109,11 @@ export default function MainView() {
         </h1>
         <p className="text-secondary text-sm">
           {status === "Idle" &&
-            "Press the button or use your hotkey to start recording"}
+            (handsFreeHotkey
+              ? `Press ${handsFreeHotkey} to start recording, or hold ${pttHotkey || "PTT key"} to speak`
+              : "Press the button or use your hotkey to start recording")}
           {status === "Recording" &&
-            "Speak naturally, then press again to stop"}
+            "Speak naturally, then press again or release key to stop"}
           {status === "Processing" &&
             (partialText
               ? "Transcribing your recording…"
