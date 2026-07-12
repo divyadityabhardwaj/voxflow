@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
 
 interface Toast {
   id: number;
@@ -23,11 +23,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       IsMiniMode().then(setIsMiniMode);
     });
 
+    let unsub: (() => void) | undefined;
     import("../../wailsjs/runtime/runtime").then(({ EventsOn }) => {
-      EventsOn(Events.MiniMode, (isMini: boolean) => {
+      unsub = EventsOn(Events.MiniMode, (isMini: boolean) => {
         setIsMiniMode(isMini);
       });
     });
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   let nextId = 0;
@@ -61,8 +66,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const value = useMemo(() => ({ showToast }), [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
 
       {!isMiniMode && (

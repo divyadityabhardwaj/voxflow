@@ -1,4 +1,4 @@
-import { useState, useEffect, type CSSProperties } from "react";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
 import "./style.css";
 import MainView from "./components/MainView";
 import HistoryView from "./components/HistoryView";
@@ -138,6 +138,8 @@ function AppContent() {
 
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
 
   const setMiniModeTransparency = (enabled: boolean) => {
     if (enabled) {
@@ -161,24 +163,24 @@ function AppContent() {
     });
     GetOnboardingCompleted().then(setOnboardingDone);
 
-    EventsOn(Events.OpenHistory, () => setCurrentView("history"));
-    EventsOn(Events.OpenSettings, () => setCurrentView("settings"));
-    EventsOn(Events.MiniMode, (isMini: boolean) => {
+    const unsub1 = EventsOn(Events.OpenHistory, () => setCurrentView("history"));
+    const unsub2 = EventsOn(Events.OpenSettings, () => setCurrentView("settings"));
+    const unsub3 = EventsOn(Events.MiniMode, (isMini: boolean) => {
       setIsMiniMode(isMini);
     });
 
     // Listen for toast events from backend
-    EventsOn(
+    const unsub4 = EventsOn(
       Events.Toast,
       (data: {
         message: string;
         type: "error" | "warning" | "success" | "info";
       }) => {
-        showToast(data.message, data.type);
+        showToastRef.current(data.message, data.type);
       },
     );
 
-    EventsOn(
+    const unsub5 = EventsOn(
       Events.ModelStatus,
       (status: { downloaded: boolean; loaded: boolean }) => {
         if (status.downloaded && status.loaded) {
@@ -190,7 +192,15 @@ function AppContent() {
         }
       },
     );
-  }, [showToast]);
+
+    return () => {
+      unsub1();
+      unsub2();
+      unsub3();
+      unsub4();
+      unsub5();
+    };
+  }, []);
 
   // Apply transparency when mini mode changes instead of continuous polling.
   useEffect(() => {
