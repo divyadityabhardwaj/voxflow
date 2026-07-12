@@ -336,14 +336,14 @@ func (p *Pipeline) processRecording() {
 	var rawText string
 	var whisperDuration time.Duration
 
-	// Calculate real covered seconds from processed chunks
+		// Calculate real covered seconds from processed chunks
 	var streamCoversSec float64
 	p.streamTextMu.Lock()
 	for _, chunk := range p.streamChunks {
 		streamCoversSec += chunk.Duration.Seconds()
 	}
-	streamText := p.streamText
-	streamChunkCount := len(p.streamChunks)
+	streamText = p.streamText
+	streamChunkCount = len(p.streamChunks)
 	p.streamTextMu.Unlock()
 
 	audioSec := audioDuration.Seconds()
