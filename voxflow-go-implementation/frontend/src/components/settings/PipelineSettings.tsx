@@ -17,17 +17,17 @@ const MODES = [
   {
     id: "refine",
     name: "Refine",
-    desc: "Whisper → LLM polish → paste",
+    desc: "Whisper → LLM polish (Cloud/Local) → paste",
   },
   {
     id: "raw",
     name: "Raw",
-    desc: "Whisper → paste as-is",
+    desc: "Whisper → paste as-is (100% on-device)",
   },
   {
     id: "copy-only",
     name: "Copy only",
-    desc: "Whisper → clipboard",
+    desc: "Whisper → clipboard (100% on-device)",
   },
 ] as const;
 

@@ -39,11 +39,11 @@ interface LLMProviderSettingsProps {
 }
 
 const PROVIDERS = [
-  { id: "gemini", label: "Gemini", sub: "Google AI" },
-  { id: "openrouter", label: "OpenRouter", sub: "Multi-model API" },
-  { id: "groq", label: "Groq", sub: "Fast inference" },
-  { id: "cerebras", label: "Cerebras", sub: "Wafer-scale inference" },
-  { id: "local", label: "Local", sub: "Ollama, LM Studio, etc." },
+  { id: "gemini", label: "Gemini", sub: "Google AI (Cloud)" },
+  { id: "openrouter", label: "OpenRouter", sub: "Multi-model API (Cloud)" },
+  { id: "groq", label: "Groq", sub: "Fast inference (Cloud)" },
+  { id: "cerebras", label: "Cerebras", sub: "Wafer-scale inference (Cloud)" },
+  { id: "local", label: "Local", sub: "Ollama, LM Studio (Local, stays on device)" },
 ] as const;
 
 function ApiKeyBlock({
