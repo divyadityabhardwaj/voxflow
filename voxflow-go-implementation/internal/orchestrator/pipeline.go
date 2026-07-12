@@ -279,10 +279,35 @@ func (p *Pipeline) startStreamingTranscription() {
 	go p.streamingWorker()
 
 	p.audioRecorder.SetChunkCallback(func(samples []int16, startTime time.Duration, isFinal bool) {
-		p.streamJobs <- streamJob{
+		select {
+		case p.streamJobs <- streamJob{
 			Samples:   samples,
 			StartTime: startTime,
 			IsFinal:   isFinal,
+		}:
+		default:
+			// If the channel is full, drop the oldest chunk to avoid blocking PortAudio stream reads.
+			select {
+			case oldJob := <-p.streamJobs:
+				if !oldJob.IsFinal {
+					audio.RecycleChunk(oldJob.Samples)
+				}
+			default:
+			}
+
+			// Try sending again
+			select {
+			case p.streamJobs <- streamJob{
+				Samples:   samples,
+				StartTime: startTime,
+				IsFinal:   isFinal,
+			}:
+			default:
+				// If it still can't send (e.g. channel closed), recycle the samples
+				if !isFinal {
+					audio.RecycleChunk(samples)
+				}
+			}
 		}
 	})
 }
