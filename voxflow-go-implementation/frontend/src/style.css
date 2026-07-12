@@ -11,7 +11,7 @@
   --surface-hover: #f1f3f6;
   --text: #111827;
   --text-secondary: #4b5563;
-  --text-tertiary: #9ca3af;
+  --text-tertiary: #6b7280;
   --primary: #6366f1;
   --primary-rgb: 99, 102, 241;
   --primary-foreground: #ffffff;
@@ -588,10 +588,19 @@ body {
   animation: scale-in 0.2s ease-out;
 }
 
-/* ===== Legacy utility aliases ===== */
-.text-primary {
-  color: var(--text);
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
+
+/* ===== Legacy utility aliases ===== */
 .text-secondary {
   color: var(--text-secondary);
 }
