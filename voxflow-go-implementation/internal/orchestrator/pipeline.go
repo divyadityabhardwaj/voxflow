@@ -478,6 +478,7 @@ func (p *Pipeline) processRecording() {
 		okToGo = true
 		logger.Infof("[Pipeline] Refinement mode '%s' for app %q — bypassing LLM", mode, p.recordingBundleID)
 	} else {
+		runtime.EventsEmit(p.ctx, events.StateChanged, "Refining")
 		refiner := p.refiner()
 		llmStart := time.Now()
 		polishedText, tokenCount, okToGo, err = refiner.RefineText(rawText, llmModel)

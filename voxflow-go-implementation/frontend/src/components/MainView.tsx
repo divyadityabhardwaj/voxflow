@@ -3,7 +3,7 @@ import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { ToggleRecording, GetStatus, GetConfig } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
 
-type Status = "Idle" | "Recording" | "Processing";
+type Status = "Idle" | "Recording" | "Processing" | "Refining";
 
 export default function MainView() {
   const [status, setStatus] = useState<Status>("Idle");
@@ -106,6 +106,7 @@ export default function MainView() {
           {status === "Idle" && "Capture a quick thought"}
           {status === "Recording" && "Listening…"}
           {status === "Processing" && "Processing…"}
+          {status === "Refining" && "Refining…"}
         </h1>
         <p className="text-secondary text-sm">
           {status === "Idle" &&
@@ -117,7 +118,8 @@ export default function MainView() {
           {status === "Processing" &&
             (partialText
               ? "Transcribing your recording…"
-              : "Transcribing and refining your recording")}
+              : "Transcribing your recording")}
+          {status === "Refining" && "Polishing transcription with AI…"}
         </p>
       </div>
 
