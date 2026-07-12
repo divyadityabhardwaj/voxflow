@@ -208,7 +208,6 @@ func (a *App) SetOpenRouterAPIKey(key string) error {
 // SetLLMProvider sets the LLM provider (gemini or openrouter)
 func (a *App) SetLLMProvider(provider string) error {
 	a.config.SetLLMProvider(provider)
-	a.refiner = a.activeRefiner() // swap the active refiner immediately
 	return a.config.Save()
 }
 
@@ -318,7 +317,6 @@ func (a *App) GetLocalURL() string {
 func (a *App) SetLocalURL(url string) error {
 	a.config.SetLocalURL(url)
 	a.localClient.SetBaseURL(url)
-	a.refiner = a.activeRefiner()
 	return a.config.Save()
 }
 

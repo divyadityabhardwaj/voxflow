@@ -38,7 +38,6 @@ type App struct {
 	cerebrasClient   *cerebras.Client
 	historyService   *history.Service
 	injectionService *injection.Service
-	refiner          llm.Refiner
 	modelReady       bool
 	downloadCancel   context.CancelFunc
 	downloadMu       sync.Mutex
@@ -60,8 +59,23 @@ func NewApp() *App {
 	}
 	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
 	app.whisperService.SetThreads(cfg.GetWhisperThreads())
-	app.refiner = app.activeRefiner()
 	app.windowMgr = window.NewManager(app.ctx, cfg)
+
+	// Initialize services that do not require Wails context
+	if histService, err := history.NewService(); err != nil {
+		logger.Warnf("Warning: Failed to initialize history: %v", err)
+	} else {
+		app.historyService = histService
+	}
+
+	if injService, err := injection.NewService(true); err != nil {
+		logger.Warnf("Warning: Failed to initialize injection: %v", err)
+	} else {
+		app.injectionService = injService
+	}
+
+	app.hotkeyManager = hotkey.NewManager(app.onHotkeyPressed)
+
 	app.rebuildPipeline()
 	return app
 }
@@ -119,7 +133,6 @@ func (a *App) activeLLMModel() string {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.windowMgr.SetContext(ctx)
-	a.rebuildPipeline()
 	a.pipeline.SetContext(ctx)
 
 	window.FloatEverywhere()
@@ -130,16 +143,7 @@ func (a *App) startup(ctx context.Context) {
 		a.windowMgr.StartupMiniMode()
 	}
 
-	if histService, err := history.NewService(); err != nil {
-		logger.Warnf("Warning: Failed to initialize history: %v", err)
-	} else {
-		a.historyService = histService
-	}
-
-	if injService, err := injection.NewService(true); err != nil {
-		logger.Warnf("Warning: Failed to initialize injection: %v", err)
-	} else {
-		a.injectionService = injService
+	if a.injectionService != nil {
 		if !a.config.GetOnboardingCompleted() && !injection.IsAccessibilityGranted() {
 			logger.Infof("[Injection] Accessibility not granted — onboarding will prompt")
 		} else if !injection.IsAccessibilityGranted() {
@@ -156,15 +160,10 @@ func (a *App) startup(ctx context.Context) {
 		}
 	}
 
-	a.rebuildPipeline()
-
 	if err := whisper.CleanupPartialDownloads(); err != nil {
 		logger.Warnf("Warning: Failed to cleanup partial downloads: %v", err)
 	}
 	go a.checkModelStatus()
-
-	a.hotkeyManager = hotkey.NewManager(a.onHotkeyPressed)
-	a.rebuildPipeline()
 
 	hfHotkey := a.config.GetHandsFreeHotkey()
 	pttHotkey := a.config.GetPushToTalkHotkey()

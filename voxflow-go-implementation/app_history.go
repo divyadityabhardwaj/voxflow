@@ -129,9 +129,9 @@ func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 	// Use raw text if no instruction, otherwise apply instruction
 	var newPolished string
 	if instruction == "" {
-		newPolished, _, _, err = a.refiner.RefineText(transcript.RawText, activeModel)
+		newPolished, _, _, err = a.activeRefiner().RefineText(transcript.RawText, activeModel)
 	} else {
-		newPolished, err = a.refiner.RetryWithInstruction(transcript.PolishedText, instruction, activeModel)
+		newPolished, err = a.activeRefiner().RetryWithInstruction(transcript.PolishedText, instruction, activeModel)
 	}
 
 	if err != nil {
