@@ -8,7 +8,7 @@ import {
   ReactNode,
 } from "react";
 
-type Theme = "light" | "dark";
+type Theme = "light" | "dark" | "midnight";
 
 interface ThemeContextType {
   theme: Theme;
@@ -30,7 +30,7 @@ function getSystemTheme(): Theme {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(THEME_KEY);
-    if (stored === "light" || stored === "dark") {
+    if (stored === "light" || stored === "dark" || stored === "midnight") {
       return stored;
     }
     return getSystemTheme();
@@ -38,7 +38,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
-    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.remove("light", "dark", "midnight");
     document.documentElement.classList.add(theme);
   }, [theme]);
 
