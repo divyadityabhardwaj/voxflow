@@ -468,13 +468,16 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 	outputPath := wavPath + ".txt"
 	defer os.Remove(outputPath)
 
-	// Run whisper CLI
+	// Run whisper CLI with greedy decoding for faster transcription.
 	args := []string{
 		"-m", modelPath,
 		"-f", wavPath,
 		"-otxt",
 		"--no-timestamps",
 		"-of", strings.TrimSuffix(outputPath, ".txt"),
+		"-bs", "1",   // Greedy: beam size 1
+		"-bo", "1",   // Best-of 1
+		"--no-fallback", // Skip temperature fallback passes
 	}
 	if strings.TrimSpace(language) != "" {
 		args = append(args, "-l", language)

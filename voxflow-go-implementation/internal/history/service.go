@@ -48,10 +48,12 @@ func NewService() (*Service, error) {
 // NewServiceWithPath creates a new history service using a custom SQLite database file path.
 // This is extremely helpful for testing.
 func NewServiceWithPath(dbPath string) (*Service, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %s: %w", dbPath, err)
 	}
+	db.SetMaxOpenConns(1)
 
 	s := &Service{db: db}
 	if err := s.initDB(); err != nil {
@@ -69,7 +71,7 @@ func getDBPath() (string, error) {
 		return "", err
 	}
 	configDir := filepath.Join(homeDir, ".voxflow")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return "", err
 	}
 	return filepath.Join(configDir, "history.db"), nil
