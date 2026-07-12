@@ -9,8 +9,8 @@ export default function AppearanceSettings() {
       title="Appearance"
       description="Choose light or dark mode. Your preference is saved locally."
     >
-      <div className="grid grid-cols-2 gap-2">
-        {(["light", "dark"] as const).map((mode) => (
+      <div className="grid grid-cols-3 gap-2">
+        {(["light", "dark", "midnight"] as const).map((mode) => (
           <button
             key={mode}
             type="button"
@@ -25,7 +25,9 @@ export default function AppearanceSettings() {
               className={`w-full h-10 rounded-md border ${
                 mode === "light"
                   ? "bg-[#f8f9fb] border-border"
-                  : "bg-[#18181b] border-border"
+                  : mode === "midnight"
+                    ? "bg-[#0f172a] border-border"
+                    : "bg-[#18181b] border-border"
               }`}
             />
           </button>
