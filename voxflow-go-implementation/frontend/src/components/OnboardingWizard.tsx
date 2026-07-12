@@ -32,10 +32,21 @@ export default function OnboardingWizard({ onComplete }: Props) {
     IsModelDownloaded().then((ok) => {
       if (ok) setModelReady(true);
     });
-    EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
+
+    const checkAccess = () => {
+      IsAccessibilityGranted().then((ok) => {
+        setAccessibilityGranted(ok);
+      });
+    };
+
+    checkAccess();
+    window.addEventListener("focus", checkAccess);
+
+    const unsubDownload = EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
       setProgress(Math.round(data.progress));
     });
-    EventsOn(
+
+    const unsubModel = EventsOn(
       Events.ModelStatus,
       (status: { downloaded: boolean; loaded: boolean }) => {
         if (status.downloaded && status.loaded) {
@@ -44,6 +55,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
         }
       },
     );
+
+    return () => {
+      window.removeEventListener("focus", checkAccess);
+      unsubDownload();
+      unsubModel();
+    };
   }, []);
 
   const finish = async () => {
@@ -52,10 +69,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
   };
 
   const handleAccessibility = async () => {
-    const opened = await PromptAccessibilityExplanation();
+    await PromptAccessibilityExplanation();
     const granted = await IsAccessibilityGranted();
-    setAccessibilityGranted(granted || opened);
-    setStep("model");
+    setAccessibilityGranted(granted);
+    if (granted) {
+      setStep("model");
+    }
   };
 
   const handleSaveApiKey = async () => {
@@ -114,20 +133,32 @@ export default function OnboardingWizard({ onComplete }: Props) {
               </p>
             )}
             <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                className="btn-primary w-full"
-                onClick={handleAccessibility}
-              >
-                Grant permission
-              </button>
-              <button
-                type="button"
-                className="btn-secondary w-full"
-                onClick={() => setStep("model")}
-              >
-                Skip for now
-              </button>
+              {accessibilityGranted ? (
+                <button
+                  type="button"
+                  className="btn-primary w-full"
+                  onClick={() => setStep("model")}
+                >
+                  Continue
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-primary w-full"
+                  onClick={handleAccessibility}
+                >
+                  Grant permission
+                </button>
+              )}
+              {!accessibilityGranted && (
+                <button
+                  type="button"
+                  className="btn-secondary w-full"
+                  onClick={() => setStep("model")}
+                >
+                  Skip for now
+                </button>
+              )}
             </div>
           </>
         )}
