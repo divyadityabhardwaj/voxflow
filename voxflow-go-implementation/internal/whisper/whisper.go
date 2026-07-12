@@ -2,6 +2,7 @@ package whisper
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"voxflow/internal/logger"
@@ -34,6 +36,14 @@ var modelSizes = map[string]int64{
 	"base":   142 * 1024 * 1024,  // ~142 MB
 	"small":  466 * 1024 * 1024,  // ~466 MB
 	"medium": 1500 * 1024 * 1024, // ~1.5 GB
+}
+
+// Model SHA-256 checksums pinned for integrity verification
+var modelSHA256s = map[string]string{
+	"tiny":   "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+	"base":   "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+	"small":  "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+	"medium": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
 }
 
 // Model descriptions for UI
@@ -130,6 +140,9 @@ func (s *Service) downloadWhisperCLI(progress ProgressCallback) error {
 
 	for _, p := range homebrewPaths {
 		if _, err := os.Stat(p); err == nil {
+			if !isSecureBinary(p) {
+				continue
+			}
 			// Create symlink
 			os.Remove(whisperPath) // Remove if exists
 			if err := os.Symlink(p, whisperPath); err != nil {
@@ -297,6 +310,16 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
 	}
 
+	// Verify SHA-256 integrity
+	if expectedHash, exists := modelSHA256s[modelSize]; exists {
+		logger.Infof("[Whisper] Verifying SHA-256 integrity of downloaded model %s...", modelSize)
+		if err := verifyFileSHA256(tempPath, expectedHash); err != nil {
+			os.Remove(tempPath)
+			return fmt.Errorf("integrity check failed for model %s: %w", modelSize, err)
+		}
+		logger.Infof("[Whisper] Integrity check passed for model %s", modelSize)
+	}
+
 	// Rename temp file to final name
 	if err := os.Rename(tempPath, modelPath); err != nil {
 		os.Remove(tempPath)
@@ -304,6 +327,26 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 	}
 
 	logger.Infof("[Whisper] Model %s downloaded successfully (%d bytes)", modelSize, bytesWritten)
+	return nil
+}
+
+// verifyFileSHA256 verifies a file's SHA-256 checksum against an expected hex string.
+func verifyFileSHA256(filePath string, expectedHash string) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+
+	actualHash := fmt.Sprintf("%x", h.Sum(nil))
+	if actualHash != expectedHash {
+		return fmt.Errorf("SHA-256 mismatch: got %s, expected %s", actualHash, expectedHash)
+	}
 	return nil
 }
 
@@ -432,15 +475,21 @@ func (s *Service) findWhisperBinary() string {
 	binDir, _ := GetBinDir()
 	whisperPath := filepath.Join(binDir, "whisper-cli")
 	if _, err := os.Stat(whisperPath); err == nil {
-		return whisperPath
+		if isSecureBinary(whisperPath) {
+			return whisperPath
+		}
 	}
 
 	// Check in PATH
 	if path, err := exec.LookPath("whisper"); err == nil {
-		return path
+		if isSecureBinary(path) {
+			return path
+		}
 	}
 	if path, err := exec.LookPath("whisper-cli"); err == nil {
-		return path
+		if isSecureBinary(path) {
+			return path
+		}
 	}
 
 	// Check common locations on macOS
@@ -455,7 +504,9 @@ func (s *Service) findWhisperBinary() string {
 	}
 	for _, p := range commonPaths {
 		if _, err := os.Stat(p); err == nil {
-			return p
+			if isSecureBinary(p) {
+				return p
+			}
 		}
 	}
 
@@ -818,4 +869,33 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 		pr.onProgress(int64(n))
 	}
 	return n, err
+}
+
+// isSecureBinary checks if a file at path is secure to execute.
+// Specifically, it verifies that the file is not world-writable or group-writable.
+func isSecureBinary(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	mode := info.Mode()
+	// Check world-writable (0002) - ALWAYS reject world-writable binaries
+	if (mode & 0002) != 0 {
+		logger.Warnf("[Security] Binary at %s is world-writable! Rejecting for security.", path)
+		return false
+	}
+
+	// For group-writable (0020), check if owned by root.
+	// If it is group-writable and owned by root, it's unsafe.
+	if (mode & 0020) != 0 {
+		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
+			if sys.Uid == 0 {
+				logger.Warnf("[Security] Binary at %s is owned by root and group-writable! Rejecting for security.", path)
+				return false
+			}
+		}
+	}
+
+	return true
 }
