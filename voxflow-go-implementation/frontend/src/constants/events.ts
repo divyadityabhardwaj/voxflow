@@ -4,6 +4,7 @@ export const Events = {
   RecordingStarted: "recording-started",
   RecordingStopped: "recording-stopped",
   ProcessingComplete: "processing-complete",
+  PartialTranscript: "partial-transcript",
 
   // Window Events
   MiniMode: "mini-mode",

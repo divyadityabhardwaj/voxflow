@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { ToggleRecording, GetStatus } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
@@ -12,35 +12,71 @@ export default function MainView() {
   );
   const [usedRawNoPolish, setUsedRawNoPolish] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [partialText, setPartialText] = useState<string>("");
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [wordsPerMinute, setWordsPerMinute] = useState<number | null>(null);
+  const partialRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
 
-    EventsOn(Events.StateChanged, (newStatus: string) => {
+    const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
       if (newStatus === "Recording") {
         setError(null);
         setLastTranscription(null);
         setUsedRawNoPolish(false);
+        setPartialText("");
+        setElapsedMs(null);
+        setWordsPerMinute(null);
       }
     });
 
-    EventsOn(
+    const unsubComplete = EventsOn(
       Events.ProcessingComplete,
       (result: {
         polished: string;
         elapsed: number;
         used_raw?: boolean;
+        words_per_second?: number;
       }) => {
         setLastTranscription(result.polished);
         setUsedRawNoPolish(Boolean(result.used_raw));
+        setPartialText("");
+        setElapsedMs(result.elapsed);
+        if (result.words_per_second && result.words_per_second > 0) {
+          setWordsPerMinute(Math.round(result.words_per_second * 60));
+        }
       },
     );
 
-    EventsOn(Events.Error, (err: string) => {
+    const unsubError = EventsOn(Events.Error, (err: string) => {
       setError(err);
     });
+
+    const unsubPartial = EventsOn(
+      Events.PartialTranscript,
+      (data: { text: string }) => {
+        if (data?.text) {
+          setPartialText(data.text);
+        }
+      },
+    );
+
+    return () => {
+      unsubState();
+      unsubComplete();
+      unsubError();
+      unsubPartial();
+    };
   }, []);
+
+  // Auto-scroll partial transcript
+  useEffect(() => {
+    if (partialRef.current) {
+      partialRef.current.scrollTop = partialRef.current.scrollHeight;
+    }
+  }, [partialText]);
 
   const handleToggle = async () => {
     try {
@@ -48,6 +84,11 @@ export default function MainView() {
     } catch (err) {
       setError(String(err));
     }
+  };
+
+  const formatElapsed = (ms: number) => {
+    const seconds = ms / 1000;
+    return seconds < 1 ? `${ms}ms` : `${seconds.toFixed(1)}s`;
   };
 
   return (
@@ -64,7 +105,9 @@ export default function MainView() {
           {status === "Recording" &&
             "Speak naturally, then press again to stop"}
           {status === "Processing" &&
-            "Transcribing and refining your recording"}
+            (partialText
+              ? "Transcribing your recording…"
+              : "Transcribing and refining your recording")}
         </p>
       </div>
 
@@ -78,12 +121,24 @@ export default function MainView() {
           `}
         >
           {/* Text area */}
-          <div className="flex-1">
-            <p className="text-tertiary text-sm font-medium">
-              {status === "Idle" && "Take a quick note with your voice..."}
-              {status === "Recording" && "Recording in progress..."}
-              {status === "Processing" && "Transcribing..."}
-            </p>
+          <div className="flex-1 min-w-0">
+            {status === "Processing" && partialText ? (
+              <div
+                ref={partialRef}
+                className="max-h-24 overflow-y-auto"
+              >
+                <p className="text-text text-sm leading-relaxed opacity-70 whitespace-pre-wrap">
+                  {partialText}
+                  <span className="inline-block w-0.5 h-3.5 bg-primary ml-0.5 align-text-bottom animate-pulse-soft" />
+                </p>
+              </div>
+            ) : (
+              <p className="text-tertiary text-sm font-medium">
+                {status === "Idle" && "Take a quick note with your voice..."}
+                {status === "Recording" && "Recording in progress..."}
+                {status === "Processing" && "Transcribing..."}
+              </p>
+            )}
           </div>
 
           {/* Mic button */}
@@ -99,7 +154,7 @@ export default function MainView() {
             }
             className={`
               relative w-12 h-12 rounded-2xl transition-all duration-300
-              flex items-center justify-center
+              flex items-center justify-center flex-shrink-0
               ${
                 status === "Idle"
                   ? "bg-primary text-[var(--primary-foreground)] hover:opacity-90"
@@ -178,6 +233,12 @@ export default function MainView() {
               <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-primary font-medium">
                 Done
               </span>
+              {elapsedMs != null && (
+                <span className="text-xs text-tertiary ml-auto font-medium tabular-nums">
+                  {formatElapsed(elapsedMs)}
+                  {wordsPerMinute != null && ` · ${wordsPerMinute} WPM`}
+                </span>
+              )}
             </div>
             {usedRawNoPolish && (
               <p className="text-xs text-tertiary mb-2 font-medium">
