@@ -13,24 +13,17 @@ import (
 // and returns the original volume level so it can be restored later.
 // Returns -1 if the volume could not be read (in which case UnmuteSystemAudio is a no-op).
 func MuteSystemAudio() int {
-	// Get current output volume (0–100)
-	getScript := `output volume of (get volume settings)`
-	out, err := exec.Command("osascript", "-e", getScript).Output()
+	// Combine reading output volume and muting into a single AppleScript call to save latency.
+	script := "set currentVolume to output volume of (get volume settings)\nset volume output volume 0\ncurrentVolume"
+	out, err := exec.Command("osascript", "-e", script).Output()
 	if err != nil {
-		logger.Errorf("[Audio] Could not read system volume: %v", err)
+		logger.Errorf("[Audio] Could not read or mute system volume: %v", err)
 		return -1
 	}
 
 	vol, err := strconv.Atoi(strings.TrimSpace(string(out)))
 	if err != nil {
 		logger.Errorf("[Audio] Could not parse system volume %q: %v", strings.TrimSpace(string(out)), err)
-		return -1
-	}
-
-	// Mute output
-	muteScript := `set volume output volume 0`
-	if err := exec.Command("osascript", "-e", muteScript).Run(); err != nil {
-		logger.Errorf("[Audio] Could not mute system volume: %v", err)
 		return -1
 	}
 
