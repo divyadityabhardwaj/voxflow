@@ -58,7 +58,7 @@ func main() {
 		Height:            window.MiniModeCollapsedH,
 		MinWidth:          window.MiniModeCollapsedW,
 		MinHeight:         window.MiniModeCollapsedH,
-		DisableResize:     false, // Enable native resizing
+		DisableResize:     true, // Disable native resizing to prevent outline artifacts on transparent windows
 		Frameless:         true,
 		AlwaysOnTop:       true,
 		StartHidden:       false,

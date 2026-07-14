@@ -15,6 +15,7 @@ void makeWindowFloatEverywhere() {
             [window setCollectionBehavior:273];
             [window setLevel:101];
             [window setAnimationBehavior:NSWindowAnimationBehaviorNone];
+            [window setHasShadow:NO];
         }
     });
 }
@@ -25,6 +26,7 @@ void resetWindowBehavior() {
         for (NSWindow *window in [app windows]) {
             [window setCollectionBehavior:0];
             [window setLevel:NSNormalWindowLevel];
+            [window setHasShadow:YES];
         }
     });
 }

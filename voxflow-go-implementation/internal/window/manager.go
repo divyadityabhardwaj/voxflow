@@ -53,11 +53,13 @@ func (m *Manager) UserExplicitlyMaximized() bool {
 // StartupMiniMode restores saved mini position and begins position watching.
 func (m *Manager) StartupMiniMode() {
 	x, y := m.config.GetMiniModePosition()
+
+	runtime.WindowSetMinSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
+	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
+	runtime.WindowSetSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
+
 	if x != 0 || y != 0 {
 		runtime.WindowSetPosition(m.ctx, x, y)
-		runtime.WindowSetMinSize(m.ctx, 200, 60)
-		runtime.WindowSetMaxSize(m.ctx, 200, 60)
-		runtime.WindowSetSize(m.ctx, 200, 60)
 	} else {
 		runtime.WindowCenter(m.ctx)
 	}
