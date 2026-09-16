@@ -193,7 +193,12 @@ func (c *Config) Save() error {
 		return err
 	}
 
-	return os.WriteFile(configPath, data, 0600)
+	// Write-then-rename so a crash mid-write never leaves a truncated config (API keys live here).
+	tmp := configPath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, configPath)
 }
 
 // GetGeminiAPIKey returns the Gemini API key
