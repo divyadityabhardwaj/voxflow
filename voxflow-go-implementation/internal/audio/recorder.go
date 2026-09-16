@@ -218,23 +218,45 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 		// because chunkBuffer is local to this goroutine.
 		chunkBuffer = append(chunkBuffer, inputBuffer...)
 		if len(chunkBuffer) >= chunkSize {
-			if cb := r.loadCallback(); cb != nil {
-				// Rent a buffer from the pool to avoid allocations
-				chunkSamples := chunkPool.Get().([]int16)
-				copy(chunkSamples, chunkBuffer[:chunkSize])
-				var remaining []int16
-				if len(chunkBuffer) > chunkSize {
-					remaining = make([]int16, len(chunkBuffer)-chunkSize)
-					copy(remaining, chunkBuffer[chunkSize:])
-				}
-				chunkBuffer = remaining
-				start := chunkStartTime
-				chunkStartTime += time.Duration(ChunkDuration) * time.Second
-				// Invoke callback synchronously (it will queue to a channel in O(1))
-				cb(chunkSamples, start, false)
+			cb := r.loadCallback()
+			if cb == nil {
+				chunkBuffer = chunkBuffer[:0]
+				continue
 			}
+			// Split in a pause rather than at exactly 8s so no word straddles two chunks.
+			cut := quietestCut(chunkBuffer[:chunkSize])
+			chunkSamples := chunkPool.Get().([]int16)[:cut]
+			copy(chunkSamples, chunkBuffer[:cut])
+			remaining := make([]int16, len(chunkBuffer)-cut, chunkSize)
+			copy(remaining, chunkBuffer[cut:])
+			chunkBuffer = remaining
+			start := chunkStartTime
+			chunkStartTime += time.Duration(cut) * time.Second / SampleRate
+			// Invoke callback synchronously (it will queue to a channel in O(1))
+			cb(chunkSamples, start, false)
 		}
 	}
+}
+
+// quietestCut returns the index in the last 1.5s of buf at the centre of the
+// 100ms window with the least energy, so streaming chunks split in pauses.
+func quietestCut(buf []int16) int {
+	const window, step, search = SampleRate / 10, SampleRate / 40, SampleRate * 3 / 2
+	n := len(buf)
+	if n < search+window {
+		return n
+	}
+	best, bestEnergy := n, math.MaxFloat64
+	for start := n - search; start+window <= n; start += step {
+		var e float64
+		for _, v := range buf[start : start+window] {
+			e += float64(v) * float64(v)
+		}
+		if e < bestEnergy {
+			bestEnergy, best = e, start+window/2
+		}
+	}
+	return best
 }
 
 // Stop stops recording and returns the path to the WAV file
