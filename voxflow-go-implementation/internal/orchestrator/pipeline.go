@@ -205,6 +205,11 @@ func (p *Pipeline) StartRecording() error {
 // CaptureRecordingTarget records the frontmost app before VoxFlow takes focus.
 // Call this from the hotkey callback before switching to mini mode.
 func (p *Pipeline) CaptureRecordingTarget() {
+	// Clear first: osascript takes a while, and a short dictation that stops before
+	// it returns must not inherit the previous recording's app rules.
+	p.targetMu.Lock()
+	p.recordingBundleID, p.recordingAppName = "", ""
+	p.targetMu.Unlock()
 	bundleID, name, err := macos.FrontmostApp()
 	if err != nil {
 		logger.Debugf("[Pipeline] Could not detect frontmost app: %v", err)
@@ -332,7 +337,6 @@ func (p *Pipeline) processRecording() {
 	defer p.restoreVolume()
 
 	processingStartTime := time.Now()
-	targetBundleID, targetAppName := p.RecordingTarget()
 
 	var stopAndWavDuration time.Duration
 	var cleanTextDuration time.Duration
@@ -480,6 +484,9 @@ func (p *Pipeline) processRecording() {
 	llmProvider := p.config.GetLLMProvider()
 	llmModel := p.activeLLMModel()
 
+	// Read the target only now: by this point the frontmost-app lookup has had
+	// the whole stop/transcribe window to finish.
+	targetBundleID, targetAppName := p.RecordingTarget()
 	mode := p.config.ResolveRefinementMode(targetBundleID)
 
 	var polishedText string
