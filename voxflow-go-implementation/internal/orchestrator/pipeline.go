@@ -39,9 +39,9 @@ type Pipeline struct {
 	hotkeyManager    *hotkey.Manager
 	windows          WindowController
 
-	refiner       func() llm.Refiner
+	refiner        func() llm.Refiner
 	activeLLMModel func() string
-	modelReady    func() bool
+	modelReady     func() bool
 
 	stateMu sync.Mutex
 	state   hotkey.State
@@ -62,17 +62,17 @@ type Pipeline struct {
 
 // Config wires dependencies into a Pipeline.
 type Config struct {
-	Ctx              context.Context
-	AppConfig        *config.Config
-	Audio            *audio.Recorder
-	Whisper          *whisper.Service
-	History          *history.Service
-	Injection        *injection.Service
-	Hotkeys          *hotkey.Manager
-	Windows          WindowController
-	Refiner          func() llm.Refiner
-	ActiveLLMModel   func() string
-	ModelReady       func() bool
+	Ctx            context.Context
+	AppConfig      *config.Config
+	Audio          *audio.Recorder
+	Whisper        *whisper.Service
+	History        *history.Service
+	Injection      *injection.Service
+	Hotkeys        *hotkey.Manager
+	Windows        WindowController
+	Refiner        func() llm.Refiner
+	ActiveLLMModel func() string
+	ModelReady     func() bool
 }
 
 // New creates a recording pipeline.
@@ -255,7 +255,7 @@ func (p *Pipeline) streamingWorker() {
 		p.streamChunks = append(p.streamChunks, streamChunk{Start: job.StartTime, Duration: chunkDuration, Text: text})
 		p.streamText = mergeStreamingChunks(p.streamChunks)
 		currentText := p.streamText
-		
+
 		// Rate-limit/throttle partial transcript event emissions to prevent visual UI lag (max 10 events/sec)
 		shouldEmit := job.IsFinal || time.Since(p.lastEmitTime) >= 100*time.Millisecond
 		if shouldEmit {
@@ -365,7 +365,7 @@ func (p *Pipeline) processRecording() {
 	var rawText string
 	var whisperDuration time.Duration
 
-		// Calculate real covered seconds from processed chunks
+	// Calculate real covered seconds from processed chunks
 	var streamCoversSec float64
 	p.streamTextMu.Lock()
 	for _, chunk := range p.streamChunks {

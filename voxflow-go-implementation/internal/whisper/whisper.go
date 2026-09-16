@@ -526,8 +526,8 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 		"-otxt",
 		"--no-timestamps",
 		"-of", strings.TrimSuffix(outputPath, ".txt"),
-		"-bs", "1",   // Greedy: beam size 1
-		"-bo", "1",   // Best-of 1
+		"-bs", "1", // Greedy: beam size 1
+		"-bo", "1", // Best-of 1
 		"--no-fallback", // Skip temperature fallback passes
 	}
 	if strings.TrimSpace(language) != "" {

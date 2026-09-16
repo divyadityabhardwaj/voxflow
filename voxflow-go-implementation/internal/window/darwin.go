@@ -42,9 +42,9 @@ void constrainWindowToScreen() {
             if (screen) {
                 NSRect visibleFrame = [screen visibleFrame];
                 NSRect windowFrame = [window frame];
-                
+
                 BOOL adjusted = NO;
-                
+
                 // Keep X within visible screen frame
                 if (windowFrame.origin.x < visibleFrame.origin.x) {
                     windowFrame.origin.x = visibleFrame.origin.x;
@@ -53,7 +53,7 @@ void constrainWindowToScreen() {
                     windowFrame.origin.x = visibleFrame.origin.x + visibleFrame.size.width - windowFrame.size.width;
                     adjusted = YES;
                 }
-                
+
                 // Keep Y within visible screen frame
                 if (windowFrame.origin.y < visibleFrame.origin.y) {
                     windowFrame.origin.y = visibleFrame.origin.y;
@@ -62,7 +62,7 @@ void constrainWindowToScreen() {
                     windowFrame.origin.y = visibleFrame.origin.y + visibleFrame.size.height - windowFrame.size.height;
                     adjusted = YES;
                 }
-                
+
                 if (adjusted) {
                     [window setFrame:windowFrame display:YES];
                 }

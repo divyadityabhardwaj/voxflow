@@ -47,15 +47,15 @@ type App struct {
 func NewApp() *App {
 	cfg := config.GetInstance()
 	app := &App{
-		ctx:            context.Background(),
-		config:         cfg,
-		audioRecorder:  audio.NewRecorder(),
-		whisperService: whisper.NewService(),
-		geminiClient:   gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
+		ctx:              context.Background(),
+		config:           cfg,
+		audioRecorder:    audio.NewRecorder(),
+		whisperService:   whisper.NewService(),
+		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
 		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
-		groqClient:     groq.NewClient(cfg.GetGroqAPIKey()),
-		cerebrasClient: cerebras.NewClient(cfg.GetCerebrasAPIKey()),
-		localClient:    localclient.NewClient(cfg.GetLocalURL()),
+		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
+		cerebrasClient:   cerebras.NewClient(cfg.GetCerebrasAPIKey()),
+		localClient:      localclient.NewClient(cfg.GetLocalURL()),
 	}
 	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
 	app.whisperService.SetThreads(cfg.GetWhisperThreads())

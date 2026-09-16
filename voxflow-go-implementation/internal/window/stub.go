@@ -2,6 +2,6 @@
 
 package window
 
-func FloatEverywhere()  {}
-func ResetBehavior()    {}
-func ConstrainWindow()  {}
+func FloatEverywhere() {}
+func ResetBehavior()   {}
+func ConstrainWindow() {}

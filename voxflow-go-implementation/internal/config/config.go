@@ -36,11 +36,11 @@ type Config struct {
 	LocalModel string `json:"local_model"` // Free-form model name sent to the local server
 	LocalURL   string `json:"local_url"`   // Base URL of the local OpenAI-compatible server
 
-	RefinementMode  string `json:"refinement_mode"` // "refine", "raw", "copy-only"
-	MuteSystemAudio *bool  `json:"mute_system_audio,omitempty"`
-	AppRules        map[string]AppRule `json:"app_rules,omitempty"`
-	OnboardingCompleted bool `json:"onboarding_completed"`
-	mu              sync.RWMutex
+	RefinementMode      string             `json:"refinement_mode"` // "refine", "raw", "copy-only"
+	MuteSystemAudio     *bool              `json:"mute_system_audio,omitempty"`
+	AppRules            map[string]AppRule `json:"app_rules,omitempty"`
+	OnboardingCompleted bool               `json:"onboarding_completed"`
+	mu                  sync.RWMutex
 }
 
 // AppRule holds per-application overrides for refinement and injection behavior.
@@ -723,4 +723,3 @@ func ClearModelCache(provider string) error {
 	}
 	return os.WriteFile(cachePath, data, 0644)
 }
-
