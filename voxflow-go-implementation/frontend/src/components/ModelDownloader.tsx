@@ -23,23 +23,24 @@ export default function ModelDownloader({
       }
     });
 
-    EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
-      setProgress(Math.round(data.progress));
-    });
-
-    EventsOn(Events.ModelDownloadError, (err: string) => {
-      setError(err);
-      setDownloading(false);
-    });
-
-    EventsOn(
-      Events.ModelStatus,
-      (status: { downloaded: boolean; loaded: boolean }) => {
-        if (status.downloaded && status.loaded) {
-          onDownloadComplete();
-        }
-      },
-    );
+    const unsubs = [
+      EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
+        setProgress(Math.round(data.progress));
+      }),
+      EventsOn(Events.ModelDownloadError, (err: string) => {
+        setError(err);
+        setDownloading(false);
+      }),
+      EventsOn(
+        Events.ModelStatus,
+        (status: { downloaded: boolean; loaded: boolean }) => {
+          if (status.downloaded && status.loaded) {
+            onDownloadComplete();
+          }
+        },
+      ),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, []);
 
   const handleDownload = async () => {

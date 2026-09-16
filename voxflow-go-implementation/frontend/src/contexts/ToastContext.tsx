@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from "react";
 
 interface Toast {
   id: number;
@@ -35,7 +35,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  let nextId = 0;
+  const nextId = useRef(0);
 
   const showToast = useCallback(
     (message: string, type: Toast["type"] = "error") => {
@@ -49,7 +49,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           finalMessage = "No Speech Detected";
         }
 
-        const id = nextId++;
+        const id = nextId.current++;
         const newToasts = [...prev, { id, message: finalMessage, type }];
 
         setTimeout(() => {

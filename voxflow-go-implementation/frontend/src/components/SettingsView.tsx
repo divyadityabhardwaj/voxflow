@@ -140,19 +140,23 @@ export default function SettingsView() {
     checkWhisperCLI();
     setModelStatuses({});
 
-    // Listen for download progress
-    EventsOn(
+    const unsubProgress = EventsOn(
       Events.ModelDownloadProgress,
       (data: { model: string; progress: number }) => {
         setDownloadProgress(Math.round(data.progress));
       },
     );
 
-    EventsOn(Events.ModelDownloadComplete, () => {
+    const unsubComplete = EventsOn(Events.ModelDownloadComplete, () => {
       setDownloading(null);
       setDownloadProgress(0);
       loadModels();
     });
+
+    return () => {
+      unsubProgress();
+      unsubComplete();
+    };
   }, []);
 
   // Load Gemini models when config (and thus API key) is loaded
