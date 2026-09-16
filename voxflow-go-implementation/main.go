@@ -2,6 +2,10 @@ package main
 
 import (
 	"embed"
+	"path/filepath"
+
+	"voxflow/internal/config"
+	"voxflow/internal/logger"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -16,6 +20,13 @@ import (
 var assets embed.FS
 
 func main() {
+	// A packaged .app has no stdout, so mirror logs to ~/.voxflow/voxflow.log.
+	if dir, err := config.GetConfigDir(); err == nil {
+		if err := logger.File(filepath.Join(dir, "voxflow.log"), logger.INFO); err != nil {
+			logger.Warnf("Could not open log file: %v", err)
+		}
+	}
+
 	// Create an instance of the app structure
 	app := NewApp()
 

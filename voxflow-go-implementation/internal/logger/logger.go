@@ -229,6 +229,11 @@ func File(path string, lvl Level) error {
 		logFile.Close()
 	}
 
+	// ponytail: single rotation at 5MB, add numbered rotation if anyone asks for history.
+	if info, err := os.Stat(path); err == nil && info.Size() > 5*1024*1024 {
+		_ = os.Rename(path, path+".1")
+	}
+
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return err
