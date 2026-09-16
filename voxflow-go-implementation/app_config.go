@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
 	"voxflow/internal/groq"
@@ -63,7 +64,59 @@ func (a *App) SetAPIKey(key string) error {
 	a.config.SetGeminiAPIKey(key)
 	a.geminiClient.SetAPIKey(key)
 	_ = config.ClearModelCache("gemini")
+	go a.ensureValidModel("gemini")
 	return a.config.Save()
+}
+
+// ensureValidModel swaps the configured model for provider when the provider no
+// longer lists it. Cloud catalogs churn (free tiers especially), and a stale
+// default otherwise fails silently on the first dictation. Network call: run in
+// a goroutine.
+func (a *App) ensureValidModel(provider string) {
+	var (
+		models       []string
+		err          error
+		current, def string
+		set          func(string)
+	)
+	switch provider {
+	case "gemini":
+		if a.config.GetGeminiAPIKey() == "" {
+			return
+		}
+		models, err = a.GetGeminiModels()
+		current, def = a.config.GetGeminiModel(), config.DefaultGeminiModel
+		set = func(m string) { a.config.SetGeminiModel(m); a.geminiClient.SetModel(m) }
+	case "openrouter":
+		models, err = a.GetOpenRouterModels()
+		current, def, set = a.config.GetOpenRouterModel(), config.DefaultOpenRouterModel, a.config.SetOpenRouterModel
+	case "groq":
+		if a.config.GetGroqAPIKey() == "" {
+			return
+		}
+		models, err = a.GetGroqModels()
+		current, def, set = a.config.GetGroqModel(), config.DefaultGroqModel, a.config.SetGroqModel
+	case "cerebras":
+		if a.config.GetCerebrasAPIKey() == "" {
+			return
+		}
+		models, err = a.GetCerebrasModels()
+		current, def, set = a.config.GetCerebrasModel(), config.DefaultCerebrasModel, a.config.SetCerebrasModel
+	default:
+		return
+	}
+	if err != nil || len(models) == 0 || slices.Contains(models, current) {
+		return
+	}
+	pick := models[0]
+	if slices.Contains(models, def) {
+		pick = def
+	}
+	logger.Warnf("[LLM] %s no longer lists %q, switching to %q", provider, current, pick)
+	set(pick)
+	if err := a.config.Save(); err != nil {
+		logger.Errorf("[LLM] Failed to save model switch: %v", err)
+	}
 }
 
 // reloadHotkeys re-initializes the hotkey manager with current config
@@ -202,12 +255,14 @@ func (a *App) SetOpenRouterAPIKey(key string) error {
 	a.config.SetOpenRouterAPIKey(key)
 	a.openRouterClient.SetAPIKey(key)
 	_ = config.ClearModelCache("openrouter")
+	go a.ensureValidModel("openrouter")
 	return a.config.Save()
 }
 
-// SetLLMProvider sets the LLM provider (gemini or openrouter)
+// SetLLMProvider sets the LLM provider (gemini, openrouter, groq, cerebras, local)
 func (a *App) SetLLMProvider(provider string) error {
 	a.config.SetLLMProvider(provider)
+	go a.ensureValidModel(provider)
 	return a.config.Save()
 }
 
@@ -259,6 +314,7 @@ func (a *App) SetGroqAPIKey(key string) error {
 	a.groqClient.SetAPIKey(key)
 	a.groqClient.ClearModelsCache()
 	_ = config.ClearModelCache("groq")
+	go a.ensureValidModel("groq")
 	return a.config.Save()
 }
 
@@ -337,6 +393,7 @@ func (a *App) SetCerebrasAPIKey(key string) error {
 	a.cerebrasClient.SetAPIKey(key)
 	a.cerebrasClient.ClearModelsCache()
 	_ = config.ClearModelCache("cerebras")
+	go a.ensureValidModel("cerebras")
 	return a.config.Save()
 }
 

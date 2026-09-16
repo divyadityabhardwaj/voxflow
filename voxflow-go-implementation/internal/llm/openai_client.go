@@ -31,6 +31,12 @@ type chatRequest struct {
 	Messages    []chatMessage `json:"messages"`
 	Temperature float64       `json:"temperature,omitempty"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
+	// OpenRouter-only: turn off hybrid-thinking so the reply is just the text.
+	Reasoning *reasoningOpts `json:"reasoning,omitempty"`
+}
+
+type reasoningOpts struct {
+	Enabled bool `json:"enabled"`
 }
 
 // chatMessage is a single message in a chat conversation.
@@ -64,6 +70,15 @@ type OpenAIClient struct {
 	APIKey       string
 	ExtraHeaders map[string]string
 	HTTPClient   *http.Client
+	// DisableReasoning sends {"reasoning":{"enabled":false}}; only OpenRouter accepts it.
+	DisableReasoning bool
+}
+
+func (c *OpenAIClient) reasoning() *reasoningOpts {
+	if c.DisableReasoning {
+		return &reasoningOpts{Enabled: false}
+	}
+	return nil
 }
 
 // newTunedTransport returns an http.Transport optimised for low-latency API
@@ -196,6 +211,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 		},
 		Temperature: 0.3,
 		MaxTokens:   RefineMaxTokens(rawText),
+		Reasoning:   c.reasoning(),
 	}
 
 	reqBody, err := json.Marshal(req)
@@ -248,6 +264,7 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 			{Role: "user", Content: prompt},
 		},
 		Temperature: 0.3,
+		Reasoning:   c.reasoning(),
 	}
 
 	reqBody, err := json.Marshal(req)
@@ -286,6 +303,7 @@ func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 			{Role: "user", Content: LatencyTestText},
 		},
 		Temperature: 0.3,
+		Reasoning:   c.reasoning(),
 	}
 
 	reqBody, err := json.Marshal(req)

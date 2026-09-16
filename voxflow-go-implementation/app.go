@@ -122,11 +122,7 @@ func (a *App) activeLLMModel() string {
 	case "local":
 		return a.config.GetLocalModel()
 	default:
-		model := a.config.GetGeminiModel()
-		if model == "" {
-			model = "gemini-2.0-flash-lite"
-		}
-		return model
+		return a.config.GetGeminiModel()
 	}
 }
 
@@ -168,6 +164,7 @@ func (a *App) startup(ctx context.Context) {
 		logger.Warnf("Warning: Failed to cleanup stale temp audio files: %v", err)
 	}
 	go a.checkModelStatus()
+	go a.ensureValidModel(a.config.GetLLMProvider())
 
 	hfHotkey := a.config.GetHandsFreeHotkey()
 	pttHotkey := a.config.GetPushToTalkHotkey()

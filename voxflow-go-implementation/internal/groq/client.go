@@ -21,10 +21,8 @@ var ModelDescriptions = map[string]string{
 
 // AvailableModels is a static fallback list used when the API is unreachable.
 var AvailableModels = []string{
-	"llama-3.1-8b-instant",
-	"llama3-70b-8192",
-	"mixtral-8x7b-32768",
-	"gemma2-9b-it",
+	"openai/gpt-oss-20b",
+	"openai/gpt-oss-120b",
 }
 
 // Client handles communication with the Groq API.

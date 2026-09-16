@@ -25,12 +25,10 @@ var ModelDescriptions = map[string]string{
 
 // FallbackFreeModels is used when the API call to list free models fails.
 var FallbackFreeModels = []string{
-	"qwen/qwen3-235b-a22b:free",
-	"deepseek/deepseek-chat-v3-0324:free",
-	"meta-llama/llama-4-maverick:free",
-	"nvidia/nemotron-3-nano-30b-a3b:free",
-	"google/gemma-3-4b-it:free",
-	"mistralai/mistral-7b-instruct:free",
+	"google/gemma-4-31b-it:free",
+	"google/gemma-4-26b-a4b-it:free",
+	"nvidia/nemotron-3-super-120b-a12b:free",
+	"z-ai/glm-5.2:free",
 }
 
 // Client handles communication with the OpenRouter API.
@@ -43,13 +41,15 @@ type Client struct {
 
 // NewClient creates a new OpenRouter client.
 func NewClient(apiKey string) *Client {
-	return &Client{
+	c := &Client{
 		apiKey: apiKey,
 		openai: llm.NewOpenAIClient(baseAPIURL, apiKey, map[string]string{
 			"HTTP-Referer": "https://voxflow.app",
 			"X-Title":      "Voxflow",
 		}),
 	}
+	c.openai.DisableReasoning = true
+	return c
 }
 
 // SetAPIKey updates the API key and clears the cached model list, since a new
@@ -106,7 +106,11 @@ func (c *Client) GetFreeModels() ([]string, error) {
 
 	var freeModels []string
 	for _, model := range modelsResp.Data {
-		if strings.Contains(model.ID, ":free") {
+		// Reasoning-first models spend the whole output budget thinking; a dictation
+		// cleanup call needs a plain instruct model.
+		if strings.HasSuffix(model.ID, ":free") &&
+			!strings.Contains(model.ID, "reasoning") &&
+			!strings.Contains(model.ID, "thinking") {
 			freeModels = append(freeModels, model.ID)
 		}
 	}

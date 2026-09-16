@@ -47,9 +47,6 @@ func newTunedTransport() *http.Transport {
 
 // NewClient creates a new Gemini client
 func NewClient(apiKey string, modelName string) *Client {
-	if modelName == "" {
-		modelName = "gemini-2.0-flash-lite"
-	}
 	return &Client{
 		apiKey:    apiKey,
 		modelName: modelName,

@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// Default refinement models. Cloud catalogs churn, so ensureValidModel in the app
+// swaps these out when a provider stops listing them.
+const (
+	DefaultGeminiModel     = "gemini-2.5-flash-lite"
+	DefaultOpenRouterModel = "google/gemma-4-31b-it:free"
+	DefaultGroqModel       = "openai/gpt-oss-20b"
+	DefaultCerebrasModel   = "llama3.1-8b"
+)
+
 // Config holds the application configuration
 type Config struct {
 	GeminiAPIKey     string `json:"gemini_api_key"`
@@ -137,19 +146,19 @@ func (c *Config) Load() error {
 		c.WhisperThreads = 0
 	}
 	if c.GeminiModel == "" {
-		c.GeminiModel = "gemini-1.5-flash"
+		c.GeminiModel = DefaultGeminiModel
 	}
 	if c.LLMProvider == "" {
 		c.LLMProvider = "gemini"
 	}
 	if c.OpenRouterModel == "" {
-		c.OpenRouterModel = "qwen/qwen3-235b-a22b:free"
+		c.OpenRouterModel = DefaultOpenRouterModel
 	}
 	if c.GroqModel == "" {
-		c.GroqModel = "llama-3.1-8b-instant"
+		c.GroqModel = DefaultGroqModel
 	}
 	if c.CerebrasModel == "" {
-		c.CerebrasModel = "llama3.1-8b"
+		c.CerebrasModel = DefaultCerebrasModel
 	}
 	if c.LocalURL == "" {
 		c.LocalURL = "http://localhost:11434"
@@ -382,7 +391,7 @@ func (c *Config) GetGeminiModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.GeminiModel == "" {
-		return "gemini-1.5-flash"
+		return DefaultGeminiModel
 	}
 	return c.GeminiModel
 }
@@ -433,7 +442,7 @@ func (c *Config) GetOpenRouterModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.OpenRouterModel == "" {
-		return "qwen/qwen3-235b-a22b:free" // Default to Qwen
+		return DefaultOpenRouterModel
 	}
 	return c.OpenRouterModel
 }
@@ -467,7 +476,7 @@ func (c *Config) GetGroqModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.GroqModel == "" {
-		return "llama-3.1-8b-instant"
+		return DefaultGroqModel
 	}
 	return c.GroqModel
 }
@@ -501,7 +510,7 @@ func (c *Config) GetCerebrasModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.CerebrasModel == "" {
-		return "llama3.1-8b"
+		return DefaultCerebrasModel
 	}
 	return c.CerebrasModel
 }

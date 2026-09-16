@@ -200,8 +200,8 @@ export default function SettingsView() {
           if (!prev) return null;
           const currentModel = prev.gemini_model;
           if (!currentModel || !modelsList.includes(currentModel)) {
-            const defaultModel = modelsList.find(m => m.includes("gemini-1.5-flash")) || 
-                                 modelsList.find(m => m.includes("flash")) || 
+            const defaultModel = modelsList.find(m => m.includes("flash-lite")) ||
+                                 modelsList.find(m => m.includes("flash")) ||
                                  modelsList[0];
             if (defaultModel) {
               SetGeminiModel(defaultModel).catch(err => console.error("Failed to auto-set Gemini model:", err));
@@ -231,7 +231,7 @@ export default function SettingsView() {
           if (!prev) return null;
           const currentModel = prev.openrouter_model;
           if (!currentModel || !modelsList.includes(currentModel)) {
-            const defaultModel = modelsList.find(m => m.includes("free")) || modelsList[0];
+            const defaultModel = modelsList.find(m => m.includes("gemma")) || modelsList[0];
             if (defaultModel) {
               SetOpenRouterModel(defaultModel).catch(err => console.error("Failed to auto-set OpenRouter model:", err));
               return { ...prev, openrouter_model: defaultModel };
@@ -259,8 +259,8 @@ export default function SettingsView() {
           if (!prev) return null;
           const currentModel = prev.groq_model;
           if (!currentModel || !modelsList.includes(currentModel)) {
-            const defaultModel = modelsList.find(m => m.includes("llama-3.1-8b-instant")) || 
-                                 modelsList.find(m => m.includes("llama3")) || 
+            const defaultModel = modelsList.find(m => m.includes("gpt-oss-20b")) ||
+                                 modelsList.find(m => m.includes("gpt-oss")) ||
                                  modelsList[0];
             if (defaultModel) {
               SetGroqModel(defaultModel).catch(err => console.error("Failed to auto-set Groq model:", err));
