@@ -5,7 +5,7 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from "react";
-import { EventsOn, Quit } from "../../wailsjs/runtime/runtime";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 import {
   HideMiniMode,
   ToggleRecording,
@@ -156,12 +156,6 @@ export default function RecordingIndicator() {
     HideMiniMode();
   };
 
-  const handleQuitClick = (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    Quit();
-  };
-
   const handleToastClick = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -280,7 +274,6 @@ export default function RecordingIndicator() {
   };
 
   const hoverBgExpand = isDark ? "hover:bg-white/10" : "hover:bg-black/5";
-  const hoverBgQuit = "hover:bg-red-500/20";
 
   return (
     <div
@@ -409,7 +402,9 @@ export default function RecordingIndicator() {
 
       {/* Main Control Pill */}
       <div
-        className="w-full h-[24px] flex flex-row items-center justify-between px-1 rounded-full transition-[box-shadow] duration-150 ease-out pointer-events-auto shadow-sm"
+        className={`w-full h-[24px] flex flex-row items-center px-1 rounded-full transition-[box-shadow] duration-150 ease-out pointer-events-auto shadow-sm ${
+          uiExpanded ? "justify-between" : "justify-center"
+        }`}
         style={
           {
             background: statusBg,
@@ -489,8 +484,8 @@ export default function RecordingIndicator() {
 
         {/* Middle: Drag handle */}
         <div
-          className={`flex-1 h-full flex items-center justify-center px-0.5 transition-all duration-200 ease-out overflow-hidden min-w-0 ${
-            uiExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`h-full flex items-center justify-center transition-all duration-200 ease-out overflow-hidden min-w-0 ${
+            uiExpanded ? "flex-1 px-0.5 opacity-100" : "w-0 opacity-0 pointer-events-none"
           }`}
         >
           <div
@@ -509,59 +504,35 @@ export default function RecordingIndicator() {
           </div>
         </div>
 
-        {/* Right: Expand + Quit */}
-        <div className="flex-none flex items-center gap-0.5">
+        {/* Right: Expand (hover-reveal) */}
+        <div
+          className={`flex-none transition-all duration-200 ease-out overflow-hidden ${
+            uiExpanded ? "opacity-100 w-4" : "opacity-0 w-0"
+          }`}
+        >
           <div
-            className={`transition-all duration-200 ease-out overflow-hidden ${
-              uiExpanded ? "opacity-100 w-4" : "opacity-0 w-0"
-                }`}
-              >
-                <div
-                  className={`size-4 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
-                  style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
-                  onClick={handleExpandClick}
-                  title="Expand"
-                >
-                  <svg
-                    className="w-2 h-2 opacity-70"
-                    style={{ color: foregroundColor }}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              <div
-                className={`size-4 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgQuit} transition-colors`}
-                style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
-                onClick={handleQuitClick}
-                title="Quit"
-              >
-                <svg
-                  className="w-2 h-2 opacity-75 hover:opacity-100"
-                  style={{ color: foregroundColor }}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </div>
-            </div>
+            className={`size-4 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
+            style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
+            onClick={handleExpandClick}
+            title="Expand"
+          >
+            <svg
+              className="w-2 h-2 opacity-70"
+              style={{ color: foregroundColor }}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+              />
+            </svg>
           </div>
         </div>
+      </div>
+    </div>
   );
 }
