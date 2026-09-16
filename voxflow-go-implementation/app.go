@@ -206,35 +206,3 @@ func (a *App) IsMiniMode() bool {
 func (a *App) Quit() {
 	runtime.Quit(a.ctx)
 }
-
-func (a *App) ToggleFullscreen() {
-	if runtime.WindowIsFullscreen(a.ctx) {
-		runtime.WindowUnfullscreen(a.ctx)
-	} else {
-		runtime.WindowFullscreen(a.ctx)
-	}
-}
-
-func (a *App) IsFullscreen() bool {
-	return runtime.WindowIsFullscreen(a.ctx)
-}
-
-func (a *App) ToggleMaximize() {
-	if runtime.WindowIsMaximised(a.ctx) {
-		runtime.WindowUnmaximise(a.ctx)
-	} else {
-		runtime.WindowMaximise(a.ctx)
-	}
-}
-
-func (a *App) IsMaximized() bool {
-	return runtime.WindowIsMaximised(a.ctx)
-}
-
-func (a *App) Minimize() {
-	runtime.WindowMinimise(a.ctx)
-}
-
-func (a *App) IsMinimized() bool {
-	return runtime.WindowIsMinimised(a.ctx)
-}

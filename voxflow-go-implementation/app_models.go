@@ -157,8 +157,3 @@ func (a *App) DeleteModelByName(modelName string) error {
 func (a *App) IsWhisperCLIReady() bool {
 	return a.whisperService.IsWhisperCLIInstalled()
 }
-
-// EnsureWhisperCLI ensures whisper-cli is installed
-func (a *App) EnsureWhisperCLI() error {
-	return a.whisperService.EnsureWhisperCLI(nil)
-}

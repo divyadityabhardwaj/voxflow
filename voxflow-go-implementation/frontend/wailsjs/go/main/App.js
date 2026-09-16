@@ -54,24 +54,12 @@ export function DownloadModelByName(arg1) {
   return window['go']['main']['App']['DownloadModelByName'](arg1);
 }
 
-export function EnsureWhisperCLI() {
-  return window['go']['main']['App']['EnsureWhisperCLI']();
-}
-
 export function GetAllModels() {
   return window['go']['main']['App']['GetAllModels']();
 }
 
 export function GetAppRules() {
   return window['go']['main']['App']['GetAppRules']();
-}
-
-export function GetCerebrasModel() {
-  return window['go']['main']['App']['GetCerebrasModel']();
-}
-
-export function GetCerebrasModelDescriptions() {
-  return window['go']['main']['App']['GetCerebrasModelDescriptions']();
 }
 
 export function GetCerebrasModels() {
@@ -86,20 +74,8 @@ export function GetFrontmostApp() {
   return window['go']['main']['App']['GetFrontmostApp']();
 }
 
-export function GetGeminiModel() {
-  return window['go']['main']['App']['GetGeminiModel']();
-}
-
 export function GetGeminiModels() {
   return window['go']['main']['App']['GetGeminiModels']();
-}
-
-export function GetGroqModel() {
-  return window['go']['main']['App']['GetGroqModel']();
-}
-
-export function GetGroqModelDescriptions() {
-  return window['go']['main']['App']['GetGroqModelDescriptions']();
 }
 
 export function GetGroqModels() {
@@ -114,28 +90,8 @@ export function GetHistoryPage(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetHistoryPage'](arg1, arg2, arg3);
 }
 
-export function GetLLMProvider() {
-  return window['go']['main']['App']['GetLLMProvider']();
-}
-
-export function GetLocalModel() {
-  return window['go']['main']['App']['GetLocalModel']();
-}
-
-export function GetLocalURL() {
-  return window['go']['main']['App']['GetLocalURL']();
-}
-
 export function GetOnboardingCompleted() {
   return window['go']['main']['App']['GetOnboardingCompleted']();
-}
-
-export function GetOpenRouterModel() {
-  return window['go']['main']['App']['GetOpenRouterModel']();
-}
-
-export function GetOpenRouterModelDescriptions() {
-  return window['go']['main']['App']['GetOpenRouterModelDescriptions']();
 }
 
 export function GetOpenRouterModels() {
@@ -144,10 +100,6 @@ export function GetOpenRouterModels() {
 
 export function GetStatus() {
   return window['go']['main']['App']['GetStatus']();
-}
-
-export function GetTranscript(arg1) {
-  return window['go']['main']['App']['GetTranscript'](arg1);
 }
 
 export function HideMiniMode() {
@@ -162,20 +114,8 @@ export function IsAccessibilityGranted() {
   return window['go']['main']['App']['IsAccessibilityGranted']();
 }
 
-export function IsFullscreen() {
-  return window['go']['main']['App']['IsFullscreen']();
-}
-
-export function IsMaximized() {
-  return window['go']['main']['App']['IsMaximized']();
-}
-
 export function IsMiniMode() {
   return window['go']['main']['App']['IsMiniMode']();
-}
-
-export function IsMinimized() {
-  return window['go']['main']['App']['IsMinimized']();
 }
 
 export function IsModelDownloaded() {
@@ -188,10 +128,6 @@ export function IsModelReady() {
 
 export function IsWhisperCLIReady() {
   return window['go']['main']['App']['IsWhisperCLIReady']();
-}
-
-export function Minimize() {
-  return window['go']['main']['App']['Minimize']();
 }
 
 export function OpenHistoryWindow() {
@@ -214,24 +150,12 @@ export function RemoveAppRule(arg1) {
   return window['go']['main']['App']['RemoveAppRule'](arg1);
 }
 
-export function RequestAccessibilityPermission() {
-  return window['go']['main']['App']['RequestAccessibilityPermission']();
-}
-
 export function ResetWindowPosition() {
   return window['go']['main']['App']['ResetWindowPosition']();
 }
 
 export function RetryRefinement(arg1, arg2) {
   return window['go']['main']['App']['RetryRefinement'](arg1, arg2);
-}
-
-export function RetryWithGemini(arg1, arg2) {
-  return window['go']['main']['App']['RetryWithGemini'](arg1, arg2);
-}
-
-export function SearchHistory(arg1, arg2) {
-  return window['go']['main']['App']['SearchHistory'](arg1, arg2);
 }
 
 export function SearchHistoryPage(arg1, arg2, arg3, arg4) {
@@ -268,10 +192,6 @@ export function SetGroqModel(arg1) {
 
 export function SetHandsFreeHotkey(arg1) {
   return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
-}
-
-export function SetHotkey(arg1) {
-  return window['go']['main']['App']['SetHotkey'](arg1);
 }
 
 export function SetLLMProvider(arg1) {
@@ -324,22 +244,6 @@ export function SetWhisperModel(arg1) {
 
 export function ShowMiniMode() {
   return window['go']['main']['App']['ShowMiniMode']();
-}
-
-export function StartRecording() {
-  return window['go']['main']['App']['StartRecording']();
-}
-
-export function StopRecording() {
-  return window['go']['main']['App']['StopRecording']();
-}
-
-export function ToggleFullscreen() {
-  return window['go']['main']['App']['ToggleFullscreen']();
-}
-
-export function ToggleMaximize() {
-  return window['go']['main']['App']['ToggleMaximize']();
 }
 
 export function ToggleRecording() {

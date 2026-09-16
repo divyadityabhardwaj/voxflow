@@ -11,14 +11,6 @@ const (
 	baseAPIURL = "https://api.groq.com/openai/v1"
 )
 
-// ModelDescriptions contains descriptions for popular Groq models.
-var ModelDescriptions = map[string]string{
-	"llama-3.1-8b-instant": "Llama 3.1 8B (Fastest)",
-	"llama3-70b-8192":      "Llama 3 70B (High Quality)",
-	"mixtral-8x7b-32768":   "Mixtral 8x7B (Balanced)",
-	"gemma2-9b-it":         "Gemma 2 9B (Good Reasoning)",
-}
-
 // AvailableModels is a static fallback list used when the API is unreachable.
 var AvailableModels = []string{
 	"openai/gpt-oss-20b",
@@ -52,14 +44,6 @@ func (c *Client) ClearModelsCache() {
 	c.modelsMu.Lock()
 	c.models = nil
 	c.modelsMu.Unlock()
-}
-
-// GetModelDescription returns a human-readable description for a model ID.
-func GetModelDescription(model string) string {
-	if desc, ok := ModelDescriptions[model]; ok {
-		return desc
-	}
-	return "Groq Model"
 }
 
 // GetModels fetches available chat/language models from the Groq API.

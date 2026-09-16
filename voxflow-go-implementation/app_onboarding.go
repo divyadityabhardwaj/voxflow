@@ -22,11 +22,6 @@ func (a *App) IsAccessibilityGranted() bool {
 	return injection.IsAccessibilityGranted()
 }
 
-// RequestAccessibilityPermission shows the system Accessibility grant dialog.
-func (a *App) RequestAccessibilityPermission() {
-	injection.PromptAccessibility()
-}
-
 // PromptAccessibilityExplanation shows why Accessibility is needed (onboarding step).
 func (a *App) PromptAccessibilityExplanation() (bool, error) {
 	selection, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{

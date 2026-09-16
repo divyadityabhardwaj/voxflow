@@ -11,12 +11,6 @@ const (
 	baseAPIURL = "https://api.cerebras.ai/v1"
 )
 
-// ModelDescriptions contains descriptions for popular Cerebras models.
-var ModelDescriptions = map[string]string{
-	"llama3.1-8b":  "Llama 3.1 8B (Fastest)",
-	"llama3.1-70b": "Llama 3.1 70B (High Quality)",
-}
-
 // AvailableModels is a static fallback list used when the API is unreachable.
 var AvailableModels = []string{
 	"llama3.1-8b",
@@ -50,14 +44,6 @@ func (c *Client) ClearModelsCache() {
 	c.modelsMu.Lock()
 	c.models = nil
 	c.modelsMu.Unlock()
-}
-
-// GetModelDescription returns a human-readable description for a model ID.
-func GetModelDescription(model string) string {
-	if desc, ok := ModelDescriptions[model]; ok {
-		return desc
-	}
-	return "Cerebras Model"
 }
 
 // GetModels fetches available chat/language models from the Cerebras API.

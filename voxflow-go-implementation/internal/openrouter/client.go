@@ -13,16 +13,6 @@ const (
 	baseAPIURL = "https://openrouter.ai/api/v1"
 )
 
-// ModelDescriptions contains descriptions for popular models.
-var ModelDescriptions = map[string]string{
-	"qwen/qwen3-235b-a22b:free":           "Qwen 3 - Excellent reasoning (262K context)",
-	"deepseek/deepseek-chat-v3-0324:free": "DeepSeek V3 - Strong open model (128K context)",
-	"meta-llama/llama-4-maverick:free":    "Llama 4 Maverick - Meta's latest (128K context)",
-	"nvidia/nemotron-3-nano-30b-a3b:free": "Nemotron 3 Nano - NVIDIA's efficient (256K)",
-	"google/gemma-3-4b-it:free":           "Gemma 3 4B - Good balance of speed/quality",
-	"mistralai/mistral-7b-instruct:free":  "Mistral 7B - Reliable open model",
-}
-
 // FallbackFreeModels is used when the API call to list free models fails.
 var FallbackFreeModels = []string{
 	"google/gemma-4-31b-it:free",
@@ -124,14 +114,6 @@ func (c *Client) GetFreeModels() ([]string, error) {
 	c.modelsMu.Unlock()
 
 	return freeModels, nil
-}
-
-// GetModelDescription returns a human-readable description for a model ID.
-func GetModelDescription(model string) string {
-	if desc, ok := ModelDescriptions[model]; ok {
-		return desc
-	}
-	return "Free model on OpenRouter"
 }
 
 // RefineText sends rawText to the OpenRouter model for transcription cleanup.

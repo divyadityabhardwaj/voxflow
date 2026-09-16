@@ -3,7 +3,6 @@ import {
   GetConfig,
   SetAPIKey,
   SetOpenRouterAPIKey,
-  SetHotkey,
   SetHandsFreeHotkey,
   SetPushToTalkHotkey,
   SetWhisperModel,
@@ -27,9 +26,7 @@ import {
   SetCerebrasAPIKey,
   SetCerebrasModel,
   CheckCerebrasModel,
-  GetLocalURL,
   SetLocalURL,
-  GetLocalModel,
   SetLocalModel,
   CheckLocalModel,
   SetRefinementMode,
@@ -40,7 +37,6 @@ import {
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import HotkeyRecorderModal from "./HotkeyRecorderModal";
-import HotkeyInput from "./HotkeyInput";
 import { Events } from "../constants/events";
 import LLMProviderSettings from "./settings/LLMProviderSettings";
 import ModelSelectionSettings from "./settings/ModelSelectionSettings";

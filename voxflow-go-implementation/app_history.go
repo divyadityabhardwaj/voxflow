@@ -81,22 +81,6 @@ func (a *App) SearchHistoryPage(query string, cursorTS string, cursorID int64, l
 	return &HistoryPage{Transcripts: transcripts, NextCursorTS: nextTSStr, NextCursorID: nextID}, nil
 }
 
-// SearchHistory searches transcript history
-func (a *App) SearchHistory(query string, limit int) ([]*history.Transcript, error) {
-	if a.historyService == nil {
-		return nil, fmt.Errorf("history service not available")
-	}
-	return a.historyService.Search(query, limit)
-}
-
-// GetTranscript returns a single transcript by ID
-func (a *App) GetTranscript(id int64) (*history.Transcript, error) {
-	if a.historyService == nil {
-		return nil, fmt.Errorf("history service not available")
-	}
-	return a.historyService.GetByID(id)
-}
-
 // DeleteTranscript deletes a transcript by ID
 func (a *App) DeleteTranscript(id int64) error {
 	if a.historyService == nil {
@@ -144,11 +128,6 @@ func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 	}
 
 	return newPolished, nil
-}
-
-// RetryWithGemini re-processes a transcript with a custom instruction (legacy alias for provider-agnostic RetryRefinement)
-func (a *App) RetryWithGemini(id int64, instruction string) (string, error) {
-	return a.RetryRefinement(id, instruction)
 }
 
 // CopyToClipboard copies text to clipboard

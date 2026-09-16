@@ -3,12 +3,9 @@ package main
 import (
 	"fmt"
 	"slices"
-	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
-	"voxflow/internal/groq"
 	"voxflow/internal/llm"
 	"voxflow/internal/logger"
-	"voxflow/internal/openrouter"
 	"voxflow/internal/whisper"
 )
 
@@ -134,11 +131,6 @@ func (a *App) reloadHotkeys() error {
 	return fmt.Errorf("hotkey manager not initialized")
 }
 
-// SetHotkey sets the global hotkey (Legacy: maps to HandsFree)
-func (a *App) SetHotkey(hotkeyStr string) error {
-	return a.SetHandsFreeHotkey(hotkeyStr)
-}
-
 // SetHandsFreeHotkey sets the hands-free hotkey
 func (a *App) SetHandsFreeHotkey(hotkeyStr string) error {
 	old := a.config.GetHandsFreeHotkey()
@@ -195,11 +187,6 @@ func (a *App) SetGeminiModel(model string) error {
 	return a.config.Save()
 }
 
-// GetGeminiModel returns the current Gemini model
-func (a *App) GetGeminiModel() string {
-	return a.config.GetGeminiModel()
-}
-
 // CheckResult holds the result of a model connectivity check
 type CheckResult struct {
 	LatencyMs int64   `json:"latency"`
@@ -239,11 +226,6 @@ func (a *App) GetOpenRouterModels() ([]string, error) {
 	return models, err
 }
 
-// GetOpenRouterModelDescriptions returns descriptions for all OpenRouter models
-func (a *App) GetOpenRouterModelDescriptions() map[string]string {
-	return openrouter.ModelDescriptions
-}
-
 // CheckOpenRouterModel tests an OpenRouter model and returns latency and TPS
 func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
 	latency, tps, err := a.openRouterClient.CheckModel(model)
@@ -269,20 +251,10 @@ func (a *App) SetLLMProvider(provider string) error {
 	return a.config.Save()
 }
 
-// GetLLMProvider returns the current LLM provider
-func (a *App) GetLLMProvider() string {
-	return a.config.GetLLMProvider()
-}
-
 // SetOpenRouterModel sets the OpenRouter model
 func (a *App) SetOpenRouterModel(model string) error {
 	a.config.SetOpenRouterModel(model)
 	return a.config.Save()
-}
-
-// GetOpenRouterModel returns the current OpenRouter model
-func (a *App) GetOpenRouterModel() string {
-	return a.config.GetOpenRouterModel()
 }
 
 // GetGroqModels returns all available Groq models
@@ -295,11 +267,6 @@ func (a *App) GetGroqModels() ([]string, error) {
 		_ = config.SaveModelCache("groq", models)
 	}
 	return models, err
-}
-
-// GetGroqModelDescriptions returns descriptions for all Groq models
-func (a *App) GetGroqModelDescriptions() map[string]string {
-	return groq.ModelDescriptions
 }
 
 // CheckGroqModel tests a Groq model and returns latency and TPS
@@ -327,11 +294,6 @@ func (a *App) SetGroqModel(model string) error {
 	return a.config.Save()
 }
 
-// GetGroqModel returns the current Groq model
-func (a *App) GetGroqModel() string {
-	return a.config.GetGroqModel()
-}
-
 // GetCerebrasModels returns all available Cerebras models
 func (a *App) GetCerebrasModels() ([]string, error) {
 	if cached, ok := config.LoadModelCache("cerebras"); ok {
@@ -342,11 +304,6 @@ func (a *App) GetCerebrasModels() ([]string, error) {
 		_ = config.SaveModelCache("cerebras", models)
 	}
 	return models, err
-}
-
-// GetCerebrasModelDescriptions returns descriptions for all Cerebras models
-func (a *App) GetCerebrasModelDescriptions() map[string]string {
-	return cerebras.ModelDescriptions
 }
 
 // CheckCerebrasModel tests a Cerebras model and returns latency and TPS
@@ -367,21 +324,11 @@ func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-// GetLocalURL returns the base URL of the local OpenAI-compatible server.
-func (a *App) GetLocalURL() string {
-	return a.config.GetLocalURL()
-}
-
 // SetLocalURL updates the server URL and immediately reinitialises the local HTTP client.
 func (a *App) SetLocalURL(url string) error {
 	a.config.SetLocalURL(url)
 	a.localClient.SetBaseURL(url)
 	return a.config.Save()
-}
-
-// GetLocalModel returns the user-configured model name.
-func (a *App) GetLocalModel() string {
-	return a.config.GetLocalModel()
 }
 
 // SetLocalModel sets the model name to send to the local server.
@@ -404,11 +351,6 @@ func (a *App) SetCerebrasAPIKey(key string) error {
 func (a *App) SetCerebrasModel(model string) error {
 	a.config.SetCerebrasModel(model)
 	return a.config.Save()
-}
-
-// GetCerebrasModel returns the current Cerebras model
-func (a *App) GetCerebrasModel() string {
-	return a.config.GetCerebrasModel()
 }
 
 // SetRefinementMode sets the refinement mode ("refine", "raw", "copy-only")
