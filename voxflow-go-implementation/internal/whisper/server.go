@@ -8,10 +8,12 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"voxflow/internal/logger"
@@ -48,7 +50,8 @@ func findWhisperServer(cliPath string) string {
 	return ""
 }
 
-func startWhisperServer(bin, modelPath string, threads int) (*whisperServer, error) {
+// spawnWhisperServer starts the process and returns at once; call waitReady before use.
+func spawnWhisperServer(bin, modelPath string, threads int) (*whisperServer, error) {
 	port, err := freePort()
 	if err != nil {
 		return nil, err
@@ -66,21 +69,65 @@ func startWhisperServer(bin, modelPath string, threads int) (*whisperServer, err
 		cmd.Wait()
 		close(srv.done)
 	}()
+	writePidFile(cmd.Process.Pid)
+	return srv, nil
+}
 
+// waitReady polls /health until the model is loaded. On timeout the process is killed.
+func (w *whisperServer) waitReady() error {
 	deadline := time.Now().Add(15 * time.Second)
-	for !srv.healthy() {
+	for !w.healthy() {
 		if time.Now().After(deadline) {
-			srv.stop()
-			return nil, fmt.Errorf("not ready after 15s")
+			w.stop()
+			return fmt.Errorf("not ready after 15s")
 		}
 		select {
-		case <-srv.done:
-			return nil, fmt.Errorf("exited during startup: %v", cmd.ProcessState)
+		case <-w.done:
+			return fmt.Errorf("exited during startup: %v", w.cmd.ProcessState)
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-	logger.Infof("[Whisper] whisper-server started: pid %d, %s, model %s", cmd.Process.Pid, srv.url, filepath.Base(modelPath))
-	return srv, nil
+	logger.Infof("[Whisper] whisper-server started: pid %d, %s", w.cmd.Process.Pid, w.url)
+	return nil
+}
+
+// macOS has no parent-death signal, so a crash or force-quit would leave the
+// server (and its resident model) running forever. Record the pid and reap it
+// on the next start.
+func pidFilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".voxflow", "whisper-server.pid")
+}
+
+func writePidFile(pid int) {
+	if p := pidFilePath(); p != "" {
+		_ = os.WriteFile(p, []byte(strconv.Itoa(pid)), 0600)
+	}
+}
+
+func reapStaleServer() {
+	p := pidFilePath()
+	if p == "" {
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	os.Remove(p)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 1 {
+		return
+	}
+	out, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil || filepath.Base(strings.TrimSpace(string(out))) != "whisper-server" {
+		return
+	}
+	logger.Warnf("[Whisper] Killing orphaned whisper-server from a previous run: pid %d", pid)
+	_ = syscall.Kill(pid, syscall.SIGKILL)
 }
 
 func freePort() (int, error) {
@@ -105,6 +152,9 @@ func (w *whisperServer) healthy() bool {
 func (w *whisperServer) stop() {
 	w.cmd.Process.Kill()
 	<-w.done
+	if p := pidFilePath(); p != "" {
+		os.Remove(p)
+	}
 	logger.Infof("[Whisper] whisper-server stopped: pid %d", w.cmd.Process.Pid)
 }
 
@@ -149,7 +199,8 @@ func (w *whisperServer) transcribe(wav []byte, language, prompt string) (string,
 
 // startServer spawns whisper-server for the loaded model and installs it unless the
 // service changed underneath (Close, another model or thread count, a server already
-// installed). Runs without s.mu held so a slow start never blocks transcription.
+// installed). Runs without s.mu held so a slow start never blocks transcription;
+// the in-flight process is tracked in s.starting so Close can kill it.
 func (s *Service) startServer() {
 	s.mu.RLock()
 	loaded, noServer, modelPath, threads := s.loaded, s.noServer, s.modelPath, s.threads
@@ -162,17 +213,32 @@ func (s *Service) startServer() {
 		logger.Infof("[Whisper] whisper-server not found, using whisper-cli per call")
 		return
 	}
-	srv, err := startWhisperServer(bin, modelPath, threads)
+	reapStaleServer()
+	srv, err := spawnWhisperServer(bin, modelPath, threads)
 	if err != nil {
 		logger.Warnf("[Whisper] whisper-server failed to start, using whisper-cli per call: %v", err)
 		return
 	}
 	s.mu.Lock()
-	stale := !s.loaded || s.server != nil || s.modelPath != modelPath || s.threads != threads
+	if s.starting == nil {
+		s.starting = map[*whisperServer]struct{}{}
+	}
+	s.starting[srv] = struct{}{}
+	s.mu.Unlock()
+
+	err = srv.waitReady()
+
+	s.mu.Lock()
+	delete(s.starting, srv)
+	stale := err != nil || !s.loaded || s.server != nil || s.modelPath != modelPath || s.threads != threads
 	if !stale {
 		s.server = srv
 	}
 	s.mu.Unlock()
+	if err != nil {
+		logger.Warnf("[Whisper] whisper-server failed to start, using whisper-cli per call: %v", err)
+		return
+	}
 	if stale {
 		srv.stop()
 		return
@@ -180,8 +246,12 @@ func (s *Service) startServer() {
 	go s.watchServer(srv)
 }
 
-// stopServerLocked stops the resident server, if any. Call with s.mu held.
+// stopServerLocked stops the resident server and any start still in flight. Call with s.mu held.
 func (s *Service) stopServerLocked() {
+	for srv := range s.starting {
+		delete(s.starting, srv)
+		srv.stop()
+	}
 	if srv := s.server; srv != nil {
 		s.server = nil
 		srv.stop()

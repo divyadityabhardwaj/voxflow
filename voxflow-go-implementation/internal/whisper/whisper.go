@@ -73,9 +73,11 @@ type Service struct {
 	mu          sync.RWMutex
 	loaded      bool
 
-	server         *whisperServer // resident whisper-server; nil means whisper-cli per call
-	serverRestarts int            // crash restarts since LoadModel, capped at one
-	noServer       bool           // force the whisper-cli path (tests)
+	server         *whisperServer              // resident whisper-server; nil means whisper-cli per call
+	starting       map[*whisperServer]struct{} // spawned but not yet healthy; Close kills these too
+	startsPending  int                         // LoadModel starts in flight, so WarmUp can wait for them
+	serverRestarts int                         // crash restarts since LoadModel, capped at one
+	noServer       bool                        // force the whisper-cli path (tests)
 }
 
 // NewService creates a new Whisper service
@@ -428,10 +430,32 @@ func (s *Service) LoadModel(modelSize string) error {
 	s.loaded = true
 	s.serverRestarts = 0
 	s.stopServerLocked()
+	s.startsPending++
 	s.mu.Unlock()
 
-	s.startServer()
+	// Start in the background: recording must not be refused while the model loads;
+	// transcribeWAV uses whisper-cli until the server is up.
+	go func() {
+		s.startServer()
+		s.mu.Lock()
+		s.startsPending--
+		s.mu.Unlock()
+	}()
 	return nil
+}
+
+// awaitServer blocks (bounded) while a LoadModel-initiated server start is in flight.
+func (s *Service) awaitServer(max time.Duration) {
+	deadline := time.Now().Add(max)
+	for time.Now().Before(deadline) {
+		s.mu.RLock()
+		pending := s.startsPending > 0
+		s.mu.RUnlock()
+		if !pending {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // Transcribe transcribes the given WAV file
@@ -666,6 +690,7 @@ func writeTempWav(wav []byte) (string, error) {
 // WarmUp runs a tiny transcription to warm model/runtime paths; on whisper-server
 // the first request also compiles the Metal shaders.
 func (s *Service) WarmUp() error {
+	s.awaitServer(20 * time.Second)
 	_, err := s.transcribeWAV(wavBytes(syntheticSamples(900*time.Millisecond), 16000), "", "")
 	return err
 }

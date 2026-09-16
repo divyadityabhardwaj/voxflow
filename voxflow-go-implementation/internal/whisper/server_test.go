@@ -99,12 +99,12 @@ func TestServerTranscribes(t *testing.T) {
 	samples, wavPath := speechClip(t)
 	hello := helloChecker(t)
 	svc := newTestService(t, false)
+	if err := svc.WarmUp(); err != nil { // waits for the background start
+		t.Fatal(err)
+	}
 	srv := currentServer(svc)
 	if srv == nil {
 		t.Fatal("whisper-server did not start")
-	}
-	if err := svc.WarmUp(); err != nil {
-		t.Fatal(err)
 	}
 
 	hello(svc.TranscribeSamples(samples))
