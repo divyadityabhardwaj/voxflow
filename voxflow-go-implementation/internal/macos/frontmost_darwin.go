@@ -18,21 +18,18 @@ func FrontmostApp() (bundleID, name string, err error) {
 	frontmostMu.Lock()
 	defer frontmostMu.Unlock()
 
-	bundleID, err = runOSA(
-		`tell application "System Events" to get bundle identifier of first application process whose frontmost is true`,
-	)
+	out, err := runOSA(`tell application "System Events"
+	set p to first application process whose frontmost is true
+	return (bundle identifier of p) & linefeed & (name of p)
+end tell`)
 	if err != nil {
 		return "", "", err
 	}
-	bundleID = strings.TrimSpace(bundleID)
+	bundleID, name, _ = strings.Cut(out, "\n")
+	bundleID, name = strings.TrimSpace(bundleID), strings.TrimSpace(name)
 	if bundleID == "" {
 		return "", "", errors.New("no frontmost application")
 	}
-
-	name, _ = runOSA(
-		`tell application "System Events" to get name of first application process whose frontmost is true`,
-	)
-	name = strings.TrimSpace(name)
 
 	return bundleID, name, nil
 }
