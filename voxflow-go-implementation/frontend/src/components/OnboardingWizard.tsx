@@ -281,7 +281,10 @@ export default function OnboardingWizard({ onComplete }: Props) {
               id="onboarding-provider"
               className="select w-full mb-4"
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                setApiKey("");
+              }}
             >
               {PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>

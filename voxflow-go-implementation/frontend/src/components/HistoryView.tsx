@@ -199,7 +199,7 @@ export default function HistoryView() {
 
     try {
       await DeleteTranscript(id);
-      setTranscripts(transcripts.filter((t) => t.id !== id));
+      setTranscripts((prev) => prev.filter((t) => t.id !== id));
       if (selectedId === id) setSelectedId(null);
     } catch (err) {
       console.error("Failed to delete:", err);
