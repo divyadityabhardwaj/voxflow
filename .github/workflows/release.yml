@@ -27,14 +27,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
-          check-latest: true
+          go-version-file: voxflow-go-implementation/go.mod
           cache-dependency-path: voxflow-go-implementation/go.sum
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
@@ -45,7 +44,8 @@ jobs:
       - name: Build Application
         working-directory: ./voxflow-go-implementation
         run: |
-          wails build -platform ${{ matrix.platform }} -clean
+          wails build -platform ${{ matrix.platform }} -clean \
+            -ldflags "-X main.version=${GITHUB_REF_NAME#v}"
 
       - name: Create DMG
         working-directory: ./voxflow-go-implementation/build/bin

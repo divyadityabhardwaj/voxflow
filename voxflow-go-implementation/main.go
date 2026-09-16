@@ -19,6 +19,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// version is stamped at release time via -ldflags "-X main.version=1.2.3".
+var version = "dev"
+
 func main() {
 	// A packaged .app has no stdout, so mirror logs to ~/.voxflow/voxflow.log.
 	if dir, err := config.GetConfigDir(); err == nil {
@@ -93,7 +96,7 @@ func main() {
 			},
 			About: &mac.AboutInfo{
 				Title:   "voxflow",
-				Message: "AI-Powered Dictation App\n\nVersion 1.0.0",
+				Message: "AI-Powered Dictation App\n\nVersion " + version,
 			},
 			Appearance:           mac.NSAppearanceNameDarkAqua,
 			WebviewIsTransparent: true,
