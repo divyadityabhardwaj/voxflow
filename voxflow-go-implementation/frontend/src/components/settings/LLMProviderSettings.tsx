@@ -42,13 +42,20 @@ interface LLMProviderSettingsProps {
   handleDeleteCerebrasApiKey?: () => Promise<void>;
 }
 
-const PROVIDERS = [
+export const PROVIDERS = [
   { id: "gemini", label: "Gemini", sub: "Google AI (Cloud)" },
   { id: "openrouter", label: "OpenRouter", sub: "Multi-model API (Cloud)" },
   { id: "groq", label: "Groq", sub: "Fast inference (Cloud)" },
   { id: "cerebras", label: "Cerebras", sub: "Wafer-scale inference (Cloud)" },
   { id: "local", label: "Local", sub: "Ollama, LM Studio (Local, stays on device)" },
 ] as const;
+
+export const KEY_URLS: Record<string, string> = {
+  gemini: "https://makersuite.google.com/app/apikey",
+  openrouter: "https://openrouter.ai/settings",
+  groq: "https://console.groq.com/keys",
+  cerebras: "https://cloud.cerebras.ai",
+};
 
 function ApiKeyBlock({
   title,
@@ -289,7 +296,7 @@ export default function LLMProviderSettings({
         <ApiKeyBlock
           title="Gemini API key"
           hint="Get a key from"
-          href="https://makersuite.google.com/app/apikey"
+          href={KEY_URLS.gemini}
           linkLabel="Google AI Studio"
           placeholder="Enter API key"
           value={apiKey}
@@ -307,7 +314,7 @@ export default function LLMProviderSettings({
         <ApiKeyBlock
           title="OpenRouter API key"
           hint="Get a key from"
-          href="https://openrouter.ai/settings"
+          href={KEY_URLS.openrouter}
           linkLabel="OpenRouter Settings"
           placeholder="Enter API key"
           value={openRouterApiKey}
@@ -325,7 +332,7 @@ export default function LLMProviderSettings({
         <ApiKeyBlock
           title="Groq API key"
           hint="Get a key from"
-          href="https://console.groq.com/keys"
+          href={KEY_URLS.groq}
           linkLabel="Groq Console"
           placeholder="Enter API key"
           value={groqApiKey}
@@ -343,7 +350,7 @@ export default function LLMProviderSettings({
         <ApiKeyBlock
           title="Cerebras API key"
           hint="Get a key from"
-          href="https://cloud.cerebras.ai"
+          href={KEY_URLS.cerebras}
           linkLabel="Cerebras Cloud"
           placeholder="Enter API key"
           value={cerebrasApiKey}

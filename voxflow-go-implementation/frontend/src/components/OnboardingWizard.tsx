@@ -9,7 +9,14 @@ import {
   IsModelDownloaded,
   PromptAccessibilityExplanation,
   SetAPIKey,
+  SetCerebrasAPIKey,
+  SetGroqAPIKey,
+  SetLLMProvider,
+  SetLocalModel,
+  SetLocalURL,
+  SetOpenRouterAPIKey,
 } from "../../wailsjs/go/main/App";
+import { KEY_URLS, PROVIDERS } from "./settings/LLMProviderSettings";
 
 interface Props {
   onComplete: () => void;
@@ -18,10 +25,29 @@ interface Props {
 const STEPS = ["welcome", "accessibility", "model", "api", "done"] as const;
 type Step = (typeof STEPS)[number];
 
+const DEFAULT_LOCAL_URL = "http://localhost:11434";
+
+const KEY_SETTERS: Record<string, (key: string) => Promise<void>> = {
+  gemini: SetAPIKey,
+  openrouter: SetOpenRouterAPIKey,
+  groq: SetGroqAPIKey,
+  cerebras: SetCerebrasAPIKey,
+};
+
+const KEY_PLACEHOLDERS: Record<string, string> = {
+  gemini: "AIza...",
+  openrouter: "sk-or-...",
+  groq: "gsk_...",
+  cerebras: "csk-...",
+};
+
 export default function OnboardingWizard({ onComplete }: Props) {
   const [step, setStep] = useState<Step>("welcome");
   const [modelReady, setModelReady] = useState(false);
+  const [provider, setProvider] = useState("gemini");
   const [apiKey, setApiKey] = useState("");
+  const [localURL, setLocalURL] = useState(DEFAULT_LOCAL_URL);
+  const [localModel, setLocalModel] = useState("");
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -33,6 +59,12 @@ export default function OnboardingWizard({ onComplete }: Props) {
   useEffect(() => {
     IsModelDownloaded().then((ok) => {
       if (ok) setModelReady(true);
+    });
+
+    GetConfig().then((cfg) => {
+      setProvider(cfg.llm_provider || "gemini");
+      setLocalURL(cfg.local_url || DEFAULT_LOCAL_URL);
+      setLocalModel(cfg.local_model || "");
     });
 
     const checkAccess = () => {
@@ -85,10 +117,13 @@ export default function OnboardingWizard({ onComplete }: Props) {
     }
   };
 
-  const handleSaveApiKey = async () => {
-    if (apiKey.trim()) {
-      await SetAPIKey(apiKey.trim());
-      await GetConfig();
+  const handleSaveProvider = async () => {
+    await SetLLMProvider(provider);
+    if (provider === "local") {
+      await SetLocalURL(localURL.trim() || DEFAULT_LOCAL_URL);
+      await SetLocalModel(localModel.trim());
+    } else if (apiKey.trim()) {
+      await KEY_SETTERS[provider](apiKey.trim());
     }
     setStep("done");
   };
@@ -113,8 +148,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
               Welcome to VoxFlow
             </h1>
             <p className="text-sm text-secondary mb-6 leading-relaxed">
-              A quick setup covers permissions, the local Whisper model, and an
-              optional Gemini API key for text refinement.
+              A quick setup covers permissions, the local Whisper model, and
+              optional AI refinement of your dictation.
             </p>
             <button
               type="button"
@@ -217,7 +252,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
               Model ready
             </h2>
             <p className="text-sm text-secondary mb-6">
-              Whisper is installed. You can add an API key next or finish setup.
+              Whisper is installed. You can set up AI refinement next or finish
+              setup.
             </p>
             <button
               type="button"
@@ -232,24 +268,82 @@ export default function OnboardingWizard({ onComplete }: Props) {
         {step === "api" && (
           <>
             <h2 className="text-lg font-semibold text-text mb-3">
-              Gemini API key (optional)
+              AI refinement (optional)
             </h2>
             <p className="text-sm text-secondary mb-4">
               Refinement polishes dictation with an LLM. You can also set this
               later in Settings.
             </p>
-            <input
-              type="password"
-              className="input w-full mb-4"
-              placeholder="AIza..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
+            <label className="label" htmlFor="onboarding-provider">
+              Provider
+            </label>
+            <select
+              id="onboarding-provider"
+              className="select w-full mb-4"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+            >
+              {PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} — {p.sub}
+                </option>
+              ))}
+            </select>
+            {provider === "local" ? (
+              <>
+                <label className="label" htmlFor="onboarding-local-url">
+                  Server URL
+                </label>
+                <input
+                  id="onboarding-local-url"
+                  type="text"
+                  className="input w-full mb-4"
+                  placeholder={DEFAULT_LOCAL_URL}
+                  value={localURL}
+                  onChange={(e) => setLocalURL(e.target.value)}
+                />
+                <label className="label" htmlFor="onboarding-local-model">
+                  Model name
+                </label>
+                <input
+                  id="onboarding-local-model"
+                  type="text"
+                  className="input w-full"
+                  placeholder="qwen3:8b"
+                  value={localModel}
+                  onChange={(e) => setLocalModel(e.target.value)}
+                />
+                <p className="hint mb-4">
+                  Works with Ollama, LM Studio or any OpenAI-compatible server.
+                  Nothing leaves your machine.
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  type="password"
+                  className="input w-full"
+                  placeholder={KEY_PLACEHOLDERS[provider]}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                <p className="hint mb-4">
+                  <a
+                    href={KEY_URLS[provider]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Get a key
+                  </a>
+                </p>
+              </>
+            )}
             <div className="flex flex-col gap-3">
               <button
                 type="button"
                 className="btn-primary w-full"
-                onClick={handleSaveApiKey}
+                onClick={handleSaveProvider}
               >
                 Save & continue
               </button>
