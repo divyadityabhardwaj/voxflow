@@ -506,9 +506,10 @@ func (p *Pipeline) processRecording() {
 		llmDuration = time.Since(llmStart)
 
 		if err != nil {
-			p.emitToast(llmProvider+" error: "+err.Error(), "error")
-			p.resetToIdle()
-			return
+			// Losing the dictation is worse than pasting it unpolished.
+			logger.Warnf("[Pipeline] %s refinement failed, using raw transcription: %v", llmProvider, err)
+			p.emitToast(llmProvider+" error: "+err.Error()+" — pasted raw transcription", "warning")
+			polishedText, tokenCount, okToGo = rawText, 0, false
 		}
 
 		if okToGo {
