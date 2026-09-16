@@ -1,6 +1,7 @@
 package whisper
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -71,6 +72,10 @@ type Service struct {
 	prompt      string // initial prompt: custom vocabulary
 	mu          sync.RWMutex
 	loaded      bool
+
+	server         *whisperServer // resident whisper-server; nil means whisper-cli per call
+	serverRestarts int            // crash restarts since LoadModel, capped at one
+	noServer       bool           // force the whisper-cli path (tests)
 }
 
 // NewService creates a new Whisper service
@@ -399,11 +404,8 @@ func CleanupPartialDownloads() error {
 	return nil
 }
 
-// LoadModel loads the Whisper model
+// LoadModel loads the Whisper model and starts whisper-server for it when available.
 func (s *Service) LoadModel(modelSize string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	modelsDir, err := GetModelsDir()
 	if err != nil {
 		return err
@@ -416,14 +418,23 @@ func (s *Service) LoadModel(modelSize string) error {
 		return fmt.Errorf("model not found: %s. Please download it first", modelPath)
 	}
 
+	s.mu.Lock()
+	if s.loaded && s.modelPath == modelPath && s.server != nil {
+		s.mu.Unlock()
+		return nil
+	}
 	s.modelSize = modelSize
 	s.modelPath = modelPath
 	s.loaded = true
+	s.serverRestarts = 0
+	s.stopServerLocked()
+	s.mu.Unlock()
 
+	s.startServer()
 	return nil
 }
 
-// Transcribe transcribes the given WAV file using whisper.cpp CLI
+// Transcribe transcribes the given WAV file
 func (s *Service) Transcribe(wavPath string) (string, error) {
 	s.mu.RLock()
 	prompt := s.prompt
@@ -434,20 +445,42 @@ func (s *Service) Transcribe(wavPath string) (string, error) {
 // TranscribeWithPrompt transcribes the given WAV file using an optional initial prompt
 // to provide context for the model (helps with streaming/chunked transcription).
 func (s *Service) TranscribeWithPrompt(wavPath, prompt string) (string, error) {
+	wav, err := os.ReadFile(wavPath)
+	if err != nil {
+		return "", err
+	}
+	return s.transcribeWAV(wav, wavPath, prompt)
+}
+
+// transcribeWAV sends wav to the resident server when one is running and falls back
+// to whisper-cli, which needs the audio on disk (wavPath, or a temp file when empty).
+func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, error) {
 	s.mu.RLock()
-	loaded := s.loaded
-	modelPath := s.modelPath
-	language := s.language
-	threads := s.threads
+	loaded, modelPath, language, threads, srv := s.loaded, s.modelPath, s.language, s.threads, s.server
 	s.mu.RUnlock()
 
 	if !loaded {
 		return "", fmt.Errorf("model not loaded")
 	}
 
+	if srv != nil {
+		text, err := srv.transcribe(wav, language, prompt)
+		if err == nil {
+			return text, nil
+		}
+		logger.Warnf("[Whisper] whisper-server request failed, falling back to whisper-cli: %v", err)
+	}
+
 	whisperBin := s.findWhisperBinary()
 	if whisperBin == "" {
 		return "", fmt.Errorf("whisper CLI binary not found. Please install whisper.cpp or provide the binary at ~/.voxflow/bin/whisper-cli")
+	}
+	if wavPath == "" {
+		var err error
+		if wavPath, err = writeTempWav(wav); err != nil {
+			return "", err
+		}
+		defer os.Remove(wavPath)
 	}
 	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language, threads)
 }
@@ -469,14 +502,22 @@ func (s *Service) SetPrompt(prompt string) {
 	s.prompt = strings.TrimSpace(prompt)
 }
 
-// SetThreads sets the number of threads to pass to Whisper CLI (0 = CLI default).
+// SetThreads sets the number of threads to pass to Whisper (0 = default).
+// Threads are fixed at whisper-server start, so a running server is restarted.
 func (s *Service) SetThreads(threads int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if threads < 0 {
 		threads = 0
 	}
+	s.mu.Lock()
+	changed := s.threads != threads
 	s.threads = threads
+	if changed {
+		s.stopServerLocked()
+	}
+	s.mu.Unlock()
+	if changed {
+		s.startServer()
+	}
 }
 
 // findWhisperBinary returns the whisper-cli path, cached after the first successful lookup.
@@ -577,223 +618,82 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 	return strings.TrimSpace(string(content)), nil
 }
 
-// TranscribeSamples transcribes raw audio samples using Whisper CLI
+// TranscribeSamples transcribes raw 16 kHz mono PCM samples
 func (s *Service) TranscribeSamples(samples []int16) (string, error) {
-	s.mu.RLock()
-	loaded := s.loaded
-	modelPath := s.modelPath
-	language := s.language
-	threads := s.threads
-	prompt := s.prompt
-	s.mu.RUnlock()
-
-	if !loaded {
-		return "", fmt.Errorf("model not loaded")
-	}
-
-	whisperBin := s.findWhisperBinary()
-	if whisperBin == "" {
-		return "", fmt.Errorf("whisper CLI binary not found")
-	}
-
-	// Write samples to temp WAV
-	wavPath, err := writeSamplesToWav(samples, 16000)
-	if err != nil {
-		return "", fmt.Errorf("failed to write WAV: %w", err)
-	}
-	defer os.Remove(wavPath)
-
-	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language, threads)
-}
-
-// writeSamplesToWav writes int16 PCM mono samples to a temp WAV file
-func writeSamplesToWav(samples []int16, sampleRate int) (string, error) {
 	if len(samples) == 0 {
 		return "", fmt.Errorf("no samples")
 	}
-
-	tempDir := os.TempDir()
-	filename := fmt.Sprintf("voxflow_stream_%d.wav", time.Now().UnixNano())
-	filepath := filepath.Join(tempDir, filename)
-
-	file, err := os.Create(filepath)
-	if err != nil {
-		return "", fmt.Errorf("failed to create WAV file: %w", err)
-	}
-	defer file.Close()
-
-	// Write WAV header
-	channels := 1
-	bitsPerSample := 16
-	byteRate := sampleRate * channels * bitsPerSample / 8
-	blockAlign := channels * bitsPerSample / 8
-	dataSize := len(samples) * 2
-	fileSize := 36 + dataSize
-
-	// RIFF header
-	if _, err := file.Write([]byte("RIFF")); err != nil {
-		return "", fmt.Errorf("failed to write RIFF chunk descriptor: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(fileSize)); err != nil {
-		return "", fmt.Errorf("failed to write WAV file size: %w", err)
-	}
-	if _, err := file.Write([]byte("WAVE")); err != nil {
-		return "", fmt.Errorf("failed to write WAVE format descriptor: %w", err)
-	}
-
-	// fmt subchunk
-	if _, err := file.Write([]byte("fmt ")); err != nil {
-		return "", fmt.Errorf("failed to write fmt subchunk ID: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(16)); err != nil { // Subchunk size
-		return "", fmt.Errorf("failed to write fmt subchunk size: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(1)); err != nil { // Audio format (PCM)
-		return "", fmt.Errorf("failed to write audio format: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(channels)); err != nil { // Num channels
-		return "", fmt.Errorf("failed to write num channels: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(sampleRate)); err != nil { // Sample rate
-		return "", fmt.Errorf("failed to write sample rate: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(byteRate)); err != nil { // Byte rate
-		return "", fmt.Errorf("failed to write byte rate: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(blockAlign)); err != nil { // Block align
-		return "", fmt.Errorf("failed to write block align: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(bitsPerSample)); err != nil { // Bits per sample
-		return "", fmt.Errorf("failed to write bits per sample: %w", err)
-	}
-
-	// data subchunk
-	if _, err := file.Write([]byte("data")); err != nil {
-		return "", fmt.Errorf("failed to write data subchunk ID: %w", err)
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(dataSize)); err != nil {
-		return "", fmt.Errorf("failed to write data subchunk size: %w", err)
-	}
-
-	// Write entire audio data slice at once to prevent slow iteration over samples
-	if err := binary.Write(file, binary.LittleEndian, samples); err != nil {
-		return "", fmt.Errorf("failed to write audio data samples: %w", err)
-	}
-
-	return filepath, nil
+	s.mu.RLock()
+	prompt := s.prompt
+	s.mu.RUnlock()
+	return s.transcribeWAV(wavBytes(samples, 16000), "", prompt)
 }
 
-// WarmUp runs a tiny transcription to warm model/runtime paths.
-func (s *Service) WarmUp() error {
-	s.mu.RLock()
-	loaded := s.loaded
-	modelPath := s.modelPath
-	language := s.language
-	threads := s.threads
-	s.mu.RUnlock()
-	if !loaded {
-		return fmt.Errorf("model not loaded")
-	}
+// wavBytes encodes 16-bit mono PCM as a WAV file in memory.
+func wavBytes(samples []int16, sampleRate int) []byte {
+	dataSize := len(samples) * 2
+	buf := bytes.NewBuffer(make([]byte, 0, 44+dataSize))
+	le := binary.LittleEndian
+	buf.WriteString("RIFF")
+	binary.Write(buf, le, int32(36+dataSize))
+	buf.WriteString("WAVEfmt ")
+	binary.Write(buf, le, int32(16)) // fmt chunk size
+	binary.Write(buf, le, int16(1))  // PCM
+	binary.Write(buf, le, int16(1))  // mono
+	binary.Write(buf, le, int32(sampleRate))
+	binary.Write(buf, le, int32(sampleRate*2)) // byte rate
+	binary.Write(buf, le, int16(2))            // block align
+	binary.Write(buf, le, int16(16))           // bits per sample
+	buf.WriteString("data")
+	binary.Write(buf, le, int32(dataSize))
+	binary.Write(buf, le, samples)
+	return buf.Bytes()
+}
 
-	whisperBin := s.findWhisperBinary()
-	if whisperBin == "" {
-		return fmt.Errorf("whisper CLI binary not found")
-	}
-
-	wavPath, err := createSyntheticWav(900 * time.Millisecond)
+func writeTempWav(wav []byte) (string, error) {
+	f, err := os.CreateTemp("", "voxflow_*.wav")
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer os.Remove(wavPath)
+	if _, err := f.Write(wav); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), f.Close()
+}
 
-	_, err = s.transcribeWithCLI(whisperBin, modelPath, wavPath, "", language, threads)
+// WarmUp runs a tiny transcription to warm model/runtime paths; on whisper-server
+// the first request also compiles the Metal shaders.
+func (s *Service) WarmUp() error {
+	_, err := s.transcribeWAV(wavBytes(syntheticSamples(900*time.Millisecond), 16000), "", "")
 	return err
 }
 
-func createSyntheticWav(d time.Duration) (string, error) {
-	if d <= 0 {
-		d = time.Second
-	}
+// syntheticSamples returns d of voice-like 16 kHz tone so warm-up
+// runs exercise the decoder without needing real speech.
+func syntheticSamples(d time.Duration) []int16 {
 	const sampleRate = 16000
-	const channels = 1
 	n := int(float64(sampleRate) * d.Seconds())
 	if n < sampleRate/2 {
 		n = sampleRate / 2
 	}
-
 	samples := make([]int16, n)
-	f1 := 180.0
-	f2 := 320.0
-	for i := 0; i < n; i++ {
+	for i := range samples {
 		t := float64(i) / sampleRate
 		envelope := 0.5 + 0.5*math.Sin(2*math.Pi*1.8*t)
-		v := envelope * (0.55*math.Sin(2*math.Pi*f1*t) + 0.35*math.Sin(2*math.Pi*f2*t))
+		v := envelope * (0.55*math.Sin(2*math.Pi*180*t) + 0.35*math.Sin(2*math.Pi*320*t))
 		samples[i] = int16(v * 12000)
 	}
-
-	file, err := os.CreateTemp(os.TempDir(), "voxflow_warmup_*.wav")
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	dataSize := len(samples) * 2
-	byteRate := sampleRate * channels * 2
-	blockAlign := channels * 2
-	fileSize := 36 + dataSize
-
-	if _, err := file.WriteString("RIFF"); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(fileSize)); err != nil {
-		return "", err
-	}
-	if _, err := file.WriteString("WAVE"); err != nil {
-		return "", err
-	}
-	if _, err := file.WriteString("fmt "); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(16)); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(1)); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(channels)); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(sampleRate)); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(byteRate)); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(blockAlign)); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int16(16)); err != nil {
-		return "", err
-	}
-	if _, err := file.WriteString("data"); err != nil {
-		return "", err
-	}
-	if err := binary.Write(file, binary.LittleEndian, int32(dataSize)); err != nil {
-		return "", err
-	}
-
-	if err := binary.Write(file, binary.LittleEndian, samples); err != nil {
-		return "", err
-	}
-
-	return file.Name(), nil
+	return samples
 }
 
-// Close closes the service
+// Close closes the service and stops whisper-server
 func (s *Service) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.loaded = false
+	s.stopServerLocked()
 	return nil
 }
 
