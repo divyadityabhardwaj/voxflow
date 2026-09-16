@@ -103,6 +103,7 @@ export default function AppRulesSettings() {
           >
             <option value="paste">Paste (⌘V)</option>
             <option value="clipboard">Clipboard only</option>
+            <option value="type">Type keystrokes (for apps that remap ⌘V)</option>
           </select>
         </div>
       </div>
