@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -124,7 +125,10 @@ func DoWithRetry(hc *http.Client, newReq func() (*http.Request, error)) ([]byte,
 
 		resp, err := hc.Do(req)
 		if err != nil {
-			if attempt == retryMaxAttempts {
+			// A timeout already cost the full client deadline; retrying would keep
+			// the pipeline in "Refining" for a minute on a dead network.
+			var ne net.Error
+			if attempt == retryMaxAttempts || (errors.As(err, &ne) && ne.Timeout()) {
 				return nil, 0, fmt.Errorf("failed to send request: %w", err)
 			}
 			time.Sleep(delay)
