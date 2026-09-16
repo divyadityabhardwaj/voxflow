@@ -44,7 +44,8 @@ type Config struct {
 	LocalModel string `json:"local_model"` // Free-form model name sent to the local server
 	LocalURL   string `json:"local_url"`   // Base URL of the local OpenAI-compatible server
 
-	RefinementMode      string             `json:"refinement_mode"` // "refine", "raw", "copy-only"
+	Vocabulary          string             `json:"vocabulary,omitempty"` // comma-separated terms fed to Whisper and the LLM
+	RefinementMode      string             `json:"refinement_mode"`      // "refine", "raw", "copy-only"
 	MuteSystemAudio     *bool              `json:"mute_system_audio,omitempty"`
 	AppRules            map[string]AppRule `json:"app_rules,omitempty"`
 	OnboardingCompleted bool               `json:"onboarding_completed"`
@@ -536,6 +537,20 @@ func (c *Config) SetLocalURL(url string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LocalURL = url
+}
+
+// GetVocabulary returns the user's custom vocabulary (names, jargon, identifiers).
+func (c *Config) GetVocabulary() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Vocabulary
+}
+
+// SetVocabulary sets the custom vocabulary.
+func (c *Config) SetVocabulary(v string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Vocabulary = v
 }
 
 // GetRefinementMode returns the configured refinement mode ("refine", "raw", "copy-only").

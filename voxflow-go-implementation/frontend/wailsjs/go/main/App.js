@@ -310,6 +310,14 @@ export function SetRefinementMode(arg1) {
   return window['go']['main']['App']['SetRefinementMode'](arg1);
 }
 
+export function SetVocabulary(arg1) {
+  return window['go']['main']['App']['SetVocabulary'](arg1);
+}
+
+export function SetWhisperLanguage(arg1) {
+  return window['go']['main']['App']['SetWhisperLanguage'](arg1);
+}
+
 export function SetWhisperModel(arg1) {
   return window['go']['main']['App']['SetWhisperModel'](arg1);
 }

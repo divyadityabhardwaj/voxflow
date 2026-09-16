@@ -67,6 +67,7 @@ type Service struct {
 	whisperPath string // Path to whisper.cpp binary
 	language    string
 	threads     int
+	prompt      string // initial prompt: custom vocabulary
 	mu          sync.RWMutex
 	loaded      bool
 }
@@ -423,7 +424,10 @@ func (s *Service) LoadModel(modelSize string) error {
 
 // Transcribe transcribes the given WAV file using whisper.cpp CLI
 func (s *Service) Transcribe(wavPath string) (string, error) {
-	return s.TranscribeWithPrompt(wavPath, "")
+	s.mu.RLock()
+	prompt := s.prompt
+	s.mu.RUnlock()
+	return s.TranscribeWithPrompt(wavPath, prompt)
 }
 
 // TranscribeWithPrompt transcribes the given WAV file using an optional initial prompt
@@ -455,6 +459,13 @@ func (s *Service) SetLanguage(language string) {
 		language = "en"
 	}
 	s.language = strings.TrimSpace(language)
+}
+
+// SetPrompt sets the initial prompt passed to Whisper (used for custom vocabulary).
+func (s *Service) SetPrompt(prompt string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.prompt = strings.TrimSpace(prompt)
 }
 
 // SetThreads sets the number of threads to pass to Whisper CLI (0 = CLI default).
@@ -562,6 +573,7 @@ func (s *Service) TranscribeSamples(samples []int16) (string, error) {
 	modelPath := s.modelPath
 	language := s.language
 	threads := s.threads
+	prompt := s.prompt
 	s.mu.RUnlock()
 
 	if !loaded {
@@ -580,7 +592,7 @@ func (s *Service) TranscribeSamples(samples []int16) (string, error) {
 	}
 	defer os.Remove(wavPath)
 
-	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, "", language, threads)
+	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language, threads)
 }
 
 // writeSamplesToWav writes int16 PCM mono samples to a temp WAV file

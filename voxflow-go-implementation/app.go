@@ -60,6 +60,8 @@ func NewApp() *App {
 	}
 	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
 	app.whisperService.SetThreads(cfg.GetWhisperThreads())
+	app.whisperService.SetPrompt(cfg.GetVocabulary())
+	llm.SetVocabulary(cfg.GetVocabulary())
 	app.windowMgr = window.NewManager(app.ctx, cfg)
 
 	// Initialize services that do not require Wails context

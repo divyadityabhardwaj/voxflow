@@ -34,6 +34,8 @@ import {
   CheckLocalModel,
   SetRefinementMode,
   SetMuteSystemAudio,
+  SetVocabulary,
+  SetWhisperLanguage,
 } from "../../wailsjs/go/main/App";
 
 import { EventsOn } from "../../wailsjs/runtime/runtime";
@@ -67,7 +69,26 @@ interface Config {
   local_model: string;
   refinement_mode: string;
   mute_system_audio: boolean;
+  vocabulary: string;
+  whisper_language: string;
 }
+
+const LANGUAGES: [string, string][] = [
+  ["auto", "Auto-detect"],
+  ["en", "English"],
+  ["es", "Spanish"],
+  ["fr", "French"],
+  ["de", "German"],
+  ["it", "Italian"],
+  ["pt", "Portuguese"],
+  ["nl", "Dutch"],
+  ["hi", "Hindi"],
+  ["ja", "Japanese"],
+  ["ko", "Korean"],
+  ["zh", "Chinese"],
+  ["ru", "Russian"],
+  ["ar", "Arabic"],
+];
 
 interface ModelInfo {
   name: string;
@@ -117,6 +138,8 @@ export default function SettingsView() {
   const [cerebrasModels, setCerebrasModels] = useState<string[]>([]);
   const [cerebrasModelsLoading, setCerebrasModelsLoading] = useState(false);
   const [cerebrasApiKey, setCerebrasApiKey] = useState("");
+
+  const [vocabulary, setVocabulary] = useState("");
 
   // Local Server State
   const [localURL, setLocalURL] = useState("http://localhost:11434");
@@ -186,6 +209,7 @@ export default function SettingsView() {
       setConfig(cfg as Config);
       setLocalURL((cfg as Config).local_url || "http://localhost:11434");
       setLocalModel((cfg as Config).local_model || "");
+      setVocabulary((cfg as Config).vocabulary || "");
     } catch (err) {
       console.error("Failed to load config:", err);
     }
@@ -676,6 +700,32 @@ export default function SettingsView() {
     }
   };
 
+  const handleSaveVocabulary = async () => {
+    setSaving("vocabulary");
+    try {
+      await SetVocabulary(vocabulary);
+      setConfig((prev) => (prev ? { ...prev, vocabulary } : null));
+      showSuccess("vocabulary");
+    } catch (err) {
+      console.error("Failed to save vocabulary:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleLanguageChange = async (lang: string) => {
+    setSaving("language");
+    try {
+      await SetWhisperLanguage(lang);
+      setConfig((prev) => (prev ? { ...prev, whisper_language: lang } : null));
+      showSuccess("language");
+    } catch (err) {
+      console.error("Failed to save language:", err);
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const handleMuteSystemAudioChange = async (value: boolean) => {
     setSaving("muteSystemAudio");
     try {
@@ -933,6 +983,32 @@ export default function SettingsView() {
           handleMuteSystemAudioChange={handleMuteSystemAudioChange}
         />
 
+        <SettingsSection
+          title="Vocabulary"
+          description="Names, product terms and identifiers you say often. Whisper and the refinement model will prefer these spellings."
+        >
+          <textarea
+            className="input font-mono text-sm"
+            rows={3}
+            placeholder="VoxFlow, Wails, Kubernetes, camelCase, Divyaditya"
+            value={vocabulary}
+            onChange={(e) => setVocabulary(e.target.value)}
+          />
+          <div className="flex items-center justify-end gap-3 mt-2">
+            {success === "vocabulary" && (
+              <span className="hint text-[var(--success)] !mt-0">Saved</span>
+            )}
+            <button
+              type="button"
+              onClick={handleSaveVocabulary}
+              disabled={saving === "vocabulary" || vocabulary === (config.vocabulary || "")}
+              className="btn btn-primary"
+            >
+              {saving === "vocabulary" ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </SettingsSection>
+
         <AppRulesSettings />
 
         {/* Global Key Hotkeys */}
@@ -945,9 +1021,30 @@ export default function SettingsView() {
         />
 
         <SettingsSection
-          title="Speech recognition models"
+          title="Speech recognition"
           description="Download and manage Whisper models. Larger models are more accurate but slower."
         >
+          <div className="mb-4">
+            <label className="label" htmlFor="whisper-language">
+              Language
+            </label>
+            <select
+              id="whisper-language"
+              className="select"
+              value={config.whisper_language || "en"}
+              disabled={saving === "language"}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+            >
+              {LANGUAGES.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <p className="hint">
+              Auto-detect costs a little accuracy and speed; pick a fixed language when you can.
+            </p>
+          </div>
           <div className="space-y-2">
             {modelsLoading ? (
               <p className="text-sm text-tertiary text-center py-4">

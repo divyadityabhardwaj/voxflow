@@ -108,6 +108,7 @@ export namespace main {
 	    local_url: string;
 	    refinement_mode: string;
 	    mute_system_audio: boolean;
+	    vocabulary: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigResponse(source);
@@ -134,6 +135,7 @@ export namespace main {
 	        this.local_url = source["local_url"];
 	        this.refinement_mode = source["refinement_mode"];
 	        this.mute_system_audio = source["mute_system_audio"];
+	        this.vocabulary = source["vocabulary"];
 	    }
 	}
 	export class FrontmostAppInfo {

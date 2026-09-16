@@ -6,6 +6,7 @@ import (
 	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
 	"voxflow/internal/groq"
+	"voxflow/internal/llm"
 	"voxflow/internal/logger"
 	"voxflow/internal/openrouter"
 	"voxflow/internal/whisper"
@@ -32,6 +33,7 @@ type ConfigResponse struct {
 	LocalURL            string `json:"local_url"`
 	RefinementMode      string `json:"refinement_mode"`
 	MuteSystemAudio     bool   `json:"mute_system_audio"`
+	Vocabulary          string `json:"vocabulary"`
 }
 
 // GetConfig returns the current configuration strongly typed.
@@ -56,6 +58,7 @@ func (a *App) GetConfig() *ConfigResponse {
 		LocalURL:            a.config.GetLocalURL(),
 		RefinementMode:      a.config.GetRefinementMode(),
 		MuteSystemAudio:     a.config.GetMuteSystemAudio(),
+		Vocabulary:          a.config.GetVocabulary(),
 	}
 }
 
@@ -411,6 +414,21 @@ func (a *App) GetCerebrasModel() string {
 // SetRefinementMode sets the refinement mode ("refine", "raw", "copy-only")
 func (a *App) SetRefinementMode(mode string) error {
 	a.config.SetRefinementMode(mode)
+	return a.config.Save()
+}
+
+// SetVocabulary saves custom terms and pushes them to Whisper and the LLM prompt.
+func (a *App) SetVocabulary(v string) error {
+	a.config.SetVocabulary(v)
+	a.whisperService.SetPrompt(v)
+	llm.SetVocabulary(v)
+	return a.config.Save()
+}
+
+// SetWhisperLanguage sets the transcription language ("auto" for detection).
+func (a *App) SetWhisperLanguage(lang string) error {
+	a.config.SetWhisperLanguage(lang)
+	a.whisperService.SetLanguage(lang)
 	return a.config.Save()
 }
 

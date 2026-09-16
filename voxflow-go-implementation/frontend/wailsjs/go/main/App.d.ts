@@ -158,6 +158,10 @@ export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 
 export function SetRefinementMode(arg1:string):Promise<void>;
 
+export function SetVocabulary(arg1:string):Promise<void>;
+
+export function SetWhisperLanguage(arg1:string):Promise<void>;
+
 export function SetWhisperModel(arg1:string):Promise<void>;
 
 export function ShowMiniMode():Promise<void>;
