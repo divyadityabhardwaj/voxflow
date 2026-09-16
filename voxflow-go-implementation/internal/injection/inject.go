@@ -60,12 +60,15 @@ func (s *Service) Inject(text string) error {
 	time.Sleep(50 * time.Millisecond)
 
 	// Restore clipboard asynchronously so Inject returns immediately.
-	if s.preserveClipboard {
+	// Electron apps and terminals can service the paste well after the key event,
+	// so wait long enough that they read our text, not the restored original.
+	// A nil original means it was not text (image, file): leave ours in place
+	// rather than clearing it.
+	if s.preserveClipboard && len(originalClipboard) > 0 {
 		go func() {
-			time.Sleep(150 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			// Verify the clipboard still has the text we pasted.
 			// If the user has copied something else in the meantime, do not overwrite it.
 			current := clipboard.Read(clipboard.FmtText)
 			if string(current) == text {
