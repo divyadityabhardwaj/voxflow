@@ -110,19 +110,19 @@ func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *Op
 	}
 }
 
-// doPost sends reqBody to url with retry/backoff on transient failures (429/502/503
-// and network errors). Returns the raw response body on success.
-func (c *OpenAIClient) doPost(reqBody []byte, url string) ([]byte, int, error) {
+// DoWithRetry sends the request produced by newReq, retrying network errors and
+// 429/502/503 with exponential backoff. newReq is called per attempt so the body
+// reader is fresh. Returns the body and status of the final attempt.
+func DoWithRetry(hc *http.Client, newReq func() (*http.Request, error)) ([]byte, int, error) {
 	delay := retryBaseDelay
 	var lastStatus int
 	for attempt := 0; attempt <= retryMaxAttempts; attempt++ {
-		httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+		req, err := newReq()
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to create request: %w", err)
 		}
-		c.applyHeaders(httpReq)
 
-		resp, err := c.HTTPClient.Do(httpReq)
+		resp, err := hc.Do(req)
 		if err != nil {
 			if attempt == retryMaxAttempts {
 				return nil, 0, fmt.Errorf("failed to send request: %w", err)
@@ -149,42 +149,26 @@ func (c *OpenAIClient) doPost(reqBody []byte, url string) ([]byte, int, error) {
 	return nil, lastStatus, nil
 }
 
-// doGet sends an HTTP GET to url with the same retry/backoff strategy as doPost.
+func (c *OpenAIClient) doPost(reqBody []byte, url string) ([]byte, int, error) {
+	return DoWithRetry(c.HTTPClient, func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+		if err != nil {
+			return nil, err
+		}
+		c.applyHeaders(req)
+		return req, nil
+	})
+}
+
 func (c *OpenAIClient) doGet(url string) ([]byte, int, error) {
-	delay := retryBaseDelay
-	var lastStatus int
-	for attempt := 0; attempt <= retryMaxAttempts; attempt++ {
-		httpReq, err := http.NewRequest("GET", url, nil)
+	return DoWithRetry(c.HTTPClient, func() (*http.Request, error) {
+		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+			return nil, err
 		}
-		c.applyHeaders(httpReq)
-
-		resp, err := c.HTTPClient.Do(httpReq)
-		if err != nil {
-			if attempt == retryMaxAttempts {
-				return nil, 0, fmt.Errorf("failed to send request: %w", err)
-			}
-			time.Sleep(delay)
-			delay = min(delay*2, retryMaxDelay)
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
-		}
-
-		lastStatus = resp.StatusCode
-		if !isRetryableStatus(resp.StatusCode) || attempt == retryMaxAttempts {
-			return body, lastStatus, nil
-		}
-
-		time.Sleep(delay)
-		delay = min(delay*2, retryMaxDelay)
-	}
-	return nil, lastStatus, nil
+		c.applyHeaders(req)
+		return req, nil
+	})
 }
 
 // applyHeaders sets Content-Type, Authorization (when APIKey is set), and any

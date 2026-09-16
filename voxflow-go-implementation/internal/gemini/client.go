@@ -71,6 +71,24 @@ func (c *Client) SetModel(modelName string) {
 	c.modelName = modelName
 }
 
+// do sends a JSON request with retry/backoff. The key goes in a header rather
+// than the query string so it never lands in proxy or access logs.
+func (c *Client) do(method, url string, body []byte) ([]byte, int, error) {
+	return llm.DoWithRetry(c.httpClient, func() (*http.Request, error) {
+		var r io.Reader
+		if body != nil {
+			r = bytes.NewReader(body)
+		}
+		req, err := http.NewRequest(method, url, r)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-goog-api-key", c.apiKey)
+		return req, nil
+	})
+}
+
 // Request represents a Gemini API request
 type Request struct {
 	Contents          []Content        `json:"contents"`
@@ -161,27 +179,10 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Build URL with API key
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, activeModel, c.apiKey)
-
-	// Make HTTP request
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	url := fmt.Sprintf("%s/models/%s:generateContent", baseAPIURL, activeModel)
+	respBody, _, err := c.do("POST", url, reqBody)
 	if err != nil {
-		return "", 0, false, fmt.Errorf("failed to create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	// Send request
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return "", 0, false, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", 0, false, fmt.Errorf("failed to read response: %w", err)
+		return "", 0, false, err
 	}
 
 	// Parse response
@@ -262,23 +263,10 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, activeModel, c.apiKey)
-
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
+	url := fmt.Sprintf("%s/models/%s:generateContent", baseAPIURL, activeModel)
+	respBody, _, err := c.do("POST", url, reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return "", err
 	}
 
 	var geminiResp Response
@@ -330,22 +318,9 @@ func (c *Client) ListModels() ([]string, error) {
 	}
 	c.modelsMu.Unlock()
 
-	url := fmt.Sprintf("%s/models?key=%s", baseAPIURL, c.apiKey)
-
-	httpReq, err := http.NewRequest("GET", url, nil)
+	respBody, _, err := c.do("GET", baseAPIURL+"/models", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, err
 	}
 
 	var listResp ModelListResponse
@@ -408,7 +383,7 @@ func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 		return 0, 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", baseAPIURL, modelName, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent", baseAPIURL, modelName)
 
 	startTime := time.Now()
 
@@ -417,6 +392,7 @@ func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 		return 0, 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", c.apiKey)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
