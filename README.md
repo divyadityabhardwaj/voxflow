@@ -30,10 +30,12 @@ VoxFlow acts as a system-level overlay. It works inside any application where yo
 
 ### 3. Key Productivity Features
 
-- **Streaming Transcription**: Real-time transcription with chunk processing and live feedback during recording.
-- **History Vault**: Access and search through past transcriptions with raw and polished views.
-- **Optimized Performance**: Whisper thread autotuning, warm-up, and silence trimming for improved transcription accuracy and speed.
-- **Modernized Design**: Clean, compact UI with improved drag-handle implementation and intuitive controls.
+- **Streaming Transcription**: Audio is transcribed in chunks while you speak, split at pauses so no word is cut in half, with live feedback during recording.
+- **Resident Model**: whisper.cpp stays loaded in a local `whisper-server`, so each chunk costs milliseconds instead of a fresh model load.
+- **Menu Bar Control**: A status bar icon shows recording state and offers start/stop, open, settings and quit.
+- **Custom Vocabulary**: Names, jargon and identifiers you use often are fed to both Whisper and the refinement model.
+- **Per-App Rules**: Choose raw, refined or copy-only output and paste, clipboard or typed-keystroke delivery per application.
+- **History Vault**: Search past transcriptions, compare raw and polished text, and rewrite any entry with a custom instruction.
 
 ## Troubleshooting
 

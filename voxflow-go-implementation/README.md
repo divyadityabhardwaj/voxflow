@@ -6,50 +6,51 @@ VoxFlow is a macOS-optimized voice-to-text tool that captures your voice, transc
 
 ## How It Works
 
-1.  **Global Capture**: A system-wide hotkey (`Cmd+Shift+V`) triggers the recording state.
-2.  **Audio Processing**: The app captures system audio via PortAudio and saves it as a high-fidelity WAV file.
-3.  **Local Transcription**: The audio is processed locally using `whisper.cpp` with streaming transcription, chunk processing, and real-time updates. No voice data leaves your machine.
-4.  **AI refinement**: The raw text is sent to an LLM (Gemini, Groq, OpenRouter, or Local GGUF) for punctuation, filler removal, and style formatting.
-5.  **Smart Injection**: The polished text is automatically injected into the active application's cursor position using AppleScript.
+1.  **Global Capture**: A hands-free hotkey (`Cmd+Shift+Space`, press to start and again to stop) or a push-to-talk hotkey (`Cmd+Shift+P`, hold to record) triggers recording. The menu bar icon does the same.
+2.  **Audio Processing**: Microphone audio is captured via PortAudio at 16 kHz and streamed in chunks of up to 8 s, each cut at the quietest pause so words are never split.
+3.  **Local Transcription**: Chunks are transcribed by `whisper.cpp`, kept resident in a local `whisper-server` process (falling back to `whisper-cli` per call when the server binary is missing). No voice data leaves your machine.
+4.  **AI refinement**: The raw text is sent to an LLM (Gemini, OpenRouter, Groq, Cerebras, or a local OpenAI-compatible server such as Ollama) for punctuation, filler removal and formatting. Raw and copy-only modes skip this step entirely.
+5.  **Smart Injection**: The polished text is pasted into the frontmost app with a simulated `Cmd+V` (CoreGraphics events), or, per app rule, typed as keystrokes or only copied to the clipboard.
 
 ## Project Structure
 
 ```text
 .
-├── app.go                # Main Wails application logic & event handling
-├── main.go               # Entry point and dependency injection
-├── window_darwin.go      # macOS-specific window styling (rounded corners, etc.)
-├── internal/             # Core backend services
-│   ├── audio/            # PortAudio recording implementation
-│   ├── hotkey/           # Global shortcut management (macOS)
-│   ├── whisper/          # whisper.cpp CLI wrapper and model management
-│   ├── llm/              # Refinement prompts and provider abstractions
-│   ├── injection/        # AppleScript-based text injection service
-│   ├── history/          # SQLite-based storage for past transcripts
-│   └── config/           # App settings and API key management
-└── frontend/             # Single Page Application (React + Vite)
-    ├── src/
-    │   ├── components/   # MainView, HistoryView, Settings, etc.
-    │   └── contexts/     # Application state management
+├── main.go               # Entry point, Wails options, native menu
+├── app.go, app_*.go      # Methods bound to the frontend (config, history, models, window, rules)
+├── internal/
+│   ├── orchestrator/     # Recording → transcription → refinement → injection pipeline
+│   ├── audio/            # PortAudio capture, pause-aware chunking, system mute
+│   ├── whisper/          # Model downloads, whisper-server client, whisper-cli fallback
+│   ├── llm/              # Shared prompt, JSON parsing, OpenAI-compatible client, retry
+│   ├── gemini/, groq/, cerebras/, openrouter/, localclient/   # Providers
+│   ├── injection/        # Cmd+V paste, keystroke typing, clipboard (CoreGraphics)
+│   ├── hotkey/           # Global shortcuts and recording state machine
+│   ├── window/           # Mini pill / full window management, menu bar status item
+│   ├── history/          # SQLite transcript storage and search
+│   ├── config/           # ~/.voxflow/config.json and per-app rules
+│   └── macos/, logger/, events/
+└── frontend/             # React + TypeScript + Tailwind (Vite)
+    └── src/components/   # MainView, HistoryView, SettingsView, OnboardingWizard, RecordingIndicator
 ```
 
 ## Tech Stack
 
 - **Framework**: [Wails v2](https://wails.io/) (Go backend, Web frontend)
 - **Frontend**: React + TypeScript + Tailwind CSS
-- **STT Engine**: [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (Local, high-performance C++ with streaming transcription, thread autotuning, and silence trimming)
-- **Refinement**: Google Gemini, Groq, OpenRouter, Cerebras, or local LLMs (Ollama/GGUF)
+- **STT Engine**: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via a resident `whisper-server` (Metal on Apple Silicon), `whisper-cli` fallback
+- **Refinement**: Google Gemini, OpenRouter, Groq, Cerebras, or any local OpenAI-compatible server (Ollama, LM Studio, llama.cpp)
 - **Database**: SQLite (via `modernc.org/sqlite`)
-- **Injection**: AppleScript (for seamless system-level pasting)
+- **Injection**: CoreGraphics key events (simulated `Cmd+V` or unicode keystrokes)
 
 ## Prerequisites
 
 - **macOS** (Optimized for Apple Silicon)
-- **Go 1.21+**
-- **Node.js 18+**
+- **Go 1.24+**
+- **Node.js 20.19+**
 - **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 - **PortAudio**: `brew install portaudio`
-- **whisper-cli**: `brew install whisper-cpp`
+- **whisper.cpp**: `brew install whisper-cpp` (provides `whisper-cli` and `whisper-server`)
 
 ## Development
 
@@ -64,12 +65,15 @@ On first launch, the app will assist in downloading the necessary Whisper models
 
 ## Configuration
 
-Settings are stored in `~/.voxflow/config.json`. You can configure:
+Settings are stored in `~/.voxflow/config.json` (models in `~/.voxflow/models`, transcripts in `~/.voxflow/history.db`, logs in `~/.voxflow/voxflow.log`). From the Settings view you can configure:
 
-- **LLM Provider**: Choose between Gemini, OpenRouter, or Local.
-- **Refinement Mode**: "Casual" for messages or "Formal" for documents.
-- **Global Hotkey**: Customize the trigger shortcut.
-- **Whisper Model**: Balance between speed (`tiny`) and accuracy (`medium`).
+- **LLM Provider**: Gemini, OpenRouter, Groq, Cerebras, or a local server, with a connection test per model.
+- **Pipeline Mode**: Refine (Whisper → LLM → paste), Raw (paste as transcribed) or Copy only.
+- **Hotkeys**: Separate hands-free and push-to-talk shortcuts.
+- **Whisper Model and Language**: Balance speed (`tiny`) against accuracy (`medium`); fix the language or auto-detect.
+- **Vocabulary**: Terms Whisper and the LLM should spell your way.
+- **Per-App Rules**: Override the pipeline mode and the delivery method (paste, typed keystrokes, clipboard) for specific apps.
+- **Mute System Audio**: Silence speakers while recording.
 
 ## Troubleshooting
 
