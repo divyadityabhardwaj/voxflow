@@ -56,7 +56,8 @@ type Config struct {
 type AppRule struct {
 	// RefinementMode overrides the global mode: "refine", "raw", or "copy-only".
 	RefinementMode string `json:"refinement_mode,omitempty"`
-	// InjectMethod is "paste" (default) or "clipboard" (copy only, no Cmd+V).
+	// InjectMethod is "paste" (default), "clipboard" (copy only, no Cmd+V),
+	// or "type" (keystrokes, for apps that remap Cmd+V).
 	InjectMethod string `json:"inject_method,omitempty"`
 }
 
@@ -644,16 +645,18 @@ func (c *Config) ResolveRefinementMode(bundleID string) string {
 	return c.RefinementMode
 }
 
-// ShouldInjectPaste returns whether Cmd+V paste injection should run for the given app.
-func (c *Config) ShouldInjectPaste(bundleID string) bool {
+// InjectMethodFor returns "paste" by default, or "clipboard"/"type" when a
+// per-app rule says so.
+func (c *Config) InjectMethodFor(bundleID string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if bundleID != "" {
-		if rule, ok := c.AppRules[bundleID]; ok && rule.InjectMethod == "clipboard" {
-			return false
+		switch m := c.AppRules[bundleID].InjectMethod; m {
+		case "clipboard", "type":
+			return m
 		}
 	}
-	return true
+	return "paste"
 }
 
 // CachedModelList holds a list of models and the time they were fetched.

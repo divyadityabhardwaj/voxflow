@@ -91,3 +91,11 @@ func (s *Service) CopyToClipboard(text string) error {
 	clipboard.Write(clipboard.FmtText, []byte(text))
 	return nil
 }
+
+// Type types text as keystrokes without touching the clipboard, for apps that
+// remap Cmd+V (vim-mode editors, tmux). Requires Accessibility permission like Inject.
+func (s *Service) Type(text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return typeText(text)
+}

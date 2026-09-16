@@ -531,18 +531,28 @@ func (p *Pipeline) processRecording() {
 		}()
 	}
 
-	shouldPaste := mode != "copy-only" && p.config.ShouldInjectPaste(targetBundleID)
-	if p.injectionService != nil && shouldPaste {
-		if err := p.injectionService.Inject(polishedText); err != nil {
+	if p.injectionService != nil {
+		method := p.config.InjectMethodFor(targetBundleID)
+		if mode == "copy-only" {
+			method = "clipboard"
+		}
+		var err error
+		switch method {
+		case "clipboard":
+			_ = p.injectionService.CopyToClipboard(polishedText)
+			logger.Infof("Text copied to clipboard")
+			if mode != "copy-only" {
+				logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", targetBundleID)
+			}
+		case "type":
+			logger.Infof("[Pipeline] Per-app rule: typing keystrokes for %q", targetBundleID)
+			err = p.injectionService.Type(polishedText)
+		default:
+			err = p.injectionService.Inject(polishedText)
+		}
+		if err != nil {
 			logger.Warnf("Could not inject text: %v", err)
 			p.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
-		}
-	} else if p.injectionService != nil {
-		// Copy-only or paste disabled — just copy to clipboard.
-		_ = p.injectionService.CopyToClipboard(polishedText)
-		logger.Infof("Text copied to clipboard")
-		if mode != "copy-only" && !shouldPaste {
-			logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", targetBundleID)
 		}
 	}
 
