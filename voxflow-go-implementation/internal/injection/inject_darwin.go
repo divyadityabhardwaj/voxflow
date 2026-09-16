@@ -38,8 +38,10 @@ static int typeUnicode(const UniChar *chars, int len) {
     CGEventSourceRef src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     if (!src) return -1;
 
-    for (int i = 0; i < len; i += 20) {
+    for (int i = 0; i < len; ) {
         int n = len - i < 20 ? len - i : 20;
+        // Never split a surrogate pair across events or the emoji arrives as garbage.
+        if (n == 20 && (chars[i + n - 1] & 0xFC00) == 0xD800) n--;
 
         CGEventRef keyDown = CGEventCreateKeyboardEvent(src, (CGKeyCode)0, true);
         if (!keyDown) { CFRelease(src); return -2; }
@@ -56,6 +58,7 @@ static int typeUnicode(const UniChar *chars, int len) {
         CGEventPost(kCGAnnotatedSessionEventTap, keyUp);
         CFRelease(keyUp);
         usleep(3000);
+        i += n;
     }
 
     CFRelease(src);

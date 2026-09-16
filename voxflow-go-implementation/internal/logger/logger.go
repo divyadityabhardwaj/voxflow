@@ -243,6 +243,7 @@ func File(path string, lvl Level) error {
 	output = io.MultiWriter(os.Stdout, f)
 	logger.SetOutput(output)
 	level = lvl
+	enableColors = false // ANSI escapes would land in the file
 
 	return nil
 }
