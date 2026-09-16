@@ -517,7 +517,7 @@ func (p *Pipeline) processRecording() {
 	// Fire-and-forget history save — off the critical path.
 	if p.historyService != nil {
 		go func() {
-			if err := p.historyService.SaveAsync("", rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
+			if err := p.historyService.SaveAsync(p.recordingAppName, rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
 				logger.Errorf("Failed to save to history: %v", err)
 			}
 		}()
