@@ -1,6 +1,7 @@
 package history
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -144,5 +145,40 @@ func TestSearchEscapesWildcards(t *testing.T) {
 	got, _ = s.Search("%", 10)
 	if len(got) != 1 || got[0].RawText != "100% done" {
 		t.Fatalf("percent should be literal, got %d rows", len(got))
+	}
+}
+
+func TestPagingDoesNotRepeatRowsWithEqualTimestamps(t *testing.T) {
+	s, err := NewServiceWithPath(filepath.Join(t.TempDir(), "h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for i := 0; i < 5; i++ { // all within the same second
+		if _, err := s.Save("", fmt.Sprintf("row %d", i), "", "p", "m", 0, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := map[int64]bool{}
+	var ts time.Time
+	var id int64
+	for pages := 0; pages < 10; pages++ {
+		page, nextTS, nextID, err := s.GetPage(ts, id, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, row := range page {
+			if seen[row.ID] {
+				t.Fatalf("row %d returned twice", row.ID)
+			}
+			seen[row.ID] = true
+		}
+		ts, id = nextTS, nextID
+	}
+	if len(seen) != 5 {
+		t.Fatalf("expected 5 distinct rows across pages, got %d", len(seen))
 	}
 }

@@ -282,6 +282,14 @@ func (s *Service) scanTranscript(rows *sql.Rows) (*Transcript, error) {
 	return t, nil
 }
 
+// sqliteTime renders a cursor the way datetime('now') stored it, so the text
+// comparison in the cursor WHERE clause is exact. The driver would otherwise bind
+// time.Time as "2006-01-02 15:04:05 +0000 UTC", which sorts after equal stamps
+// and repeats rows across pages.
+func sqliteTime(t time.Time) string {
+	return t.UTC().Format("2006-01-02 15:04:05")
+}
+
 // GetPage returns a page of transcripts using cursor-based pagination.
 // If cursorTS.IsZero(), it starts from the newest entries.
 // Returns the transcripts and the cursor (timestamp,id) to use for the next page (older results).
@@ -300,7 +308,8 @@ func (s *Service) GetPage(cursorTS time.Time, cursorID int64, limit int) ([]*Tra
 		rows, err = s.db.Query(query, limit)
 	} else {
 		query := base + " WHERE (timestamp < ? OR (timestamp = ? AND id < ?)) ORDER BY timestamp DESC, id DESC LIMIT ?"
-		rows, err = s.db.Query(query, cursorTS, cursorTS, cursorID, limit)
+		ts := sqliteTime(cursorTS)
+		rows, err = s.db.Query(query, ts, ts, cursorID, limit)
 	}
 	if err != nil {
 		return nil, time.Time{}, 0, err
@@ -339,7 +348,8 @@ func (s *Service) SearchPage(q string, cursorTS time.Time, cursorID int64, limit
 		rows, err = s.db.Query(query, searchQuery, searchQuery, limit)
 	} else {
 		query := base + " AND (timestamp < ? OR (timestamp = ? AND id < ?)) ORDER BY timestamp DESC, id DESC LIMIT ?"
-		rows, err = s.db.Query(query, searchQuery, searchQuery, cursorTS, cursorTS, cursorID, limit)
+		ts := sqliteTime(cursorTS)
+		rows, err = s.db.Query(query, searchQuery, searchQuery, ts, ts, cursorID, limit)
 	}
 	if err != nil {
 		return nil, time.Time{}, 0, err
