@@ -42,6 +42,7 @@ type Pipeline struct {
 	refiner        func() llm.Refiner
 	activeLLMModel func() string
 	modelReady     func() bool
+	onState        func(hotkey.State)
 
 	stateMu sync.Mutex
 	state   hotkey.State
@@ -74,6 +75,8 @@ type Config struct {
 	Refiner        func() llm.Refiner
 	ActiveLLMModel func() string
 	ModelReady     func() bool
+	// OnState, if set, is called on every state transition.
+	OnState func(hotkey.State)
 }
 
 // New creates a recording pipeline.
@@ -90,6 +93,7 @@ func New(cfg Config) *Pipeline {
 		refiner:          cfg.Refiner,
 		activeLLMModel:   cfg.ActiveLLMModel,
 		modelReady:       cfg.ModelReady,
+		onState:          cfg.OnState,
 		state:            hotkey.StateIdle,
 		savedVolume:      -1,
 	}
@@ -109,6 +113,9 @@ func (p *Pipeline) setState(state hotkey.State) {
 	p.stateMu.Lock()
 	p.state = state
 	p.stateMu.Unlock()
+	if p.onState != nil {
+		p.onState(state)
+	}
 }
 
 // HandleHotkeyState reacts to global hotkey state transitions.
