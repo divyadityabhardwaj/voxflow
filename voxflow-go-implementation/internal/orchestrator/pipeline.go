@@ -141,7 +141,12 @@ func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 // StartRecording begins audio capture.
 func (p *Pipeline) StartRecording() error {
 	if p.modelReady != nil && !p.modelReady() {
-		return fmt.Errorf("model not ready")
+		// The hotkey path has already flipped state to Recording; undo it or the
+		// pill and menu bar stay red and the next press tries to stop nothing.
+		p.resetToIdle()
+		err := fmt.Errorf("model not ready")
+		runtime.EventsEmit(p.ctx, events.Error, err.Error())
+		return err
 	}
 
 	p.setState(hotkey.StateRecording)
@@ -342,6 +347,7 @@ func (p *Pipeline) processRecording() {
 	// Close the streaming worker channel and wait for any remaining transcriptions to finish.
 	if p.streamJobs != nil {
 		close(p.streamJobs)
+		p.streamJobs = nil
 		p.streamWG.Wait()
 	}
 
