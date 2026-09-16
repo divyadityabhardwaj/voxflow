@@ -20,7 +20,7 @@ func FrontmostApp() (bundleID, name string, err error) {
 
 	out, err := runOSA(`tell application "System Events"
 	set p to first application process whose frontmost is true
-	return (bundle identifier of p) & linefeed & (name of p)
+	return "" & (bundle identifier of p) & linefeed & (name of p)
 end tell`)
 	if err != nil {
 		return "", "", err
