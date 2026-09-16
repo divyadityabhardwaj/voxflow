@@ -1,9 +1,43 @@
 import { useState, useEffect, useRef } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { ToggleRecording, GetStatus, GetConfig } from "../../wailsjs/go/main/App";
+import {
+  ToggleRecording,
+  GetStatus,
+  GetConfig,
+  GetHistory,
+  CopyToClipboard,
+  InjectText,
+} from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
+import { useToast } from "../contexts/ToastContext";
 
 type Status = "Idle" | "Recording" | "Processing" | "Refining";
+
+interface Transcript {
+  id: number;
+  timestamp: string;
+  raw_text: string;
+  polished_text: string;
+}
+
+const formatElapsed = (ms: number) => {
+  const seconds = ms / 1000;
+  return seconds < 1 ? `${ms}ms` : `${seconds.toFixed(1)}s`;
+};
+
+const formatRecentDate = (timestamp: string) => {
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return "";
+  }
+};
 
 export default function MainView() {
   const [status, setStatus] = useState<Status>("Idle");
@@ -17,7 +51,9 @@ export default function MainView() {
   const [partialText, setPartialText] = useState<string>("");
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [wordsPerMinute, setWordsPerMinute] = useState<number | null>(null);
+  const [recents, setRecents] = useState<Transcript[]>([]);
   const partialRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     GetStatus().then((s) => setStatus(s as Status));
@@ -28,6 +64,18 @@ export default function MainView() {
       }
     });
 
+    const loadRecents = () => {
+      GetHistory(4)
+        .then((items) => {
+          setRecents(items || []);
+        })
+        .catch((err) => {
+          console.error("Failed to load recent recordings:", err);
+        });
+    };
+
+    loadRecents();
+
     const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
       setStatus(newStatus as Status);
       if (newStatus === "Recording") {
@@ -37,6 +85,8 @@ export default function MainView() {
         setPartialText("");
         setElapsedMs(null);
         setWordsPerMinute(null);
+      } else if (newStatus === "Idle") {
+        loadRecents();
       }
     });
 
@@ -55,6 +105,7 @@ export default function MainView() {
         if (result.words_per_second && result.words_per_second > 0) {
           setWordsPerMinute(Math.round(result.words_per_second * 60));
         }
+        loadRecents();
       },
     );
 
@@ -94,9 +145,26 @@ export default function MainView() {
     }
   };
 
-  const formatElapsed = (ms: number) => {
-    const seconds = ms / 1000;
-    return seconds < 1 ? `${ms}ms` : `${seconds.toFixed(1)}s`;
+
+
+  const handleCopy = async (text: string) => {
+    try {
+      await CopyToClipboard(text);
+      showToast("Copied to clipboard", "success");
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      showToast("Failed to copy text", "error");
+    }
+  };
+
+  const handleInject = async (text: string) => {
+    try {
+      await InjectText(text);
+      showToast("Text injected", "success");
+    } catch (err) {
+      console.error("Failed to inject:", err);
+      showToast("Failed to inject text", "error");
+    }
   };
 
   return (
@@ -155,6 +223,7 @@ export default function MainView() {
 
           {/* Mic button */}
           <button
+            type="button"
             onClick={handleToggle}
             disabled={status === "Processing"}
             title={
@@ -264,19 +333,81 @@ export default function MainView() {
         </div>
       )}
 
-      {/* Recent recordings section (placeholder for future) */}
+      {/* Recent recordings section */}
       {!lastTranscription && status === "Idle" && (
-        <div className="w-full max-w-xl">
+        <div className="w-full max-w-xl animate-fade-in">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-medium text-secondary uppercase tracking-wide">
-              Recent
+            <h2 className="text-xs font-semibold text-secondary uppercase tracking-wide">
+              Recent Recordings
             </h2>
           </div>
-          <div className="card p-8 text-center">
-            <p className="text-sm text-tertiary font-medium">
-              Your recent recordings will appear here
-            </p>
-          </div>
+          {recents.length === 0 ? (
+            <div className="card p-8 text-center">
+              <p className="text-sm text-tertiary font-medium">
+                Your recent recordings will appear here
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recents.map((item) => (
+                <div
+                  key={item.id}
+                  className="card p-4 flex items-center justify-between gap-4 hover:border-border-hover transition-colors group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-text font-medium truncate">
+                      {item.polished_text || item.raw_text}
+                    </p>
+                    <p className="text-xs text-tertiary mt-1 font-medium">
+                      {formatRecentDate(item.timestamp)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(item.polished_text || item.raw_text)}
+                      title="Copy to clipboard"
+                      className="p-2 text-text hover:text-primary hover:bg-secondary rounded-lg transition-all"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInject(item.polished_text || item.raw_text)}
+                      title="Inject text at cursor"
+                      className="p-2 text-text hover:text-primary hover:bg-secondary rounded-lg transition-all"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
