@@ -26,8 +26,7 @@ type Config struct {
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
 	WhisperModel     string `json:"whisper_model"`       // tiny, base, small
 	WhisperLanguage  string `json:"whisper_language"`    // fixed language for transcription (en)
-	WhisperThreads   int    `json:"whisper_threads"`     // 0 = auto
-	WhisperProfile   string `json:"whisper_profile"`     // machine+model profile key for autotuned threads
+	WhisperThreads   int    `json:"whisper_threads"`     // 0 = whisper default
 	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
 	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
 	MaximizedX       int    `json:"maximized_x"`         // Saved X position of maximized window
@@ -325,20 +324,6 @@ func (c *Config) SetWhisperThreads(threads int) {
 		threads = 0
 	}
 	c.WhisperThreads = threads
-}
-
-// GetWhisperProfile returns the profile key used for thread autotune cache.
-func (c *Config) GetWhisperProfile() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.WhisperProfile
-}
-
-// SetWhisperProfile sets the profile key used for thread autotune cache.
-func (c *Config) SetWhisperProfile(profile string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.WhisperProfile = profile
 }
 
 // GetMiniModePosition returns the saved mini mode position

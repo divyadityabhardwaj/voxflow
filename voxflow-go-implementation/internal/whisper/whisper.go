@@ -11,8 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -689,80 +687,6 @@ func (s *Service) WarmUp() error {
 	return err
 }
 
-// BenchmarkBestThreads benchmarks several thread counts on this machine/model.
-// Returns the fastest thread count.
-func (s *Service) BenchmarkBestThreads() (int, error) {
-	s.mu.RLock()
-	loaded := s.loaded
-	modelPath := s.modelPath
-	language := s.language
-	s.mu.RUnlock()
-	if !loaded {
-		return 0, fmt.Errorf("model not loaded")
-	}
-
-	whisperBin := s.findWhisperBinary()
-	if whisperBin == "" {
-		return 0, fmt.Errorf("whisper CLI binary not found")
-	}
-
-	candidates := threadCandidates()
-	if len(candidates) == 0 {
-		return 0, fmt.Errorf("no thread candidates available")
-	}
-
-	wavPath, err := createSyntheticWav(3 * time.Second)
-	if err != nil {
-		return 0, err
-	}
-	defer os.Remove(wavPath)
-
-	bestThread := 0
-	bestDur := time.Duration(1<<63 - 1)
-	for _, t := range candidates {
-		start := time.Now()
-		_, err := s.transcribeWithCLI(whisperBin, modelPath, wavPath, "", language, t)
-		if err != nil {
-			continue
-		}
-		d := time.Since(start)
-		if d < bestDur {
-			bestDur = d
-			bestThread = t
-		}
-	}
-
-	if bestThread == 0 {
-		return 0, fmt.Errorf("thread benchmark failed for all candidates")
-	}
-
-	return bestThread, nil
-}
-
-func threadCandidates() []int {
-	n := runtime.NumCPU()
-	if n < 1 {
-		n = 1
-	}
-	raw := []int{1, 2, 4, 6, 8, 10, 12, n / 2, n}
-	set := map[int]struct{}{}
-	for _, v := range raw {
-		if v < 1 {
-			continue
-		}
-		if v > n {
-			v = n
-		}
-		set[v] = struct{}{}
-	}
-	out := make([]int, 0, len(set))
-	for v := range set {
-		out = append(out, v)
-	}
-	sort.Ints(out)
-	return out
-}
-
 func createSyntheticWav(d time.Duration) (string, error) {
 	if d <= 0 {
 		d = time.Second
@@ -855,20 +779,6 @@ func (s *Service) IsLoaded() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.loaded
-}
-
-// progressReader wraps an io.Reader to report progress
-type progressReader struct {
-	reader     io.Reader
-	onProgress func(n int64)
-}
-
-func (pr *progressReader) Read(p []byte) (int, error) {
-	n, err := pr.reader.Read(p)
-	if n > 0 && pr.onProgress != nil {
-		pr.onProgress(int64(n))
-	}
-	return n, err
 }
 
 // isSecureBinary checks if a file at path is secure to execute.

@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	goruntime "runtime"
-	"strings"
 	"voxflow/internal/events"
 	"voxflow/internal/logger"
 
@@ -44,37 +42,9 @@ func (a *App) checkModelStatus() {
 	go a.optimizeWhisperRuntime()
 }
 
-func (a *App) whisperRuntimeProfileKey() string {
-	return fmt.Sprintf("%s-%s-cpu%d-%s", goruntime.GOOS, goruntime.GOARCH, goruntime.NumCPU(), a.config.GetWhisperModel())
-}
-
 func (a *App) optimizeWhisperRuntime() {
-	language := strings.TrimSpace(a.config.GetWhisperLanguage())
-	if language == "" {
-		language = "en"
-	}
-	a.whisperService.SetLanguage(language)
-
-	profileKey := a.whisperRuntimeProfileKey()
-	threads := a.config.GetWhisperThreads()
-	if threads <= 0 || a.config.GetWhisperProfile() != profileKey {
-		bestThreads, err := a.whisperService.BenchmarkBestThreads()
-		if err != nil {
-			logger.Warnf("[Whisper] Thread autotune skipped: %v", err)
-		} else if bestThreads > 0 {
-			threads = bestThreads
-			a.config.SetWhisperThreads(bestThreads)
-			a.config.SetWhisperProfile(profileKey)
-			a.whisperService.SetThreads(bestThreads)
-			if err := a.config.Save(); err != nil {
-				logger.Errorf("[Whisper] Failed to persist thread autotune: %v", err)
-			}
-			logger.Infof("[Whisper] Autotuned threads: %d (%s)", bestThreads, profileKey)
-		}
-	} else {
-		a.whisperService.SetThreads(threads)
-	}
-
+	a.whisperService.SetLanguage(a.config.GetWhisperLanguage())
+	a.whisperService.SetThreads(a.config.GetWhisperThreads())
 	if err := a.whisperService.WarmUp(); err != nil {
 		logger.Warnf("[Whisper] Warm-up skipped: %v", err)
 	}
