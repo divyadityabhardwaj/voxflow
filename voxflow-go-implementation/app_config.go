@@ -175,7 +175,7 @@ func (a *App) SetWhisperModel(model string) error {
 	}
 
 	// Check if model needs to be downloaded
-	a.modelReady = false
+	a.modelReady.Store(false)
 	go a.checkModelStatus()
 	return nil
 }

@@ -32,7 +32,7 @@ func (a *App) checkModelStatus() {
 		return
 	}
 
-	a.modelReady = true
+	a.modelReady.Store(true)
 	runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
 		"downloaded": true,
 		"loaded":     true,
@@ -52,7 +52,7 @@ func (a *App) optimizeWhisperRuntime() {
 
 // IsModelReady returns whether the Whisper model is ready
 func (a *App) IsModelReady() bool {
-	return a.modelReady
+	return a.modelReady.Load()
 }
 
 // IsModelDownloaded checks if the current Whisper model is downloaded
@@ -85,7 +85,7 @@ func (a *App) DownloadModel() error {
 		return err
 	}
 
-	a.modelReady = true
+	a.modelReady.Store(true)
 	runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
 		"downloaded": true,
 		"loaded":     true,

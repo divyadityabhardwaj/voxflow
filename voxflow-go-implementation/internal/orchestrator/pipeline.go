@@ -53,6 +53,7 @@ type Pipeline struct {
 	streamWG     sync.WaitGroup
 	lastEmitTime time.Time
 
+	targetMu          sync.Mutex
 	recordingBundleID string
 	recordingAppName  string
 
@@ -192,16 +193,15 @@ func (p *Pipeline) StartRecording() error {
 // CaptureRecordingTarget records the frontmost app before VoxFlow takes focus.
 // Call this from the hotkey callback before switching to mini mode.
 func (p *Pipeline) CaptureRecordingTarget() {
-	p.recordingBundleID = ""
-	p.recordingAppName = ""
 	bundleID, name, err := macos.FrontmostApp()
 	if err != nil {
 		logger.Debugf("[Pipeline] Could not detect frontmost app: %v", err)
-		return
+	} else {
+		logger.Infof("[Pipeline] Recording target app: %s (%s)", name, bundleID)
 	}
-	p.recordingBundleID = bundleID
-	p.recordingAppName = name
-	logger.Infof("[Pipeline] Recording target app: %s (%s)", name, bundleID)
+	p.targetMu.Lock()
+	p.recordingBundleID, p.recordingAppName = bundleID, name
+	p.targetMu.Unlock()
 }
 
 // StopRecording stops capture and begins async processing.
@@ -320,6 +320,7 @@ func (p *Pipeline) processRecording() {
 	defer p.restoreVolume()
 
 	processingStartTime := time.Now()
+	targetBundleID, targetAppName := p.RecordingTarget()
 
 	var stopAndWavDuration time.Duration
 	var cleanTextDuration time.Duration
@@ -466,7 +467,7 @@ func (p *Pipeline) processRecording() {
 	llmProvider := p.config.GetLLMProvider()
 	llmModel := p.activeLLMModel()
 
-	mode := p.config.ResolveRefinementMode(p.recordingBundleID)
+	mode := p.config.ResolveRefinementMode(targetBundleID)
 
 	var polishedText string
 	var tokenCount int
@@ -476,7 +477,7 @@ func (p *Pipeline) processRecording() {
 	if mode == "raw" || mode == "copy-only" {
 		polishedText = rawText
 		okToGo = true
-		logger.Infof("[Pipeline] Refinement mode '%s' for app %q — bypassing LLM", mode, p.recordingBundleID)
+		logger.Infof("[Pipeline] Refinement mode '%s' for app %q — bypassing LLM", mode, targetBundleID)
 	} else {
 		runtime.EventsEmit(p.ctx, events.StateChanged, "Refining")
 		refiner := p.refiner()
@@ -517,13 +518,13 @@ func (p *Pipeline) processRecording() {
 	// Fire-and-forget history save — off the critical path.
 	if p.historyService != nil {
 		go func() {
-			if err := p.historyService.SaveAsync(p.recordingAppName, rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
+			if err := p.historyService.SaveAsync(targetAppName, rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
 				logger.Errorf("Failed to save to history: %v", err)
 			}
 		}()
 	}
 
-	shouldPaste := mode != "copy-only" && p.config.ShouldInjectPaste(p.recordingBundleID)
+	shouldPaste := mode != "copy-only" && p.config.ShouldInjectPaste(targetBundleID)
 	if p.injectionService != nil && shouldPaste {
 		if err := p.injectionService.Inject(polishedText); err != nil {
 			logger.Warnf("Could not inject text: %v", err)
@@ -534,7 +535,7 @@ func (p *Pipeline) processRecording() {
 		_ = p.injectionService.CopyToClipboard(polishedText)
 		logger.Infof("Text copied to clipboard")
 		if mode != "copy-only" && !shouldPaste {
-			logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", p.recordingBundleID)
+			logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", targetBundleID)
 		}
 	}
 
@@ -650,5 +651,7 @@ func (p *Pipeline) ToggleRecording() string {
 
 // RecordingTarget returns the bundle ID and app name captured at recording start.
 func (p *Pipeline) RecordingTarget() (bundleID, appName string) {
+	p.targetMu.Lock()
+	defer p.targetMu.Unlock()
 	return p.recordingBundleID, p.recordingAppName
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"voxflow/internal/audio"
 	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
@@ -38,7 +39,7 @@ type App struct {
 	cerebrasClient   *cerebras.Client
 	historyService   *history.Service
 	injectionService *injection.Service
-	modelReady       bool
+	modelReady       atomic.Bool
 	downloadCancel   context.CancelFunc
 	downloadMu       sync.Mutex
 }
