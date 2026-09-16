@@ -94,8 +94,9 @@ func (s *Service) initDB() error {
 		words_per_second REAL
 	);
 	CREATE INDEX IF NOT EXISTS idx_timestamp ON transcripts(timestamp DESC);
-	CREATE INDEX IF NOT EXISTS idx_raw_text ON transcripts(raw_text);
-	CREATE INDEX IF NOT EXISTS idx_polished_text ON transcripts(polished_text);
+	-- Full-column B-tree indexes cannot serve LIKE '%q%' and doubled the DB size.
+	DROP INDEX IF EXISTS idx_raw_text;
+	DROP INDEX IF EXISTS idx_polished_text;
 	`
 	_, err := s.db.Exec(query)
 	if err != nil {
@@ -217,13 +218,20 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 	return transcripts, nil
 }
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// likePattern builds a substring match with the user's wildcards escaped.
+func likePattern(query string) string {
+	return "%" + likeEscaper.Replace(query) + "%"
+}
+
 // Search searches transcripts by text content
 func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
-	searchQuery := "%" + query + "%"
+	searchQuery := likePattern(query)
 	sqlQuery := `
 		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second
 		FROM transcripts
-		WHERE raw_text LIKE ? OR polished_text LIKE ?
+		WHERE raw_text LIKE ? ESCAPE '\' OR polished_text LIKE ? ESCAPE '\'
 		ORDER BY timestamp DESC
 	`
 	if limit <= 0 || limit > MaxHistoryLimit {
@@ -321,8 +329,8 @@ func (s *Service) SearchPage(q string, cursorTS time.Time, cursorID int64, limit
 		limit = MaxPageSize
 	}
 
-	searchQuery := "%" + q + "%"
-	base := `SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE (raw_text LIKE ? OR polished_text LIKE ?)`
+	searchQuery := likePattern(q)
+	base := `SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE (raw_text LIKE ? ESCAPE '\' OR polished_text LIKE ? ESCAPE '\')`
 
 	var rows *sql.Rows
 	var err error

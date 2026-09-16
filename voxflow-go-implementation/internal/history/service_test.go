@@ -122,3 +122,27 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("expected 0 transcripts after delete, got %d", count)
 	}
 }
+
+func TestSearchEscapesWildcards(t *testing.T) {
+	s, err := NewServiceWithPath(filepath.Join(t.TempDir(), "h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, txt := range []string{"snake_case", "snakeXcase", "100% done"} {
+		if _, err := s.Save("", txt, txt, "p", "m", 0, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.Search("e_c", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].RawText != "snake_case" {
+		t.Fatalf("underscore should be literal, got %d rows", len(got))
+	}
+	got, _ = s.Search("%", 10)
+	if len(got) != 1 || got[0].RawText != "100% done" {
+		t.Fatalf("percent should be literal, got %d rows", len(got))
+	}
+}
