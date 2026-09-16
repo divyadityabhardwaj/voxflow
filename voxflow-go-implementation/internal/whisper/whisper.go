@@ -64,7 +64,8 @@ type ProgressCallback func(downloaded, total int64)
 type Service struct {
 	modelSize   string
 	modelPath   string
-	whisperPath string // Path to whisper.cpp binary
+	whisperPath string // cached whisper-cli path, guarded by binMu
+	binMu       sync.Mutex
 	language    string
 	threads     int
 	prompt      string // initial prompt: custom vocabulary
@@ -478,8 +479,18 @@ func (s *Service) SetThreads(threads int) {
 	s.threads = threads
 }
 
-// findWhisperBinary looks for whisper.cpp binary
+// findWhisperBinary returns the whisper-cli path, cached after the first successful lookup.
 func (s *Service) findWhisperBinary() string {
+	s.binMu.Lock()
+	defer s.binMu.Unlock()
+	if s.whisperPath != "" && isSecureBinary(s.whisperPath) {
+		return s.whisperPath
+	}
+	s.whisperPath = locateWhisperBinary()
+	return s.whisperPath
+}
+
+func locateWhisperBinary() string {
 	// Check in our bin directory
 	binDir, _ := GetBinDir()
 	whisperPath := filepath.Join(binDir, "whisper-cli")
