@@ -50,6 +50,7 @@ type Config struct {
 	AppRules            map[string]AppRule `json:"app_rules,omitempty"`
 	OnboardingCompleted bool               `json:"onboarding_completed"`
 	mu                  sync.RWMutex
+	saveMu              sync.Mutex // serialises Save: concurrent writers would share one .tmp
 }
 
 // AppRule holds per-application overrides for refinement and injection behavior.
@@ -190,6 +191,8 @@ func (c *Config) Load() error {
 
 // Save writes the config to disk
 func (c *Config) Save() error {
+	c.saveMu.Lock()
+	defer c.saveMu.Unlock()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
