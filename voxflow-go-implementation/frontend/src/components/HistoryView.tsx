@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   DeleteTranscript,
   ClearAllHistory,
   CopyToClipboard,
   InjectText,
+  GetHistoryPage,
+  SearchHistoryPage,
 } from "../../wailsjs/go/main/App";
 import { useConfirmModal } from "./ConfirmModal";
 
@@ -102,80 +104,81 @@ const HistoryItem = memo(function HistoryItem({
   );
 });
 
+const PAGE_SIZE = 50;
+
+interface PageState {
+  query: string;
+  cursorTS: string;
+  cursorID: number;
+  loading: boolean;
+  hasMore: boolean;
+}
+
+const freshPage = (query: string): PageState => ({
+  query,
+  cursorTS: "",
+  cursorID: 0,
+  loading: false,
+  hasMore: true,
+});
+
 export default function HistoryView() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [cursorTS, setCursorTS] = useState<string>("");
-  const [cursorID, setCursorID] = useState<number>(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState<"first" | "more" | null>("first");
+  // Paging state lives in a ref so a single stable loadNextPage always sees
+  // current values. A query change swaps in a new object; in-flight requests
+  // compare identity and drop their results.
+  const page = useRef<PageState>(freshPage(""));
 
   const { confirm, ConfirmModalComponent } = useConfirmModal();
 
-  const PAGE_SIZE = 50;
-
-  const loadNextPage = async () => {
-    if (loading || !hasMore) return;
-    setLoading(true);
+  const loadNextPage = useCallback(async () => {
+    const p = page.current;
+    if (p.loading || !p.hasMore) return;
+    p.loading = true;
+    setLoading(p.cursorID === 0 ? "first" : "more");
     try {
-      let res: any;
-      if (searchQuery) {
-        res = await (window as any).go.main.App.SearchHistoryPage(
-          searchQuery,
-          cursorTS,
-          cursorID,
-          PAGE_SIZE,
-        );
-      } else {
-        res = await (window as any).go.main.App.GetHistoryPage(
-          cursorTS,
-          cursorID,
-          PAGE_SIZE,
-        );
-      }
-
+      const res = p.query
+        ? await SearchHistoryPage(p.query, p.cursorTS, p.cursorID, PAGE_SIZE)
+        : await GetHistoryPage(p.cursorTS, p.cursorID, PAGE_SIZE);
+      if (page.current !== p) return;
       const items: Transcript[] = res.transcripts || [];
       setTranscripts((prev) => [...prev, ...items]);
-      setCursorTS(res.next_cursor_ts || "");
-      setCursorID(res.next_cursor_id || 0);
-      setHasMore(items.length === PAGE_SIZE);
+      p.cursorTS = res.next_cursor_ts || "";
+      p.cursorID = res.next_cursor_id || 0;
+      p.hasMore = items.length === PAGE_SIZE;
     } catch (err) {
       console.error("Failed to load history:", err);
     } finally {
-      setLoading(false);
+      p.loading = false;
+      if (page.current === p) setLoading(null);
     }
-  };
+  }, []);
 
-  // Reset and load first page on mount and when search query changes
   useEffect(() => {
+    page.current = freshPage(searchQuery);
     setTranscripts([]);
-    setCursorTS("");
-    setCursorID(0);
-    setHasMore(true);
-    const t = setTimeout(() => {
-      loadNextPage();
-    }, 200);
+    setLoading("first");
+    const t = setTimeout(loadNextPage, 200);
     return () => clearTimeout(t);
-  }, [searchQuery]);
+  }, [searchQuery, loadNextPage]);
 
-  // Infinite scroll: observe a sentinel element at the end of the list
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          loadNextPage();
-        }
+  // Callback ref: the sentinel mounts only once the list renders, so a
+  // useEffect keyed on a ref object would never see it.
+  const observer = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      observer.current?.disconnect();
+      if (!el) return;
+      observer.current = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) loadNextPage();
       });
-    });
-    io.observe(el);
-    return () => io.disconnect();
-    // We intentionally only recreate observer when the sentinel element changes.
-    // Other state changes (loading/hasMore) are handled inside loadNextPage.
-  }, [sentinelRef]);
+      observer.current.observe(el);
+    },
+    [loadNextPage],
+  );
 
   const selectedTranscript = transcripts.find((t) => t.id === selectedId);
 
@@ -288,7 +291,7 @@ export default function HistoryView() {
 
         {/* Transcript list */}
         <div className="flex-1 overflow-y-auto">
-          {loading ? (
+          {loading === "first" ? (
             <div className="p-4 text-center text-tertiary font-medium">
               Loading...
             </div>
@@ -322,7 +325,11 @@ export default function HistoryView() {
                   onClick={() => setSelectedId(t.id)}
                 />
               ))}
-              {/* sentinel for infinite scroll */}
+              {loading === "more" && (
+                <div className="p-3 text-center text-xs text-tertiary font-medium">
+                  Loading more…
+                </div>
+              )}
               <div ref={sentinelRef} />
             </div>
           )}
