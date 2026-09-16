@@ -104,3 +104,29 @@ func TestParseRefineResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestUnparsedFallback(t *testing.T) {
+	raw := "um hello world"
+	if got := UnparsedFallback(`{"text": "Hello wor`, raw); got != raw {
+		t.Errorf("truncated JSON should fall back to raw text, got %q", got)
+	}
+	if got := UnparsedFallback("```json\n{\"text\": \"x", raw); got != raw {
+		t.Errorf("fenced truncated JSON should fall back to raw text, got %q", got)
+	}
+	if got := UnparsedFallback("Hello world.", raw); got != "Hello world." {
+		t.Errorf("plain text reply should be used as-is, got %q", got)
+	}
+	if got := UnparsedFallback("   ", raw); got != raw {
+		t.Errorf("empty reply should fall back to raw text, got %q", got)
+	}
+}
+
+func TestRefineMaxTokens(t *testing.T) {
+	if got := RefineMaxTokens("short"); got != 768 {
+		t.Errorf("floor should be 768, got %d", got)
+	}
+	long := make([]byte, 6000)
+	if got := RefineMaxTokens(string(long)); got != 3256 {
+		t.Errorf("6000 chars should give 3256, got %d", got)
+	}
+}

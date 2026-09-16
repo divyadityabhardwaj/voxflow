@@ -195,7 +195,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 			{Role: "user", Content: "Transcription to refine:\n<transcription>\n" + rawText + "\n</transcription>"},
 		},
 		Temperature: 0.3,
-		MaxTokens:   768,
+		MaxTokens:   RefineMaxTokens(rawText),
 	}
 
 	reqBody, err := json.Marshal(req)
@@ -227,7 +227,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 
 	refined, okToGo, parsed := ParseRefineResponse(result, rawText)
 	if !parsed {
-		return StripCodeFences(result), tokenCount, false, nil
+		return UnparsedFallback(result, rawText), tokenCount, false, nil
 	}
 	return refined, tokenCount, okToGo, nil
 }

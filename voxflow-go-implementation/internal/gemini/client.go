@@ -153,8 +153,8 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 			},
 		},
 		GenerationConfig: GenerationConfig{
-			Temperature:     0.2,  // Lower temperature for more consistent output
-			MaxOutputTokens: 1024, // Reduced for typical voice transcription length
+			Temperature:     0.2, // Lower temperature for more consistent output
+			MaxOutputTokens: llm.RefineMaxTokens(rawText),
 		},
 	}
 
@@ -221,8 +221,8 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	// Parse structured response
 	refined, okToGo, parsed := llm.ParseRefineResponse(result, rawText)
 	if !parsed {
-		logger.Warnf("[Gemini] Warning: Response was not valid JSON, using as plain text")
-		return llm.StripCodeFences(result), tokenCount, false, nil
+		logger.Warnf("[Gemini] Warning: Response was not valid JSON")
+		return llm.UnparsedFallback(result, rawText), tokenCount, false, nil
 	}
 	return refined, tokenCount, okToGo, nil
 }

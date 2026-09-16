@@ -36,6 +36,28 @@ func ParseRefineResponse(raw string, rawText string) (result string, okToGo bool
 	return resp.Text, false, true
 }
 
+// UnparsedFallback picks the text to use when the LLM reply was not valid JSON.
+// A reply that starts with "{" is a truncated or malformed JSON object; pasting
+// it would inject a JSON fragment into the user's app, so use the raw transcript.
+// Anything else is treated as the model answering in plain text.
+func UnparsedFallback(raw, rawText string) string {
+	clean := StripCodeFences(raw)
+	if clean == "" || strings.HasPrefix(clean, "{") {
+		return rawText
+	}
+	return clean
+}
+
+// RefineMaxTokens sizes the output cap to the input so long dictations are not
+// cut off mid-JSON. ~2 chars per token leaves 2x headroom over typical English.
+func RefineMaxTokens(rawText string) int {
+	n := len(rawText)/2 + 256
+	if n < 768 {
+		n = 768
+	}
+	return n
+}
+
 // StripCodeFences removes markdown code block wrappers from text.
 func StripCodeFences(text string) string {
 	text = strings.TrimSpace(text)
