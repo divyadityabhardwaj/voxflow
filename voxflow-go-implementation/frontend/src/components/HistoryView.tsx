@@ -6,8 +6,10 @@ import {
   InjectText,
   GetHistoryPage,
   SearchHistoryPage,
+  RetryRefinement,
 } from "../../wailsjs/go/main/App";
 import { useConfirmModal } from "./ConfirmModal";
+import { useToast } from "../contexts/ToastContext";
 
 interface Transcript {
   id: number;
@@ -132,7 +134,11 @@ export default function HistoryView() {
   // compare identity and drop their results.
   const page = useRef<PageState>(freshPage(""));
 
+  const [instruction, setInstruction] = useState("");
+  const [rewriting, setRewriting] = useState(false);
+
   const { confirm, ConfirmModalComponent } = useConfirmModal();
+  const { showToast } = useToast();
 
   const loadNextPage = useCallback(async () => {
     const p = page.current;
@@ -232,6 +238,22 @@ export default function HistoryView() {
       await InjectText(text);
     } catch (err) {
       console.error("Failed to inject:", err);
+    }
+  };
+
+  const handleRewrite = async (id: number, instr: string) => {
+    if (rewriting) return;
+    setRewriting(true);
+    try {
+      const polished = await RetryRefinement(id, instr);
+      setTranscripts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, polished_text: polished } : t)),
+      );
+      setInstruction("");
+    } catch (err) {
+      showToast(`Rewrite failed: ${err}`);
+    } finally {
+      setRewriting(false);
     }
   };
 
@@ -479,6 +501,38 @@ export default function HistoryView() {
                     {highlightText(selectedTranscript.polished_text, searchQuery)}
                   </p>
                 </div>
+                <form
+                  className="flex gap-2 mt-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleRewrite(selectedTranscript.id, instruction.trim());
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Rewrite instruction, e.g. make it formal"
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    disabled={rewriting}
+                    className="input flex-1 min-w-0 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={rewriting || !instruction.trim()}
+                    className="btn btn-primary shrink-0"
+                  >
+                    {rewriting ? "Rewriting…" : "Rewrite"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRewrite(selectedTranscript.id, "")}
+                    disabled={rewriting}
+                    title="Re-run the standard refinement on the original text"
+                    className="btn btn-secondary shrink-0"
+                  >
+                    Re-refine
+                  </button>
+                </form>
               </div>
             </div>
           </>
