@@ -1,7 +1,0 @@
-.env
-build/bin
-node_modules
-frontend/dist
-*.db
-*.wav
-.DS_Store

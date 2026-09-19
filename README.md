@@ -1,56 +1,106 @@
 # VoxFlow
 
-**AI-powered voice dictation for macOS** — Speak naturally, get polished text instantly.
+macOS voice dictation that turns speech into polished text — locally transcribed, optionally refined by an LLM, then injected into whatever app you're using.
 
-VoxFlow is designed to bridge the gap between spoken thought and written text. By leveraging local AI for transcription and large language models for refinement, it provides a seamless, "it just works" experience for productivity and development.
+Built for developers and power users who want speaking to be faster than typing without sacrificing quality.
 
-This project was born from the need to reduce the friction of typing during intensive prompting and coding sessions. It is built for **power users who want to save time** by making speaking faster and more natural, while VoxFlow ensures the output is precise and polished.
+> Optimized for macOS (Apple Silicon).
 
-> [!IMPORTANT]
-> This implementation is currently fine-tuned and optimized specifically for **macOS**.
+## Features
 
-## Core Vision
+- **Local speech-to-text** — [whisper.cpp](https://github.com/ggml-org/whisper.cpp) runs on-device; audio never leaves your machine for transcription
+- **Streaming transcription** — chunks while you speak, cut at pauses so words aren't split mid-utterance
+- **Resident model** — `whisper-server` keeps the model loaded; no cold start per chunk
+- **LLM refinement** — Gemini, OpenRouter, Groq, Cerebras, or any local OpenAI-compatible server (Ollama, LM Studio, llama.cpp)
+- **Pipeline modes** — refine, raw, or copy-only
+- **Per-app rules** — override mode and delivery (paste / typed keystrokes / clipboard) per application
+- **Global hotkeys** — hands-free toggle and push-to-talk, plus a menu bar control
+- **Custom vocabulary** — names and jargon fed to Whisper and the refinement prompt
+- **History** — search past transcripts, compare raw vs polished, rewrite with a custom instruction
 
-### 1. Smart Voice-to-Text
+## How it works
 
-Unlike standard dictation which requires explicit punctuation commands, VoxFlow uses AI to:
+1. Press a hotkey (or use the menu bar) to start recording
+2. PortAudio captures 16 kHz audio; chunks stream to Whisper
+3. Raw text is optionally refined by your chosen LLM
+4. Polished text is pasted (or typed / copied) into the frontmost app via CoreGraphics
 
-- **Auto-Punctuate**: Detects pauses and tone to add commas, periods, and question marks naturally.
-- **Clean Up Fillers**: Automatically removes "ums," "uhs," and stutters.
-- **Handle "Backtracking"**: Intelligently corrects speech when you change your mind mid-sentence.
-- **Understand Context**: Recognizes technical jargon, developer-specific syntax (camelCase), and personal names.
+## Tech stack
 
-### 2. Universal Integration
+| Layer | Choice |
+|-------|--------|
+| Desktop shell | [Wails v2](https://wails.io/) (Go + WebView) |
+| Backend | Go |
+| Frontend | React, TypeScript, Tailwind CSS |
+| STT | whisper.cpp (`whisper-server` / `whisper-cli`) |
+| Refinement | Gemini · OpenRouter · Groq · Cerebras · local OpenAI-compatible |
+| Storage | SQLite (`~/.voxflow/history.db`) |
 
-VoxFlow acts as a system-level overlay. It works inside any application where you can type:
+## Prerequisites
 
-- **Messaging**: Slack, WhatsApp, iMessage.
-- **Productivity**: Notion, Google Docs, Email clients.
-- **Development**: VS Code, Cursor, terminal environments.
+- macOS (Apple Silicon recommended)
+- Go 1.24+
+- Node.js 20.19+
+- [Wails CLI](https://wails.io/docs/gettingstarted/installation): `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+- PortAudio: `brew install portaudio`
+- whisper.cpp: `brew install whisper-cpp`
 
-### 3. Key Productivity Features
+## Development
 
-- **Streaming Transcription**: Audio is transcribed in chunks while you speak, split at pauses so no word is cut in half, with live feedback during recording.
-- **Resident Model**: whisper.cpp stays loaded in a local `whisper-server`, so each chunk costs milliseconds instead of a fresh model load.
-- **Menu Bar Control**: A status bar icon shows recording state and offers start/stop, open, settings and quit.
-- **Custom Vocabulary**: Names, jargon and identifiers you use often are fed to both Whisper and the refinement model.
-- **Per-App Rules**: Choose raw, refined or copy-only output and paste, clipboard or typed-keystroke delivery per application.
-- **History Vault**: Search past transcriptions, compare raw and polished text, and rewrite any entry with a custom instruction.
+```bash
+./dev.sh
+```
+
+On first launch the app helps download a Whisper model (~142 MB for `base`).
+
+## Configuration
+
+Settings live in `~/.voxflow/config.json`. Models are stored under `~/.voxflow/models/`.
+
+| Setting | Purpose |
+|---------|---------|
+| LLM provider & model | Cloud or local refinement |
+| Pipeline mode | Refine / raw / copy-only |
+| Hotkeys | Hands-free and push-to-talk |
+| Whisper model & language | Speed vs accuracy; fixed language or auto-detect |
+| Vocabulary | Preferred spellings for Whisper + LLM |
+| Per-app rules | Mode and inject method per bundle ID |
+| Mute system audio | Silence speakers while recording |
+
+Copy `.env.example` to `.env` for API keys during development (keys can also be set in the Settings UI).
+
+## Project layout
+
+```text
+.
+├── main.go, app*.go     # Wails entry + frontend-bound methods
+├── internal/
+│   ├── orchestrator/    # Record → transcribe → refine → inject
+│   ├── audio/           # PortAudio capture, chunking, mute
+│   ├── whisper/         # Models, whisper-server, CLI fallback
+│   ├── llm/             # Shared prompt, parsing, OpenAI client
+│   ├── gemini/, groq/, cerebras/, openrouter/, localclient/
+│   ├── injection/       # Paste / type / clipboard (CoreGraphics)
+│   ├── hotkey/, window/, history/, config/, macos/
+│   └── logger/, events/
+├── frontend/            # React + TypeScript UI
+└── docs/                # Product & architecture notes
+```
 
 ## Troubleshooting
 
 ### "VoxFlow is damaged and can't be opened"
 
-Because the app is not signed with an Apple Developer Certificate, macOS may block it. To fix this, run:
+The app is not notarized. Clear the quarantine flag:
 
 ```bash
 xattr -cr /Applications/voxflow.app
 ```
 
-(Adjust the path if you've moved the app elsewhere)
+## Docs
 
-## Implementations
+- [Product overview](./docs/PRODUCT.md) — architecture, pipeline, and design decisions in detail
 
-This repository contains the primary Go-based implementation of VoxFlow.
+## License
 
-- **[VoxFlow Go Implementation](./voxflow-go-implementation/README.md)**: The core desktop application built with Wails (Go + React). It handles the global shortcut, local transcription via whisper.cpp, and AI refinement via Gemini, Groq, and other LLMs.
+Personal project. See repository for terms.

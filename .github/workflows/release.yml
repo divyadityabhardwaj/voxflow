@@ -27,8 +27,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: voxflow-go-implementation/go.mod
-          cache-dependency-path: voxflow-go-implementation/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -42,17 +42,16 @@ jobs:
         run: brew install create-dmg portaudio pkg-config
 
       - name: Build Application
-        working-directory: ./voxflow-go-implementation
         run: |
           wails build -platform ${{ matrix.platform }} -clean \
             -ldflags "-X main.version=${GITHUB_REF_NAME#v}"
 
       - name: Create DMG
-        working-directory: ./voxflow-go-implementation/build/bin
+        working-directory: ./build/bin
         run: |
           create-dmg \
             --volname "Voxflow Installer" \
-            --volicon "../../../voxflow-go-implementation/build/appicon.png" \
+            --volicon "../../build/appicon.png" \
             --window-pos 200 120 \
             --window-size 800 400 \
             --icon-size 100 \
@@ -66,6 +65,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            voxflow-go-implementation/build/bin/voxflow-${{ matrix.arch }}.dmg
+            build/bin/voxflow-${{ matrix.arch }}.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
