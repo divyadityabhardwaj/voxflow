@@ -90,7 +90,7 @@ const HistoryItem = memo(function HistoryItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full p-4 text-left transition-all border-b-2 border-border ${
+      className={`w-full p-4 text-left transition-all border-b border-border ${
         isSelected
           ? "bg-accent-soft border-l-4 border-l-primary"
           : "hover:bg-secondary border-l-4 border-l-transparent"
@@ -263,7 +263,7 @@ export default function HistoryView() {
             <button
               onClick={handleClearAll}
               title="Delete all transcripts"
-              className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+              className="p-1.5 text-tertiary hover:text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"
@@ -282,7 +282,7 @@ export default function HistoryView() {
           )}
         </div>
 
-        <div className="px-4 py-3 border-b-2 border-border">
+        <div className="px-4 py-3 border-b border-border">
           <div className="relative">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary pointer-events-none"
@@ -378,7 +378,7 @@ export default function HistoryView() {
                       selectedTranscript.tokens_per_second > 0 && (
                         <span
                           title="Generation speed"
-                          className="px-2 py-0.5 rounded-lg bg-green-500/10 text-green-500 text-xs font-bold"
+                          className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 text-xs font-medium"
                         >
                           ⚡ {selectedTranscript.tokens_per_second.toFixed(1)}{" "}
                           t/s

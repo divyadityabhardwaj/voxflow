@@ -37,7 +37,7 @@ function HotkeyRow({
       <button
         type="button"
         onClick={onEdit}
-        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border border-border bg-background hover:border-border-hover hover:bg-surface-hover transition-colors text-left"
+        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border border-border bg-surface hover:border-border-hover hover:bg-surface-hover transition-colors text-left"
       >
         <span className="font-mono text-sm text-text">
           {value || "Not set"}

@@ -14,11 +14,13 @@ export default function SettingsSection({
   className = "",
 }: SettingsSectionProps) {
   return (
-    <section className={`settings-card p-5 ${className}`}>
+    <section className={`settings-card ${className}`}>
       <div className="mb-4">
-        <h3 className="text-[15px] font-semibold text-text">{title}</h3>
+        <h3 className="text-[15px] font-semibold tracking-tight text-text">
+          {title}
+        </h3>
         {description && (
-          <p className="text-sm text-secondary mt-1 leading-relaxed">
+          <p className="text-[13px] text-secondary mt-1 leading-relaxed max-w-prose">
             {description}
           </p>
         )}

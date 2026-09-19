@@ -129,8 +129,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
   };
 
   return (
-    <div className="h-full bg-background flex items-center justify-center p-8">
-      <div className="max-w-lg w-full settings-card p-8">
+    <div className="h-full app-shell flex items-center justify-center p-8">
+      <div className="max-w-lg w-full card p-8">
         <div className="flex gap-2 mb-8">
           {STEPS.map((s, i) => (
             <div
@@ -171,7 +171,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
               Accessibility permission for simulated Cmd+V.
             </p>
             {accessibilityGranted && (
-              <p className="text-xs text-green-600 font-bold mb-4">
+              <p className="text-xs text-[var(--success)] font-medium mb-4">
                 ✓ Accessibility granted
               </p>
             )}

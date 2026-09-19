@@ -1057,7 +1057,7 @@ export default function SettingsView() {
                   className={`flex items-center justify-between gap-3 p-3 rounded-md border transition-colors ${
                     config.whisper_model === model.name
                       ? "border-primary bg-accent-soft"
-                      : "border-border bg-background hover:bg-surface-hover"
+                      : "border-border bg-surface hover:bg-surface-hover"
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">

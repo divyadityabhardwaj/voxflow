@@ -57,11 +57,11 @@ export default function ModelDownloader({
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-8">
+    <div className="min-h-screen app-shell flex items-center justify-center p-8">
       <div className="max-w-md w-full text-center">
         <div className="w-20 h-20 mx-auto mb-8 rounded-2xl bg-primary flex items-center justify-center shadow-soft-md">
           <svg
-            className="w-10 h-10 text-white"
+            className="w-10 h-10 text-[var(--primary-foreground)]"
             fill="currentColor"
             viewBox="0 0 24 24"
           >
@@ -123,8 +123,8 @@ export default function ModelDownloader({
 
         {error && (
           <div className="space-y-4">
-            <div className="p-4 bg-red-500/10 border border-red-500 rounded-xl">
-              <p className="text-sm font-bold text-red-500">{error}</p>
+            <div className="p-4 bg-[var(--danger)]/10 border border-[var(--danger)]/30 rounded-xl">
+              <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
             </div>
 
             <button

@@ -130,7 +130,7 @@ export default function AppRulesSettings() {
           {rules.map((rule) => (
             <li
               key={rule.bundle_id}
-              className="flex items-center justify-between gap-3 p-3 rounded-md border border-border bg-background"
+              className="flex items-center justify-between gap-3 p-3 rounded-md border border-border bg-surface"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate text-text">

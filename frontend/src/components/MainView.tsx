@@ -167,53 +167,64 @@ export default function MainView() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-0 p-8 overflow-y-auto animate-fade-in">
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-semibold text-text mb-2">
+    <div className="flex flex-col items-center justify-center h-full min-h-0 px-6 py-8 overflow-y-auto animate-fade-in">
+      <div className="text-center mb-6 max-w-lg">
+        <h1 className="text-xl font-semibold tracking-tight text-text mb-1.5">
           {status === "Idle" && "Capture a quick thought"}
           {status === "Recording" && "Listening…"}
           {status === "Processing" && "Processing…"}
           {status === "Refining" && "Refining…"}
         </h1>
-        <p className="text-secondary text-sm">
-          {status === "Idle" &&
-            (handsFreeHotkey
-              ? `Press ${handsFreeHotkey} to start recording, or hold ${pttHotkey || "PTT key"} to speak`
-              : "Press the button or use your hotkey to start recording")}
-          {status === "Recording" &&
-            "Speak naturally, then press again or release key to stop"}
-          {status === "Processing" &&
-            (partialText
-              ? "Transcribing your recording…"
-              : "Transcribing your recording")}
-          {status === "Refining" && "Polishing transcription with AI…"}
-        </p>
+        {status === "Idle" ? (
+          <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-secondary mt-2">
+            <span>Press</span>
+            <kbd className="px-2 py-0.5 rounded-md bg-surface border border-border text-[11px] font-mono text-text shadow-sm">
+              {handsFreeHotkey || "Hotkey"}
+            </kbd>
+            <span>to record, or hold</span>
+            <kbd className="px-2 py-0.5 rounded-md bg-surface border border-border text-[11px] font-mono text-text shadow-sm">
+              {pttHotkey || "PTT key"}
+            </kbd>
+            <span>to speak</span>
+          </div>
+        ) : (
+          <p className="text-xs text-secondary mt-1">
+            {status === "Recording" &&
+              "Speak naturally, then press again or release key to stop"}
+            {status === "Processing" &&
+              (partialText
+                ? "Transcribing your recording…"
+                : "Transcribing your recording")}
+            {status === "Refining" && "Polishing transcription with AI…"}
+          </p>
+        )}
       </div>
 
-      <div className="w-full max-w-xl mb-10">
+      <div className="w-full max-w-xl mb-8">
         <div
           className={`
-            card-elevated p-5 flex items-center gap-4 transition-all duration-300
-            ${status === "Recording" ? "border-recording" : ""}
-            ${status === "Processing" ? "border-processing" : ""}
+            card p-3 pl-4 flex items-center gap-3 transition-all duration-200
+            ${status === "Recording" ? "border-recording ring-1 ring-recording/30" : ""}
+            ${status === "Processing" ? "border-processing ring-1 ring-processing/30" : ""}
           `}
         >
           <div className="flex-1 min-w-0">
             {status === "Processing" && partialText ? (
               <div
                 ref={partialRef}
-                className="max-h-24 overflow-y-auto"
+                className="max-h-20 overflow-y-auto"
               >
-                <p className="text-text text-sm leading-relaxed opacity-70 whitespace-pre-wrap">
+                <p className="text-text text-sm leading-relaxed whitespace-pre-wrap">
                   {partialText}
                   <span className="inline-block w-0.5 h-3.5 bg-primary ml-0.5 align-text-bottom animate-pulse-soft" />
                 </p>
               </div>
             ) : (
-              <p className="text-tertiary text-sm font-medium">
-                {status === "Idle" && "Take a quick note with your voice..."}
-                {status === "Recording" && "Recording in progress..."}
-                {status === "Processing" && "Transcribing..."}
+              <p className="text-tertiary text-[13px] font-normal select-none">
+                {status === "Idle" && "Take a quick note with your voice…"}
+                {status === "Recording" && "Recording in progress…"}
+                {status === "Processing" && "Transcribing…"}
+                {status === "Refining" && "Polishing transcription…"}
               </p>
             )}
           </div>
@@ -224,36 +235,35 @@ export default function MainView() {
             disabled={status === "Processing"}
             title={
               status === "Idle"
-                ? "Start recording (use your hotkey)"
+                ? "Start recording"
                 : status === "Recording"
                   ? "Stop recording"
-                  : "Processing transcription..."
+                  : "Processing…"
             }
             className={`
-              relative w-12 h-12 rounded-2xl transition-all duration-300
-              flex items-center justify-center flex-shrink-0
+              relative w-10 h-10 rounded-xl transition-all duration-200
+              flex items-center justify-center flex-shrink-0 cursor-pointer
               ${
                 status === "Idle"
-                  ? "bg-primary text-[var(--primary-foreground)] hover:opacity-90"
+                  ? "bg-primary text-[var(--primary-foreground)] hover:opacity-90 active:scale-95 shadow-sm"
                   : status === "Recording"
-                    ? "bg-recording text-white"
-                    : "bg-processing text-white"
+                    ? "bg-recording text-white shadow-sm"
+                    : "bg-processing text-white shadow-sm"
               }
               disabled:cursor-not-allowed disabled:opacity-50
-              active:translate-y-0 active:shadow-none
             `}
           >
             {status === "Recording" && (
-              <span className="absolute inset-0 rounded-2xl bg-recording/40 animate-recording-ring" />
+              <span className="absolute inset-0 rounded-xl bg-recording/40 animate-recording-ring" />
             )}
 
             {status === "Processing" && (
-              <span className="absolute inset-0 rounded-2xl border-2 border-white/20 border-t-white animate-spin-slow" />
+              <span className="absolute inset-0 rounded-xl border-2 border-white/20 border-t-white animate-spin-slow" />
             )}
 
             {status === "Idle" && (
               <svg
-                className="w-5 h-5 relative z-10"
+                className="w-4 h-4 relative z-10"
                 fill="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -263,7 +273,7 @@ export default function MainView() {
             )}
             {status === "Recording" && (
               <svg
-                className="w-5 h-5 relative z-10"
+                className="w-4 h-4 relative z-10"
                 fill="currentColor"
                 viewBox="0 0 24 24"
               >
@@ -272,7 +282,7 @@ export default function MainView() {
             )}
             {status === "Processing" && (
               <svg
-                className="w-5 h-5 relative z-10 animate-pulse"
+                className="w-4 h-4 relative z-10 animate-pulse"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -290,77 +300,93 @@ export default function MainView() {
       </div>
 
       {error && (
-        <div className="w-full max-w-xl mb-6 p-4 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10">
-          <p className="text-sm text-[var(--danger)]">{error}</p>
+        <div className="w-full max-w-xl mb-6 p-3.5 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+          <p className="text-xs text-[var(--danger)]">{error}</p>
         </div>
       )}
 
       {lastTranscription && (
-        <div className="w-full max-w-xl animate-fade-in">
-          <div className="card p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-xs font-medium text-secondary uppercase tracking-wide">
+        <div className="w-full max-w-xl animate-fade-in mb-8">
+          <div className="card p-5">
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-[11px] font-semibold text-tertiary uppercase tracking-wider">
                 Result
-              </h3>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-primary font-medium">
+              </span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent-soft text-primary font-medium">
                 Done
               </span>
               {elapsedMs != null && (
-                <span className="text-xs text-tertiary ml-auto font-medium tabular-nums">
+                <span className="text-[11px] text-tertiary ml-auto font-mono">
                   {formatElapsed(elapsedMs)}
                   {wordsPerMinute != null && ` · ${wordsPerMinute} WPM`}
                 </span>
               )}
             </div>
             {usedRawNoPolish && (
-              <p className="text-xs text-tertiary mb-2 font-medium">
+              <p className="text-xs text-tertiary mb-2">
                 Shown as transcribed — refinement skipped (already clear).
               </p>
             )}
-            <p className="text-text whitespace-pre-wrap leading-relaxed font-medium">
+            <p className="text-text text-sm whitespace-pre-wrap leading-relaxed">
               {lastTranscription}
             </p>
+            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => handleCopy(lastTranscription)}
+                className="btn btn-secondary !py-1.5 !px-3 !text-xs"
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInject(lastTranscription)}
+                className="btn btn-primary !py-1.5 !px-3 !text-xs"
+              >
+                Inject
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {!lastTranscription && status === "Idle" && (
         <div className="w-full max-w-xl animate-fade-in">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-semibold text-secondary uppercase tracking-wide">
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
+            <h2 className="text-[11px] font-semibold tracking-wider text-tertiary uppercase">
               Recent Recordings
             </h2>
           </div>
           {recents.length === 0 ? (
-            <div className="card p-8 text-center">
-              <p className="text-sm text-tertiary font-medium">
+            <div className="card p-6 text-center">
+              <p className="text-xs text-tertiary">
                 Your recent recordings will appear here
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="card overflow-hidden divide-y divide-border/50">
               {recents.map((item) => (
                 <div
                   key={item.id}
-                  className="card p-4 flex items-center justify-between gap-4 hover:border-border-hover transition-colors group"
+                  className="px-4 py-3 flex items-center justify-between gap-4 hover:bg-surface-hover/50 transition-colors group"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-text font-medium truncate">
+                    <p className="text-[13px] text-text font-medium truncate leading-snug">
                       {item.polished_text || item.raw_text}
                     </p>
-                    <p className="text-xs text-tertiary mt-1 font-medium">
+                    <span className="text-[11px] text-tertiary font-mono block mt-0.5">
                       {formatRecentDate(item.timestamp)}
-                    </p>
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       type="button"
                       onClick={() => handleCopy(item.polished_text || item.raw_text)}
                       title="Copy to clipboard"
-                      className="p-2 text-text hover:text-primary hover:bg-secondary rounded-lg transition-all"
+                      className="p-1.5 text-secondary hover:text-text hover:bg-surface rounded-md transition-all"
                     >
                       <svg
-                        className="w-4 h-4"
+                        className="w-3.5 h-3.5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -377,10 +403,10 @@ export default function MainView() {
                       type="button"
                       onClick={() => handleInject(item.polished_text || item.raw_text)}
                       title="Inject text at cursor"
-                      className="p-2 text-text hover:text-primary hover:bg-secondary rounded-lg transition-all"
+                      className="p-1.5 text-secondary hover:text-text hover:bg-surface rounded-md transition-all"
                     >
                       <svg
-                        className="w-4 h-4"
+                        className="w-3.5 h-3.5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
