@@ -1,7 +1,5 @@
 package llm
 
-// LatencyTestText is a sample transcription for testing model latency across all providers.
-// This simulates a realistic voice input with filler words, punctuation commands, etc.
 const LatencyTestText = `um hello uh so i was thinking about the project right and like i mean we need to get things done you know
 okay so here's the thing uh basically we have three main points first uh the budget right
 two the timeline and three the resources basically

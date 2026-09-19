@@ -34,7 +34,6 @@ static NSMenuItem *addStatusMenuItem(NSMenu *menu, NSString *title, int tag) {
     return item;
 }
 
-// state: 0 idle, 1 recording, 2 processing.
 static void applyStatusItemState(int state) {
     NSString *symbol = @"mic";
     NSString *title = @"Start Recording";
@@ -97,15 +96,11 @@ import "C"
 
 var statusCallbacks StatusItemCallbacks
 
-// InstallStatusItem adds the menu bar icon and menu. Safe from any goroutine;
-// a second call is a no-op.
 func InstallStatusItem(cb StatusItemCallbacks) {
 	statusCallbacks = cb
 	C.installStatusItem()
 }
 
-// SetStatusItemState reflects "Idle", "Recording" or "Processing" in the icon
-// and menu. Anything else is treated as idle.
 func SetStatusItemState(state string) {
 	var s C.int
 	switch state {

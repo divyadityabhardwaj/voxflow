@@ -23,7 +23,6 @@ func TestHistoryService(t *testing.T) {
 	}
 	defer s.Close()
 
-	// 1. Verify initially empty
 	count, err := s.GetCount()
 	if err != nil {
 		t.Fatalf("GetCount failed: %v", err)
@@ -32,7 +31,6 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("expected 0 transcripts, got %d", count)
 	}
 
-	// 2. Save transcript
 	raw := "Hello this is a test transcription."
 	polished := "Hello, this is a test transcription."
 	provider := "gemini"
@@ -59,13 +57,11 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("expected provider %q, got %q", provider, t1.LLMProvider)
 	}
 
-	// Verify count is 1
 	count, _ = s.GetCount()
 	if count != 1 {
 		t.Errorf("expected 1 transcript, got %d", count)
 	}
 
-	// 3. Retrieve by ID
 	t2, err := s.GetByID(t1.ID)
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
@@ -74,7 +70,6 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("retrieved mismatch fields")
 	}
 
-	// 4. Update polished text
 	newPolished := "Hello, this is a refined test transcription!"
 	err = s.UpdatePolishedText(t1.ID, newPolished)
 	if err != nil {
@@ -86,7 +81,6 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("expected updated polished text %q, got %q", newPolished, t3.PolishedText)
 	}
 
-	// 5. Search
 	results, err := s.Search("refined", 10)
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
@@ -100,7 +94,6 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("expected 0 search results, got %d", len(resultsEmpty))
 	}
 
-	// 6. Pagination (GetPage / SearchPage)
 	page, nextTS, nextID, err := s.GetPage(time.Time{}, 0, 10)
 	if err != nil {
 		t.Fatalf("GetPage failed: %v", err)
@@ -112,7 +105,6 @@ func TestHistoryService(t *testing.T) {
 		t.Errorf("invalid cursor returned")
 	}
 
-	// 7. Delete
 	err = s.Delete(t1.ID)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)

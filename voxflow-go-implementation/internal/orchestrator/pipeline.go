@@ -21,13 +21,11 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// WindowController abstracts mini/full window transitions used during recording.
 type WindowController interface {
 	ShowMini()
 	UserExplicitlyMaximized() bool
 }
 
-// Pipeline runs the recording → transcription → refinement → injection flow.
 type Pipeline struct {
 	ctx context.Context
 
@@ -62,7 +60,6 @@ type Pipeline struct {
 	savedVolume int
 }
 
-// Config wires dependencies into a Pipeline.
 type Config struct {
 	Ctx            context.Context
 	AppConfig      *config.Config
@@ -75,11 +72,9 @@ type Config struct {
 	Refiner        func() llm.Refiner
 	ActiveLLMModel func() string
 	ModelReady     func() bool
-	// OnState, if set, is called on every state transition.
 	OnState func(hotkey.State)
 }
 
-// New creates a recording pipeline.
 func New(cfg Config) *Pipeline {
 	return &Pipeline{
 		ctx:              cfg.Ctx,
@@ -118,7 +113,6 @@ func (p *Pipeline) setState(state hotkey.State) {
 	}
 }
 
-// HandleHotkeyState reacts to global hotkey state transitions.
 func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 	p.setState(state)
 	runtime.EventsEmit(p.ctx, events.StateChanged, state.String())
@@ -138,7 +132,6 @@ func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 	}
 }
 
-// StartRecording begins audio capture.
 func (p *Pipeline) StartRecording() error {
 	if p.modelReady != nil && !p.modelReady() {
 		// The hotkey path has already flipped state to Recording; undo it or the
@@ -165,7 +158,6 @@ func (p *Pipeline) StartRecording() error {
 
 	p.startStreamingTranscription()
 
-	// Pre-warm the active provider's TLS connection in the background while the user is talking.
 	if p.refiner != nil {
 		activeModel := ""
 		if p.activeLLMModel != nil {
@@ -202,8 +194,6 @@ func (p *Pipeline) StartRecording() error {
 	return nil
 }
 
-// CaptureRecordingTarget records the frontmost app before VoxFlow takes focus.
-// Call this from the hotkey callback before switching to mini mode.
 func (p *Pipeline) CaptureRecordingTarget() {
 	// Clear first: osascript takes a while, and a short dictation that stops before
 	// it returns must not inherit the previous recording's app rules.
@@ -221,7 +211,6 @@ func (p *Pipeline) CaptureRecordingTarget() {
 	p.targetMu.Unlock()
 }
 
-// StopRecording stops capture and begins async processing.
 func (p *Pipeline) StopRecording() {
 	p.setState(hotkey.StateProcessing)
 	if p.hotkeyManager != nil {
@@ -273,7 +262,7 @@ func (p *Pipeline) streamingWorker() {
 		p.streamText = mergeStreamingChunks(p.streamChunks)
 		currentText := p.streamText
 
-		// Rate-limit/throttle partial transcript event emissions to prevent visual UI lag (max 10 events/sec)
+		// Cap partial transcript events at ~10/s to avoid UI lag.
 		shouldEmit := job.IsFinal || time.Since(p.lastEmitTime) >= 100*time.Millisecond
 		if shouldEmit {
 			p.lastEmitTime = time.Now()
@@ -307,7 +296,7 @@ func (p *Pipeline) startStreamingTranscription() {
 			IsFinal:   isFinal,
 		}:
 		default:
-			// If the channel is full, drop the oldest chunk to avoid blocking PortAudio stream reads.
+			// Drop oldest chunk if full — must not block PortAudio.
 			select {
 			case oldJob := <-p.streamJobs:
 				if !oldJob.IsFinal {
@@ -316,7 +305,6 @@ func (p *Pipeline) startStreamingTranscription() {
 			default:
 			}
 
-			// Try sending again
 			select {
 			case p.streamJobs <- streamJob{
 				Samples:   samples,
@@ -324,7 +312,6 @@ func (p *Pipeline) startStreamingTranscription() {
 				IsFinal:   isFinal,
 			}:
 			default:
-				// If it still can't send (e.g. channel closed), recycle the samples
 				if !isFinal {
 					audio.RecycleChunk(samples)
 				}
@@ -348,7 +335,6 @@ func (p *Pipeline) processRecording() {
 	wavPath, err := p.audioRecorder.Stop()
 	stopAndWavDuration = time.Since(stopAndWavStart)
 
-	// Close the streaming worker channel and wait for any remaining transcriptions to finish.
 	if p.streamJobs != nil {
 		close(p.streamJobs)
 		p.streamJobs = nil
@@ -383,7 +369,6 @@ func (p *Pipeline) processRecording() {
 	var rawText string
 	var whisperDuration time.Duration
 
-	// Calculate real covered seconds from processed chunks
 	var streamCoversSec float64
 	p.streamTextMu.Lock()
 	for _, chunk := range p.streamChunks {
@@ -404,7 +389,6 @@ func (p *Pipeline) processRecording() {
 			streamChunkCount, streamCoversSec, audioSec)
 		rawText = streamText
 	} else {
-		// Gap-fill needed: transcribe only the uncovered tail.
 		fullSamples := p.audioRecorder.GetBuffer()
 		startIndex := int(streamCoversSec * 16000)
 		if startIndex < 0 {
@@ -441,7 +425,6 @@ func (p *Pipeline) processRecording() {
 			rawText = cleanWhisperText(tailText)
 		}
 
-		// Fallback to full file if still completely empty and activity detected
 		if rawText == "" && len(fullSamples) > 0 {
 			logger.Infof("[Pipeline] Tail transcription empty, falling back to transcribing full WAV file")
 			maxRetries := 3
@@ -664,7 +647,6 @@ func (p *Pipeline) resetToIdle() {
 	p.restoreVolume()
 }
 
-// ToggleRecording toggles between recording and idle.
 func (p *Pipeline) ToggleRecording() string {
 	switch p.State() {
 	case hotkey.StateIdle:
@@ -680,7 +662,6 @@ func (p *Pipeline) ToggleRecording() string {
 	}
 }
 
-// RecordingTarget returns the bundle ID and app name captured at recording start.
 func (p *Pipeline) RecordingTarget() (bundleID, appName string) {
 	p.targetMu.Lock()
 	defer p.targetMu.Unlock()

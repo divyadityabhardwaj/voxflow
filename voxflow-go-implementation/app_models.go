@@ -9,7 +9,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// checkModelStatus checks if the Whisper model is downloaded and loads it
 func (a *App) checkModelStatus() {
 	modelSize := a.config.GetWhisperModel()
 	downloaded, _ := a.whisperService.IsModelDownloaded(modelSize)
@@ -50,19 +49,16 @@ func (a *App) optimizeWhisperRuntime() {
 	}
 }
 
-// IsModelReady returns whether the Whisper model is ready
 func (a *App) IsModelReady() bool {
 	return a.modelReady.Load()
 }
 
-// IsModelDownloaded checks if the current Whisper model is downloaded
 func (a *App) IsModelDownloaded() bool {
 	modelSize := a.config.GetWhisperModel()
 	downloaded, _ := a.whisperService.IsModelDownloaded(modelSize)
 	return downloaded
 }
 
-// DownloadModel downloads the currently configured Whisper model
 func (a *App) DownloadModel() error {
 	modelSize := a.config.GetWhisperModel()
 
@@ -95,7 +91,6 @@ func (a *App) DownloadModel() error {
 	return nil
 }
 
-// DownloadModelByName downloads a specific Whisper model by name (cancellable)
 func (a *App) DownloadModelByName(modelName string) error {
 	a.downloadMu.Lock()
 	if a.downloadCancel != nil {
@@ -131,7 +126,6 @@ func (a *App) DownloadModelByName(modelName string) error {
 	return nil
 }
 
-// CancelDownload cancels any active Whisper model download
 func (a *App) CancelDownload() {
 	a.downloadMu.Lock()
 	defer a.downloadMu.Unlock()
@@ -144,7 +138,6 @@ func (a *App) CancelDownload() {
 	}
 }
 
-// DeleteModelByName deletes a specific Whisper model
 func (a *App) DeleteModelByName(modelName string) error {
 	activeModel := a.config.GetWhisperModel()
 	if modelName == activeModel {
@@ -153,7 +146,6 @@ func (a *App) DeleteModelByName(modelName string) error {
 	return a.whisperService.DeleteModel(modelName)
 }
 
-// IsWhisperCLIReady returns whether whisper-cli is available
 func (a *App) IsWhisperCLIReady() bool {
 	return a.whisperService.IsWhisperCLIInstalled()
 }

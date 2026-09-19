@@ -13,7 +13,6 @@ import (
 )
 
 // speechClip synthesizes "hello world this is a test" as 16 kHz mono PCM via macOS
-// `say`, returning the samples and the WAV path.
 func speechClip(t *testing.T) ([]int16, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -65,7 +64,6 @@ func currentServer(svc *Service) *whisperServer {
 	return svc.server
 }
 
-// helloChecker returns a func that fails the test unless a transcription mentions hello.
 func helloChecker(t *testing.T) func(text string, err error) {
 	return func(text string, err error) {
 		t.Helper()

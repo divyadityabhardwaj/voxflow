@@ -10,8 +10,7 @@ var (
 	vocabulary string
 )
 
-// SetVocabulary records user terms (names, jargon, identifiers) that every
-// provider's system prompt should prefer when the transcription sounds like them.
+// Vocabulary terms preferred in every provider's system prompt.
 func SetVocabulary(v string) {
 	vocabMu.Lock()
 	vocabulary = strings.TrimSpace(v)
@@ -68,8 +67,6 @@ Rules:
 2. The "text" field contains the refined text when ok_to_go is false
 3. Preserve speaker's meaning and intent`
 
-// BuildSystemPrompt returns the system prompt for voice-to-text refinement.
-// This is used across all LLM providers.
 func BuildSystemPrompt() string {
 	vocabMu.RLock()
 	v := vocabulary

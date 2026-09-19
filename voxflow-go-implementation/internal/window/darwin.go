@@ -45,7 +45,6 @@ void constrainWindowToScreen() {
 
                 BOOL adjusted = NO;
 
-                // Keep X within visible screen frame
                 if (windowFrame.origin.x < visibleFrame.origin.x) {
                     windowFrame.origin.x = visibleFrame.origin.x;
                     adjusted = YES;
@@ -54,7 +53,6 @@ void constrainWindowToScreen() {
                     adjusted = YES;
                 }
 
-                // Keep Y within visible screen frame
                 if (windowFrame.origin.y < visibleFrame.origin.y) {
                     windowFrame.origin.y = visibleFrame.origin.y;
                     adjusted = YES;
@@ -73,18 +71,15 @@ void constrainWindowToScreen() {
 */
 import "C"
 
-// FloatEverywhere makes the window visible on all desktops/spaces
-// and able to appear over fullscreen applications.
+// All spaces + above fullscreen apps.
 func FloatEverywhere() {
 	C.makeWindowFloatEverywhere()
 }
 
-// ResetBehavior resets the window to normal macOS behavior.
 func ResetBehavior() {
 	C.resetWindowBehavior()
 }
 
-// ConstrainWindow bounds the window to the visible area of the screen.
 func ConstrainWindow() {
 	C.constrainWindowToScreen()
 }

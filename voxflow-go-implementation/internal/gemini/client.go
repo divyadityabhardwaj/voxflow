@@ -20,7 +20,6 @@ const (
 	baseAPIURL = "https://generativelanguage.googleapis.com/v1beta"
 )
 
-// Client handles communication with the Gemini API
 type Client struct {
 	apiKey     string
 	modelName  string
@@ -29,8 +28,6 @@ type Client struct {
 	modelsMu   sync.Mutex
 }
 
-// newTunedTransport returns an http.Transport optimised for low-latency API
-// calls.
 func newTunedTransport() *http.Transport {
 	return &http.Transport{
 		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
@@ -45,7 +42,6 @@ func newTunedTransport() *http.Transport {
 	}
 }
 
-// NewClient creates a new Gemini client
 func NewClient(apiKey string, modelName string) *Client {
 	return &Client{
 		apiKey:    apiKey,
@@ -57,22 +53,18 @@ func NewClient(apiKey string, modelName string) *Client {
 	}
 }
 
-// SetAPIKey updates the API key
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
-	// Clear cached models since new key may have different access
 	c.modelsMu.Lock()
 	c.models = nil
 	c.modelsMu.Unlock()
 }
 
-// SetModel updates the model name
 func (c *Client) SetModel(modelName string) {
 	c.modelName = modelName
 }
 
-// do sends a JSON request with retry/backoff. The key goes in a header rather
-// than the query string so it never lands in proxy or access logs.
+// API key in header, not query string (proxy/access logs).
 func (c *Client) do(method, url string, body []byte) ([]byte, int, error) {
 	return llm.DoWithRetry(c.httpClient, func() (*http.Request, error) {
 		var r io.Reader
@@ -89,60 +81,49 @@ func (c *Client) do(method, url string, body []byte) ([]byte, int, error) {
 	})
 }
 
-// Request represents a Gemini API request
 type Request struct {
 	Contents          []Content        `json:"contents"`
 	SystemInstruction *Content         `json:"systemInstruction,omitempty"`
 	GenerationConfig  GenerationConfig `json:"generationConfig,omitempty"`
 }
 
-// Content represents a message content
 type Content struct {
 	Parts []Part `json:"parts"`
 	Role  string `json:"role,omitempty"`
 }
 
-// Part represents a part of the content
 type Part struct {
 	Text string `json:"text"`
 }
 
-// GenerationConfig holds generation parameters
 type GenerationConfig struct {
 	Temperature     float64 `json:"temperature,omitempty"`
 	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
 }
 
-// Response represents a Gemini API response
 type Response struct {
 	Candidates    []Candidate    `json:"candidates"`
 	UsageMetadata *UsageMetadata `json:"usageMetadata,omitempty"`
 	Error         *APIError      `json:"error,omitempty"`
 }
 
-// UsageMetadata represents token usage statistics
 type UsageMetadata struct {
 	PromptTokenCount     int `json:"promptTokenCount"`
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
 	TotalTokenCount      int `json:"totalTokenCount"`
 }
 
-// Candidate represents a generated candidate
 type Candidate struct {
 	Content *Content `json:"content"`
 }
 
-// APIError represents an API error
 type APIError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Status  string `json:"status"`
 }
 
-// RefineText sends raw transcription to Gemini for refinement.
-// If ok_to_go is true, the caller should use rawText (second return is true).
-// RefineText satisfies llm.Refiner. If model is non-empty it overrides the
-// client's configured model for this call only.
+// model non-empty overrides the client default for this call. ok_to_go => use rawText.
 func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	logger.Debugf("[Gemini] Refining text: %d chars", len(rawText))
 	if c.apiKey == "" {
@@ -156,7 +137,6 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 
 	systemPrompt := llm.BuildSystemPrompt()
 
-	// Create the request with proper system instruction separation
 	req := Request{
 		SystemInstruction: &Content{
 			Parts: []Part{{Text: systemPrompt}},
@@ -173,7 +153,6 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 		},
 	}
 
-	// Marshal request
 	reqBody, err := json.Marshal(req)
 	if err != nil {
 		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
@@ -185,18 +164,15 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 		return "", 0, false, err
 	}
 
-	// Parse response
 	var geminiResp Response
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
 		return "", 0, false, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Check for API error
 	if geminiResp.Error != nil {
 		return "", 0, false, fmt.Errorf("API error: %s (code: %d)", geminiResp.Error.Message, geminiResp.Error.Code)
 	}
 
-	// Extract the refined text
 	if len(geminiResp.Candidates) == 0 || geminiResp.Candidates[0].Content == nil {
 		return "", 0, false, fmt.Errorf("no response generated")
 	}
@@ -207,16 +183,13 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 
 	result := geminiResp.Candidates[0].Content.Parts[0].Text
 
-	// Debug logging
 	logger.Debugf("[Gemini] Raw output: %d chars", len(result))
 
-	// Extract token count
 	var tokenCount int
 	if geminiResp.UsageMetadata != nil {
 		tokenCount = geminiResp.UsageMetadata.CandidatesTokenCount
 	}
 
-	// Parse structured response
 	refined, okToGo, parsed := llm.ParseRefineResponse(result, rawText)
 	if !parsed {
 		logger.Warnf("[Gemini] Warning: Response was not valid JSON")
@@ -225,7 +198,6 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	return refined, tokenCount, okToGo, nil
 }
 
-// RetryWithInstruction re-processes text with a custom instruction
 func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
 	if c.apiKey == "" {
 		return "", fmt.Errorf("API key not set")
@@ -289,13 +261,11 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
-// ModelListResponse represents the response from listing models
 type ModelListResponse struct {
 	Models []Model   `json:"models"`
 	Error  *APIError `json:"error,omitempty"`
 }
 
-// Model represents a Gemini model
 type Model struct {
 	Name                       string   `json:"name"`
 	DisplayName                string   `json:"displayName"`
@@ -305,7 +275,6 @@ type Model struct {
 	SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
 }
 
-// ListModels returns a list of available Gemini models
 func (c *Client) ListModels() ([]string, error) {
 	if c.apiKey == "" {
 		return nil, fmt.Errorf("API key not set")
@@ -334,7 +303,6 @@ func (c *Client) ListModels() ([]string, error) {
 
 	var models []string
 	for _, m := range listResp.Models {
-		// Filter for models that support generateContent
 		isContentGen := false
 		for _, method := range m.SupportedGenerationMethods {
 			if method == "generateContent" {
@@ -343,9 +311,7 @@ func (c *Client) ListModels() ([]string, error) {
 			}
 		}
 
-		// Only include base models (not tuned), starting with "models/gemini"
 		if isContentGen && strings.HasPrefix(m.Name, "models/gemini") {
-			// Strip "models/" prefix for cleaner display/usage
 			name := strings.TrimPrefix(m.Name, "models/")
 			models = append(models, name)
 		}
@@ -358,7 +324,6 @@ func (c *Client) ListModels() ([]string, error) {
 	return models, nil
 }
 
-// CheckModel tests a model and returns latency in milliseconds and tokens per second
 func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 	if c.apiKey == "" {
 		return 0, 0, fmt.Errorf("API key not set")
@@ -374,7 +339,6 @@ func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 		},
 		GenerationConfig: GenerationConfig{
 			Temperature: 0.3,
-			// No max tokens cap - let it generate full response for accurate latency test
 		},
 	}
 
@@ -430,8 +394,6 @@ func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 	return latency, tps, nil
 }
 
-// Prewarm initiates a background HEAD request to baseAPIURL to warm up the
-// TLS/HTTP2 connection.
 func (c *Client) Prewarm(model string) {
 	if c.apiKey == "" {
 		return

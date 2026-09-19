@@ -17,7 +17,6 @@ const (
 	DefaultCerebrasModel   = "llama3.1-8b"
 )
 
-// Config holds the application configuration
 type Config struct {
 	GeminiAPIKey     string `json:"gemini_api_key"`
 	OpenRouterAPIKey string `json:"openrouter_api_key"`
@@ -67,7 +66,6 @@ var (
 	once     sync.Once
 )
 
-// GetConfigDir returns the application config directory
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -80,7 +78,6 @@ func GetConfigDir() (string, error) {
 	return configDir, nil
 }
 
-// GetConfigPath returns the path to the config file
 func GetConfigPath() (string, error) {
 	configDir, err := GetConfigDir()
 	if err != nil {
@@ -89,7 +86,6 @@ func GetConfigPath() (string, error) {
 	return filepath.Join(configDir, "config.json"), nil
 }
 
-// GetInstance returns the singleton config instance
 func GetInstance() *Config {
 	once.Do(func() {
 		instance = &Config{
@@ -103,7 +99,6 @@ func GetInstance() *Config {
 	return instance
 }
 
-// Load reads the config from disk
 func (c *Config) Load() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -131,7 +126,6 @@ func (c *Config) Load() error {
 		c.HandsFreeHotkey = c.Hotkey
 	}
 
-	// Ensure defaults
 	if c.HandsFreeHotkey == "" {
 		c.HandsFreeHotkey = "cmd+shift+space"
 	}
@@ -172,7 +166,6 @@ func (c *Config) Load() error {
 		c.AppRules = make(map[string]AppRule)
 	}
 
-	// Check environment variable first for API key
 	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
 		c.GeminiAPIKey = apiKey
 	}
@@ -189,7 +182,6 @@ func (c *Config) Load() error {
 	return nil
 }
 
-// Save writes the config to disk
 func (c *Config) Save() error {
 	c.saveMu.Lock()
 	defer c.saveMu.Unlock()
@@ -214,10 +206,7 @@ func (c *Config) Save() error {
 	return os.Rename(tmp, configPath)
 }
 
-// GetGeminiAPIKey returns the Gemini API key
-// Checks environment variable first, then config file
 func (c *Config) GetGeminiAPIKey() string {
-	// Check environment variable first
 	if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
 		return envKey
 	}
@@ -226,14 +215,12 @@ func (c *Config) GetGeminiAPIKey() string {
 	return c.GeminiAPIKey
 }
 
-// SetGeminiAPIKey sets the Gemini API key
 func (c *Config) SetGeminiAPIKey(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.GeminiAPIKey = key
 }
 
-// GetHandsFreeHotkey returns the hands-free hotkey
 func (c *Config) GetHandsFreeHotkey() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -243,14 +230,12 @@ func (c *Config) GetHandsFreeHotkey() string {
 	return c.HandsFreeHotkey
 }
 
-// SetHandsFreeHotkey sets the hands-free hotkey
 func (c *Config) SetHandsFreeHotkey(hotkey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.HandsFreeHotkey = hotkey
 }
 
-// GetPushToTalkHotkey returns the push-to-talk hotkey
 func (c *Config) GetPushToTalkHotkey() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -260,38 +245,32 @@ func (c *Config) GetPushToTalkHotkey() string {
 	return c.PushToTalkHotkey
 }
 
-// SetPushToTalkHotkey sets the push-to-talk hotkey
 func (c *Config) SetPushToTalkHotkey(hotkey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.PushToTalkHotkey = hotkey
 }
 
-// GetHotkey returns the configured hotkey (legacy)
 func (c *Config) GetHotkey() string {
 	return c.GetHandsFreeHotkey()
 }
 
-// SetHotkey sets the hotkey (legacy, maps to hands-free)
 func (c *Config) SetHotkey(hotkey string) {
 	c.SetHandsFreeHotkey(hotkey)
 }
 
-// GetWhisperModel returns the Whisper model size
 func (c *Config) GetWhisperModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.WhisperModel
 }
 
-// SetWhisperModel sets the Whisper model size
 func (c *Config) SetWhisperModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.WhisperModel = model
 }
 
-// GetWhisperLanguage returns the fixed language used by Whisper.
 func (c *Config) GetWhisperLanguage() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -301,7 +280,6 @@ func (c *Config) GetWhisperLanguage() string {
 	return c.WhisperLanguage
 }
 
-// SetWhisperLanguage sets the fixed language used by Whisper.
 func (c *Config) SetWhisperLanguage(language string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -311,7 +289,6 @@ func (c *Config) SetWhisperLanguage(language string) {
 	c.WhisperLanguage = language
 }
 
-// GetWhisperThreads returns the configured Whisper thread count (0 = auto).
 func (c *Config) GetWhisperThreads() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -321,7 +298,6 @@ func (c *Config) GetWhisperThreads() int {
 	return c.WhisperThreads
 }
 
-// SetWhisperThreads sets the Whisper thread count (0 = auto).
 func (c *Config) SetWhisperThreads(threads int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -331,14 +307,12 @@ func (c *Config) SetWhisperThreads(threads int) {
 	c.WhisperThreads = threads
 }
 
-// GetMiniModePosition returns the saved mini mode position
 func (c *Config) GetMiniModePosition() (int, int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.MiniModeX, c.MiniModeY
 }
 
-// SetMiniModePosition sets the saved mini mode position
 func (c *Config) SetMiniModePosition(x, y int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -346,14 +320,12 @@ func (c *Config) SetMiniModePosition(x, y int) {
 	c.MiniModeY = y
 }
 
-// GetMaximizedWindowPosition returns the saved maximized window position
 func (c *Config) GetMaximizedWindowPosition() (int, int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.MaximizedX, c.MaximizedY
 }
 
-// SetMaximizedWindowPosition sets the saved maximized window position
 func (c *Config) SetMaximizedWindowPosition(x, y int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -361,14 +333,12 @@ func (c *Config) SetMaximizedWindowPosition(x, y int) {
 	c.MaximizedY = y
 }
 
-// GetMaximizedWindowSize returns the saved maximized window size
 func (c *Config) GetMaximizedWindowSize() (int, int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.MaximizedW, c.MaximizedH
 }
 
-// SetMaximizedWindowSize sets the saved maximized window size
 func (c *Config) SetMaximizedWindowSize(w, h int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -376,7 +346,6 @@ func (c *Config) SetMaximizedWindowSize(w, h int) {
 	c.MaximizedH = h
 }
 
-// GetGeminiModel returns the configured Gemini model
 func (c *Config) GetGeminiModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -386,14 +355,12 @@ func (c *Config) GetGeminiModel() string {
 	return c.GeminiModel
 }
 
-// SetGeminiModel sets the configured Gemini model
 func (c *Config) SetGeminiModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.GeminiModel = model
 }
 
-// GetOpenRouterAPIKey returns the OpenRouter API key
 func (c *Config) GetOpenRouterAPIKey() string {
 	if envKey := os.Getenv("OPENROUTER_API_KEY"); envKey != "" {
 		return envKey
@@ -403,14 +370,12 @@ func (c *Config) GetOpenRouterAPIKey() string {
 	return c.OpenRouterAPIKey
 }
 
-// SetOpenRouterAPIKey sets the OpenRouter API key
 func (c *Config) SetOpenRouterAPIKey(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.OpenRouterAPIKey = key
 }
 
-// GetLLMProvider returns the LLM provider (gemini or openrouter)
 func (c *Config) GetLLMProvider() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -420,14 +385,12 @@ func (c *Config) GetLLMProvider() string {
 	return c.LLMProvider
 }
 
-// SetLLMProvider sets the LLM provider
 func (c *Config) SetLLMProvider(provider string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LLMProvider = provider
 }
 
-// GetOpenRouterModel returns the configured OpenRouter model
 func (c *Config) GetOpenRouterModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -437,14 +400,12 @@ func (c *Config) GetOpenRouterModel() string {
 	return c.OpenRouterModel
 }
 
-// SetOpenRouterModel sets the OpenRouter model
 func (c *Config) SetOpenRouterModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.OpenRouterModel = model
 }
 
-// GetGroqAPIKey returns the Groq API key
 func (c *Config) GetGroqAPIKey() string {
 	if envKey := os.Getenv("GROQ_API_KEY"); envKey != "" {
 		return envKey
@@ -454,14 +415,12 @@ func (c *Config) GetGroqAPIKey() string {
 	return c.GroqAPIKey
 }
 
-// SetGroqAPIKey sets the Groq API key
 func (c *Config) SetGroqAPIKey(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.GroqAPIKey = key
 }
 
-// GetGroqModel returns the configured Groq model
 func (c *Config) GetGroqModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -471,14 +430,12 @@ func (c *Config) GetGroqModel() string {
 	return c.GroqModel
 }
 
-// SetGroqModel sets the Groq model
 func (c *Config) SetGroqModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.GroqModel = model
 }
 
-// GetCerebrasAPIKey returns the Cerebras API key
 func (c *Config) GetCerebrasAPIKey() string {
 	if envKey := os.Getenv("CEREBRAS_API_KEY"); envKey != "" {
 		return envKey
@@ -488,14 +445,12 @@ func (c *Config) GetCerebrasAPIKey() string {
 	return c.CerebrasAPIKey
 }
 
-// SetCerebrasAPIKey sets the Cerebras API key
 func (c *Config) SetCerebrasAPIKey(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.CerebrasAPIKey = key
 }
 
-// GetCerebrasModel returns the configured Cerebras model
 func (c *Config) GetCerebrasModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -505,28 +460,24 @@ func (c *Config) GetCerebrasModel() string {
 	return c.CerebrasModel
 }
 
-// SetCerebrasModel sets the Cerebras model
 func (c *Config) SetCerebrasModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.CerebrasModel = model
 }
 
-// GetLocalModel returns the user-supplied local model name (e.g. "qwen3:8b").
 func (c *Config) GetLocalModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.LocalModel
 }
 
-// SetLocalModel sets the local model name.
 func (c *Config) SetLocalModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LocalModel = model
 }
 
-// GetLocalURL returns the base URL of the local OpenAI-compatible server.
 func (c *Config) GetLocalURL() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -536,28 +487,24 @@ func (c *Config) GetLocalURL() string {
 	return c.LocalURL
 }
 
-// SetLocalURL sets the base URL of the local OpenAI-compatible server.
 func (c *Config) SetLocalURL(url string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LocalURL = url
 }
 
-// GetVocabulary returns the user's custom vocabulary (names, jargon, identifiers).
 func (c *Config) GetVocabulary() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Vocabulary
 }
 
-// SetVocabulary sets the custom vocabulary.
 func (c *Config) SetVocabulary(v string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Vocabulary = v
 }
 
-// GetRefinementMode returns the configured refinement mode ("refine", "raw", "copy-only").
 func (c *Config) GetRefinementMode() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -567,14 +514,12 @@ func (c *Config) GetRefinementMode() string {
 	return c.RefinementMode
 }
 
-// SetRefinementMode sets the refinement mode.
 func (c *Config) SetRefinementMode(mode string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.RefinementMode = mode
 }
 
-// GetMuteSystemAudio returns whether the system audio should be muted during recording (defaults to true).
 func (c *Config) GetMuteSystemAudio() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -584,28 +529,24 @@ func (c *Config) GetMuteSystemAudio() bool {
 	return *c.MuteSystemAudio
 }
 
-// SetMuteSystemAudio sets whether system audio should be muted during recording.
 func (c *Config) SetMuteSystemAudio(val bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.MuteSystemAudio = &val
 }
 
-// GetOnboardingCompleted reports whether the first-run wizard was finished.
 func (c *Config) GetOnboardingCompleted() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.OnboardingCompleted
 }
 
-// SetOnboardingCompleted marks the onboarding wizard as done.
 func (c *Config) SetOnboardingCompleted(done bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.OnboardingCompleted = done
 }
 
-// GetAppRules returns a copy of configured per-app rules keyed by bundle ID.
 func (c *Config) GetAppRules() map[string]AppRule {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -616,7 +557,6 @@ func (c *Config) GetAppRules() map[string]AppRule {
 	return out
 }
 
-// SetAppRule sets or updates a per-app rule.
 func (c *Config) SetAppRule(bundleID string, rule AppRule) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -626,14 +566,12 @@ func (c *Config) SetAppRule(bundleID string, rule AppRule) {
 	c.AppRules[bundleID] = rule
 }
 
-// RemoveAppRule deletes a per-app rule.
 func (c *Config) RemoveAppRule(bundleID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.AppRules, bundleID)
 }
 
-// ResolveRefinementMode returns the effective refinement mode for an app bundle ID.
 func (c *Config) ResolveRefinementMode(bundleID string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -648,8 +586,6 @@ func (c *Config) ResolveRefinementMode(bundleID string) string {
 	return c.RefinementMode
 }
 
-// InjectMethodFor returns "paste" by default, or "clipboard"/"type" when a
-// per-app rule says so.
 func (c *Config) InjectMethodFor(bundleID string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -662,18 +598,15 @@ func (c *Config) InjectMethodFor(bundleID string) string {
 	return "paste"
 }
 
-// CachedModelList holds a list of models and the time they were fetched.
 type CachedModelList struct {
 	Models    []string  `json:"models"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// ModelCache maps provider names to their cached model lists.
 type ModelCache map[string]CachedModelList
 
 const modelCacheTTL = 24 * time.Hour
 
-// LoadModelCache reads the model list for the given provider from disk if it hasn't expired.
 func LoadModelCache(provider string) ([]string, bool) {
 	configDir, err := GetConfigDir()
 	if err != nil {
@@ -698,7 +631,6 @@ func LoadModelCache(provider string) ([]string, bool) {
 	return cached.Models, true
 }
 
-// SaveModelCache persists a list of models for the given provider to disk.
 func SaveModelCache(provider string, models []string) error {
 	configDir, err := GetConfigDir()
 	if err != nil {
@@ -720,7 +652,6 @@ func SaveModelCache(provider string, models []string) error {
 	return os.WriteFile(cachePath, data, 0644)
 }
 
-// ClearModelCache invalidates the cached model list for a given provider.
 func ClearModelCache(provider string) error {
 	configDir, err := GetConfigDir()
 	if err != nil {

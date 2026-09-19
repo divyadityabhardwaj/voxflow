@@ -21,7 +21,6 @@ import (
 	"voxflow/internal/logger"
 )
 
-// Model sizes and their download URLs (Hugging Face)
 var modelURLs = map[string]string{
 	"tiny":   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
 	"base":   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
@@ -29,15 +28,14 @@ var modelURLs = map[string]string{
 	"medium": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
 }
 
-// Model sizes in bytes (approximate)
 var modelSizes = map[string]int64{
-	"tiny":   75 * 1024 * 1024,   // ~75 MB
-	"base":   142 * 1024 * 1024,  // ~142 MB
-	"small":  466 * 1024 * 1024,  // ~466 MB
-	"medium": 1500 * 1024 * 1024, // ~1.5 GB
+	"tiny":   75 * 1024 * 1024,
+	"base":   142 * 1024 * 1024,
+	"small":  466 * 1024 * 1024,
+	"medium": 1500 * 1024 * 1024,
 }
 
-// Model SHA-256 checksums pinned for integrity verification
+// Pinned SHA-256 for download integrity
 var modelSHA256s = map[string]string{
 	"tiny":   "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
 	"base":   "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
@@ -45,7 +43,6 @@ var modelSHA256s = map[string]string{
 	"medium": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
 }
 
-// Model descriptions for UI
 var ModelDescriptions = map[string]string{
 	"tiny":   "Fastest, least accurate (~75 MB)",
 	"base":   "Good balance of speed and accuracy (~142 MB)",
@@ -53,15 +50,11 @@ var ModelDescriptions = map[string]string{
 	"medium": "Best accuracy, slowest (~1.5 GB)",
 }
 
-// Whisper CLI binary download URL (pre-compiled for macOS)
-// Using ggerganov's official releases
 const whisperCLIDownloadURL = "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.2/whisper-blas-bin-x64.zip"
 const whisperCLIMacARM = "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.2/whisper-bin-arm64-apple-darwin.zip"
 
-// ProgressCallback is called during model download
 type ProgressCallback func(downloaded, total int64)
 
-// Service handles Whisper transcription
 type Service struct {
 	modelSize   string
 	modelPath   string
@@ -80,12 +73,10 @@ type Service struct {
 	noServer       bool                        // force the whisper-cli path (tests)
 }
 
-// NewService creates a new Whisper service
 func NewService() *Service {
 	return &Service{language: "en"}
 }
 
-// GetModelsDir returns the directory where models are stored
 func GetModelsDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -98,7 +89,6 @@ func GetModelsDir() (string, error) {
 	return modelsDir, nil
 }
 
-// GetBinDir returns the directory for binaries
 func GetBinDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -111,34 +101,27 @@ func GetBinDir() (string, error) {
 	return binDir, nil
 }
 
-// IsWhisperCLIInstalled checks if whisper-cli is available
 func (s *Service) IsWhisperCLIInstalled() bool {
 	return s.findWhisperBinary() != ""
 }
 
-// EnsureWhisperCLI ensures whisper-cli is installed, downloading if needed
 func (s *Service) EnsureWhisperCLI(progress ProgressCallback) error {
-	// First check if already installed
 	if s.findWhisperBinary() != "" {
 		return nil
 	}
 
-	// Download and install whisper-cli
 	return s.downloadWhisperCLI(progress)
 }
 
-// downloadWhisperCLI downloads the whisper-cli binary
 func (s *Service) downloadWhisperCLI(progress ProgressCallback) error {
 	binDir, err := GetBinDir()
 	if err != nil {
 		return err
 	}
 
-	// For now, we'll create a script that tells users to install via Homebrew
-	// A production app would download pre-compiled binaries
+	// Homebrew symlink only today; production would ship prebuilt binaries.
 	whisperPath := filepath.Join(binDir, "whisper-cli")
 
-	// Check if homebrew version exists and symlink it
 	homebrewPaths := []string{
 		"/opt/homebrew/bin/whisper-cli",
 		"/opt/homebrew/Cellar/whisper-cpp/1.8.2/bin/whisper-cli",
@@ -150,7 +133,6 @@ func (s *Service) downloadWhisperCLI(progress ProgressCallback) error {
 			if !isSecureBinary(p) {
 				continue
 			}
-			// Create symlink
 			os.Remove(whisperPath) // Remove if exists
 			if err := os.Symlink(p, whisperPath); err != nil {
 				return fmt.Errorf("failed to create symlink: %w", err)
@@ -159,11 +141,9 @@ func (s *Service) downloadWhisperCLI(progress ProgressCallback) error {
 		}
 	}
 
-	// If no homebrew version, return helpful error
 	return fmt.Errorf("whisper-cli not found. Please install via: brew install whisper-cpp")
 }
 
-// ModelInfo contains information about a model for the UI
 type ModelInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -172,7 +152,6 @@ type ModelInfo struct {
 	FilePath    string `json:"file_path"`
 }
 
-// GetAllModels returns info about all available models
 func (s *Service) GetAllModels() ([]ModelInfo, error) {
 	modelsDir, err := GetModelsDir()
 	if err != nil {
@@ -199,7 +178,6 @@ func (s *Service) GetAllModels() ([]ModelInfo, error) {
 	return models, nil
 }
 
-// DeleteModel deletes a downloaded model
 func (s *Service) DeleteModel(modelSize string) error {
 	modelsDir, err := GetModelsDir()
 	if err != nil {
@@ -209,7 +187,6 @@ func (s *Service) DeleteModel(modelSize string) error {
 	return os.Remove(modelPath)
 }
 
-// IsModelDownloaded checks if a model is already downloaded
 func (s *Service) IsModelDownloaded(modelSize string) (bool, error) {
 	modelsDir, err := GetModelsDir()
 	if err != nil {
@@ -220,11 +197,10 @@ func (s *Service) IsModelDownloaded(modelSize string) (bool, error) {
 	if err != nil {
 		return false, nil
 	}
-	// Check if file size is reasonable (at least 10MB)
+	// Reject tiny/corrupt files (<10MB).
 	return info.Size() > 10*1024*1024, nil
 }
 
-// DownloadModelWithContext downloads the specified model with cancellation support
 func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string, progress ProgressCallback) error {
 	url, ok := modelURLs[modelSize]
 	if !ok {
@@ -238,7 +214,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 
 	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
 
-	// Check if already exists and has correct size
 	if info, err := os.Stat(modelPath); err == nil {
 		expectedSize := modelSizes[modelSize]
 		if info.Size() > int64(float64(expectedSize)*0.9) {
@@ -246,7 +221,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		}
 	}
 
-	// Create HTTP request with context for cancellation
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -266,7 +240,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
 	}
 
-	// Create temporary file
 	tempPath := modelPath + ".tmp"
 	file, err := os.Create(tempPath)
 	if err != nil {
@@ -279,7 +252,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 	}
 	var downloaded int64
 
-	// Create a cancellable reader
 	reader := &cancellableProgressReader{
 		ctx:    ctx,
 		reader: resp.Body,
@@ -291,7 +263,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		},
 	}
 
-	// Copy with progress and cancellation support
 	bytesWritten, err := io.Copy(file, reader)
 	file.Close()
 
@@ -303,13 +274,11 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("failed to save model: %w", err)
 	}
 
-	// Check if cancelled during download
 	if ctx.Err() == context.Canceled {
 		os.Remove(tempPath)
 		return fmt.Errorf("download cancelled")
 	}
 
-	// Verify downloaded size
 	expectedSize := modelSizes[modelSize]
 	minSize := int64(float64(expectedSize) * 0.95)
 	if bytesWritten < minSize {
@@ -317,7 +286,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
 	}
 
-	// Verify SHA-256 integrity
 	if expectedHash, exists := modelSHA256s[modelSize]; exists {
 		logger.Infof("[Whisper] Verifying SHA-256 integrity of downloaded model %s...", modelSize)
 		if err := verifyFileSHA256(tempPath, expectedHash); err != nil {
@@ -327,7 +295,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		logger.Infof("[Whisper] Integrity check passed for model %s", modelSize)
 	}
 
-	// Rename temp file to final name
 	if err := os.Rename(tempPath, modelPath); err != nil {
 		os.Remove(tempPath)
 		return fmt.Errorf("failed to finalize model file: %w", err)
@@ -337,7 +304,6 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 	return nil
 }
 
-// verifyFileSHA256 verifies a file's SHA-256 checksum against an expected hex string.
 func verifyFileSHA256(filePath string, expectedHash string) error {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -357,7 +323,6 @@ func verifyFileSHA256(filePath string, expectedHash string) error {
 	return nil
 }
 
-// cancellableProgressReader wraps an io.Reader with cancellation and progress
 type cancellableProgressReader struct {
 	ctx        context.Context
 	reader     io.Reader
@@ -365,7 +330,6 @@ type cancellableProgressReader struct {
 }
 
 func (r *cancellableProgressReader) Read(p []byte) (int, error) {
-	// Check for cancellation before each read
 	select {
 	case <-r.ctx.Done():
 		return 0, r.ctx.Err()
@@ -379,12 +343,10 @@ func (r *cancellableProgressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// DownloadModel downloads the specified model with progress callback (non-cancellable, for backwards compat)
 func (s *Service) DownloadModel(modelSize string, progress ProgressCallback) error {
 	return s.DownloadModelWithContext(context.Background(), modelSize, progress)
 }
 
-// CleanupPartialDownloads removes any stale .tmp files from failed downloads
 func CleanupPartialDownloads() error {
 	modelsDir, err := GetModelsDir()
 	if err != nil {
@@ -406,7 +368,6 @@ func CleanupPartialDownloads() error {
 	return nil
 }
 
-// LoadModel loads the Whisper model and starts whisper-server for it when available.
 func (s *Service) LoadModel(modelSize string) error {
 	modelsDir, err := GetModelsDir()
 	if err != nil {
@@ -415,7 +376,6 @@ func (s *Service) LoadModel(modelSize string) error {
 
 	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
 
-	// Check if model exists
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		return fmt.Errorf("model not found: %s. Please download it first", modelPath)
 	}
@@ -444,7 +404,6 @@ func (s *Service) LoadModel(modelSize string) error {
 	return nil
 }
 
-// awaitServer blocks (bounded) while a LoadModel-initiated server start is in flight.
 func (s *Service) awaitServer(max time.Duration) {
 	deadline := time.Now().Add(max)
 	for time.Now().Before(deadline) {
@@ -458,7 +417,6 @@ func (s *Service) awaitServer(max time.Duration) {
 	}
 }
 
-// Transcribe transcribes the given WAV file
 func (s *Service) Transcribe(wavPath string) (string, error) {
 	s.mu.RLock()
 	prompt := s.prompt
@@ -466,8 +424,6 @@ func (s *Service) Transcribe(wavPath string) (string, error) {
 	return s.TranscribeWithPrompt(wavPath, prompt)
 }
 
-// TranscribeWithPrompt transcribes the given WAV file using an optional initial prompt
-// to provide context for the model (helps with streaming/chunked transcription).
 func (s *Service) TranscribeWithPrompt(wavPath, prompt string) (string, error) {
 	wav, err := os.ReadFile(wavPath)
 	if err != nil {
@@ -476,8 +432,7 @@ func (s *Service) TranscribeWithPrompt(wavPath, prompt string) (string, error) {
 	return s.transcribeWAV(wav, wavPath, prompt)
 }
 
-// transcribeWAV sends wav to the resident server when one is running and falls back
-// to whisper-cli, which needs the audio on disk (wavPath, or a temp file when empty).
+// Server when up; else whisper-cli (needs wavPath or temp file).
 func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, error) {
 	s.mu.RLock()
 	loaded, modelPath, language, threads, srv := s.loaded, s.modelPath, s.language, s.threads, s.server
@@ -509,7 +464,6 @@ func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, err
 	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language, threads)
 }
 
-// SetLanguage sets the fixed language used by Whisper.
 func (s *Service) SetLanguage(language string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -519,15 +473,13 @@ func (s *Service) SetLanguage(language string) {
 	s.language = strings.TrimSpace(language)
 }
 
-// SetPrompt sets the initial prompt passed to Whisper (used for custom vocabulary).
 func (s *Service) SetPrompt(prompt string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.prompt = strings.TrimSpace(prompt)
 }
 
-// SetThreads sets the number of threads to pass to Whisper (0 = default).
-// Threads are fixed at whisper-server start, so a running server is restarted.
+// Threads fixed at whisper-server start; restart if changed.
 func (s *Service) SetThreads(threads int) {
 	if threads < 0 {
 		threads = 0
@@ -544,7 +496,6 @@ func (s *Service) SetThreads(threads int) {
 	}
 }
 
-// findWhisperBinary returns the whisper-cli path, cached after the first successful lookup.
 func (s *Service) findWhisperBinary() string {
 	s.binMu.Lock()
 	defer s.binMu.Unlock()
@@ -556,7 +507,6 @@ func (s *Service) findWhisperBinary() string {
 }
 
 func locateWhisperBinary() string {
-	// Check in our bin directory
 	binDir, _ := GetBinDir()
 	whisperPath := filepath.Join(binDir, "whisper-cli")
 	if _, err := os.Stat(whisperPath); err == nil {
@@ -565,7 +515,6 @@ func locateWhisperBinary() string {
 		}
 	}
 
-	// Check in PATH
 	if path, err := exec.LookPath("whisper"); err == nil {
 		if isSecureBinary(path) {
 			return path
@@ -577,7 +526,6 @@ func locateWhisperBinary() string {
 		}
 	}
 
-	// Check common locations on macOS
 	commonPaths := []string{
 		"/opt/homebrew/bin/whisper-cli",
 		"/opt/homebrew/Cellar/whisper-cpp/1.8.2/bin/whisper-cli",
@@ -598,22 +546,19 @@ func locateWhisperBinary() string {
 	return ""
 }
 
-// transcribeWithCLI uses the whisper.cpp CLI
 func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language string, threads int) (string, error) {
-	// Create a temp file for output
 	outputPath := wavPath + ".txt"
 	defer os.Remove(outputPath)
 
-	// Run whisper CLI with greedy decoding for faster transcription.
 	args := []string{
 		"-m", modelPath,
 		"-f", wavPath,
 		"-otxt",
 		"--no-timestamps",
 		"-of", strings.TrimSuffix(outputPath, ".txt"),
-		"-bs", "1", // Greedy: beam size 1
-		"-bo", "1", // Best-of 1
-		"--no-fallback", // Skip temperature fallback passes
+		"-bs", "1",
+		"-bo", "1",
+		"--no-fallback",
 	}
 	if strings.TrimSpace(language) != "" {
 		args = append(args, "-l", language)
@@ -632,17 +577,14 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 		return "", fmt.Errorf("whisper CLI failed: %w, output: %s", err, string(output))
 	}
 
-	// Read the output file
 	content, err := os.ReadFile(outputPath)
 	if err != nil {
-		// Try to parse from stdout
 		return strings.TrimSpace(string(output)), nil
 	}
 
 	return strings.TrimSpace(string(content)), nil
 }
 
-// TranscribeSamples transcribes raw 16 kHz mono PCM samples
 func (s *Service) TranscribeSamples(samples []int16) (string, error) {
 	if len(samples) == 0 {
 		return "", fmt.Errorf("no samples")
@@ -653,7 +595,6 @@ func (s *Service) TranscribeSamples(samples []int16) (string, error) {
 	return s.transcribeWAV(wavBytes(samples, 16000), "", prompt)
 }
 
-// wavBytes encodes 16-bit mono PCM as a WAV file in memory.
 func wavBytes(samples []int16, sampleRate int) []byte {
 	dataSize := len(samples) * 2
 	buf := bytes.NewBuffer(make([]byte, 0, 44+dataSize))
@@ -687,16 +628,14 @@ func writeTempWav(wav []byte) (string, error) {
 	return f.Name(), f.Close()
 }
 
-// WarmUp runs a tiny transcription to warm model/runtime paths; on whisper-server
-// the first request also compiles the Metal shaders.
+// Warm-up path; first whisper-server request also compiles Metal shaders.
 func (s *Service) WarmUp() error {
 	s.awaitServer(20 * time.Second)
 	_, err := s.transcribeWAV(wavBytes(syntheticSamples(900*time.Millisecond), 16000), "", "")
 	return err
 }
 
-// syntheticSamples returns d of voice-like 16 kHz tone so warm-up
-// runs exercise the decoder without needing real speech.
+// Synthetic tone so warm-up exercises the decoder without real speech.
 func syntheticSamples(d time.Duration) []int16 {
 	const sampleRate = 16000
 	n := int(float64(sampleRate) * d.Seconds())
@@ -713,7 +652,6 @@ func syntheticSamples(d time.Duration) []int16 {
 	return samples
 }
 
-// Close closes the service and stops whisper-server
 func (s *Service) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -722,15 +660,12 @@ func (s *Service) Close() error {
 	return nil
 }
 
-// IsLoaded returns whether a model is loaded
 func (s *Service) IsLoaded() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.loaded
 }
 
-// isSecureBinary checks if a file at path is secure to execute.
-// Specifically, it verifies that the file is not world-writable or group-writable.
 func isSecureBinary(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -738,14 +673,13 @@ func isSecureBinary(path string) bool {
 	}
 
 	mode := info.Mode()
-	// Check world-writable (0002) - ALWAYS reject world-writable binaries
+	// Reject world-writable binaries.
 	if (mode & 0002) != 0 {
 		logger.Warnf("[Security] Binary at %s is world-writable! Rejecting for security.", path)
 		return false
 	}
 
-	// For group-writable (0020), check if owned by root.
-	// If it is group-writable and owned by root, it's unsafe.
+	// Reject root-owned group-writable binaries.
 	if (mode & 0020) != 0 {
 		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 			if sys.Uid == 0 {

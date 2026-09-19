@@ -13,7 +13,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Transcript represents a saved transcription
 type Transcript struct {
 	ID                int64     `json:"id"`
 	Timestamp         time.Time `json:"timestamp"`
@@ -28,7 +27,6 @@ type Transcript struct {
 	WordsPerSecond    float64   `json:"words_per_second"`
 }
 
-// Service handles transcript storage and retrieval
 type Service struct {
 	db *sql.DB
 }
@@ -36,7 +34,6 @@ type Service struct {
 const MaxHistoryLimit = 10000
 const MaxPageSize = 100
 
-// NewService creates a new history service using the default user configuration directory path.
 func NewService() (*Service, error) {
 	dbPath, err := getDBPath()
 	if err != nil {
@@ -45,8 +42,6 @@ func NewService() (*Service, error) {
 	return NewServiceWithPath(dbPath)
 }
 
-// NewServiceWithPath creates a new history service using a custom SQLite database file path.
-// This is extremely helpful for testing.
 func NewServiceWithPath(dbPath string) (*Service, error) {
 	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
 	db, err := sql.Open("sqlite", dsn)
@@ -64,7 +59,6 @@ func NewServiceWithPath(dbPath string) (*Service, error) {
 	return s, nil
 }
 
-// getDBPath returns the path to the SQLite database
 func getDBPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -77,7 +71,6 @@ func getDBPath() (string, error) {
 	return filepath.Join(configDir, "history.db"), nil
 }
 
-// initDB initializes the database schema
 func (s *Service) initDB() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS transcripts (
@@ -103,7 +96,6 @@ func (s *Service) initDB() error {
 		return err
 	}
 
-	// Migrations for existing databases
 	migrations := []string{
 		"ALTER TABLE transcripts ADD COLUMN llm_provider TEXT;",
 		"ALTER TABLE transcripts ADD COLUMN llm_model TEXT;",
@@ -114,9 +106,7 @@ func (s *Service) initDB() error {
 
 	for _, m := range migrations {
 		if _, err := s.db.Exec(m); err != nil {
-			// "duplicate column" is expected when the DB was already migrated — ignore it.
-			// Any other error (syntax error, constraint violation, etc.) is a real problem.
-			if !strings.Contains(err.Error(), "duplicate column") {
+			if !strings.Contains(err.Error(), "duplicate column") { // expected when already migrated
 				return fmt.Errorf("migration failed: %w\nSQL: %s", err, m)
 			}
 		}
@@ -125,7 +115,6 @@ func (s *Service) initDB() error {
 	return nil
 }
 
-// Save saves a new transcript and returns the full row (includes a GetByID round-trip).
 func (s *Service) Save(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) (*Transcript, error) {
 	result, err := s.db.Exec(
 		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -143,8 +132,7 @@ func (s *Service) Save(appName, rawText, polishedText, provider, model string, t
 	return s.GetByID(id)
 }
 
-// SaveAsync saves a transcript without returning the row (no redundant GetByID SELECT).
-// Use this on the hot path when the caller doesn't need the result.
+// SaveAsync skips the GetByID round-trip (hot path when the row is not needed).
 func (s *Service) SaveAsync(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) error {
 	_, err := s.db.Exec(
 		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -156,7 +144,6 @@ func (s *Service) SaveAsync(appName, rawText, polishedText, provider, model stri
 	return nil
 }
 
-// GetByID retrieves a transcript by ID
 func (s *Service) GetByID(id int64) (*Transcript, error) {
 	row := s.db.QueryRow(
 		"SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE id = ?",
@@ -192,7 +179,6 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 	return t, nil
 }
 
-// GetAll retrieves all transcripts ordered by timestamp desc
 func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 	if limit <= 0 || limit > MaxHistoryLimit {
 		limit = MaxHistoryLimit
@@ -220,12 +206,10 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// likePattern builds a substring match with the user's wildcards escaped.
 func likePattern(query string) string {
 	return "%" + likeEscaper.Replace(query) + "%"
 }
 
-// Search searches transcripts by text content
 func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	searchQuery := likePattern(query)
 	sqlQuery := `
@@ -258,7 +242,6 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	return transcripts, nil
 }
 
-// scanTranscript scans the current row into a Transcript struct.
 func (s *Service) scanTranscript(rows *sql.Rows) (*Transcript, error) {
 	t := &Transcript{}
 	var appName, polishedText, mode, provider, model sql.NullString
@@ -282,17 +265,11 @@ func (s *Service) scanTranscript(rows *sql.Rows) (*Transcript, error) {
 	return t, nil
 }
 
-// sqliteTime renders a cursor the way datetime('now') stored it, so the text
-// comparison in the cursor WHERE clause is exact. The driver would otherwise bind
-// time.Time as "2006-01-02 15:04:05 +0000 UTC", which sorts after equal stamps
-// and repeats rows across pages.
+// sqliteTime matches datetime('now') text so cursor WHERE compares exactly (driver format breaks pagination).
 func sqliteTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04:05")
 }
 
-// GetPage returns a page of transcripts using cursor-based pagination.
-// If cursorTS.IsZero(), it starts from the newest entries.
-// Returns the transcripts and the cursor (timestamp,id) to use for the next page (older results).
 func (s *Service) GetPage(cursorTS time.Time, cursorID int64, limit int) ([]*Transcript, time.Time, int64, error) {
 	if limit <= 0 || limit > MaxPageSize {
 		limit = MaxPageSize
@@ -332,7 +309,6 @@ func (s *Service) GetPage(cursorTS time.Time, cursorID int64, limit int) ([]*Tra
 	return transcripts, lastTS, lastID, nil
 }
 
-// SearchPage searches transcripts with cursor-based pagination.
 func (s *Service) SearchPage(q string, cursorTS time.Time, cursorID int64, limit int) ([]*Transcript, time.Time, int64, error) {
 	if limit <= 0 || limit > MaxPageSize {
 		limit = MaxPageSize
@@ -372,7 +348,6 @@ func (s *Service) SearchPage(q string, cursorTS time.Time, cursorID int64, limit
 	return transcripts, lastTS, lastID, nil
 }
 
-// UpdatePolishedText updates the polished text for a transcript
 func (s *Service) UpdatePolishedText(id int64, polishedText string) error {
 	_, err := s.db.Exec(
 		"UPDATE transcripts SET polished_text = ? WHERE id = ?",
@@ -381,19 +356,16 @@ func (s *Service) UpdatePolishedText(id int64, polishedText string) error {
 	return err
 }
 
-// Delete deletes a transcript by ID
 func (s *Service) Delete(id int64) error {
 	_, err := s.db.Exec("DELETE FROM transcripts WHERE id = ?", id)
 	return err
 }
 
-// DeleteAll deletes all transcripts
 func (s *Service) DeleteAll() error {
 	_, err := s.db.Exec("DELETE FROM transcripts")
 	return err
 }
 
-// Close closes the database connection
 func (s *Service) Close() error {
 	if s.db != nil {
 		return s.db.Close()
@@ -401,14 +373,12 @@ func (s *Service) Close() error {
 	return nil
 }
 
-// GetCount returns the total number of transcripts
 func (s *Service) GetCount() (int, error) {
 	var count int
 	err := s.db.QueryRow("SELECT COUNT(*) FROM transcripts").Scan(&count)
 	return count, err
 }
 
-// parseTimestamp attempts to parse a timestamp string from multiple formats
 func parseTimestamp(ts string) time.Time {
 	formats := []string{
 		time.RFC3339Nano,

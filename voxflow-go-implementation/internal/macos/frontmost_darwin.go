@@ -12,8 +12,7 @@ import (
 // frontmostMu serializes osascript calls (System Events is not re-entrant safe under load).
 var frontmostMu sync.Mutex
 
-// FrontmostApp returns the bundle identifier and display name of the active app.
-// Uses osascript so it is safe to call from hotkey/background goroutines (no AppKit on wrong thread).
+// FrontmostApp via osascript — safe from hotkey goroutines (no AppKit off main thread).
 func FrontmostApp() (bundleID, name string, err error) {
 	frontmostMu.Lock()
 	defer frontmostMu.Unlock()

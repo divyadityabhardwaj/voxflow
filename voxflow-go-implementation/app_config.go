@@ -9,7 +9,6 @@ import (
 	"voxflow/internal/whisper"
 )
 
-// ConfigResponse represents the strongly-typed configuration payload exposed to the frontend.
 type ConfigResponse struct {
 	Hotkey              string `json:"hotkey"`
 	HandsFreeHotkey     string `json:"hands_free_hotkey"`
@@ -33,7 +32,6 @@ type ConfigResponse struct {
 	Vocabulary          string `json:"vocabulary"`
 }
 
-// GetConfig returns the current configuration strongly typed.
 func (a *App) GetConfig() *ConfigResponse {
 	return &ConfigResponse{
 		Hotkey:              a.config.GetHotkey(),
@@ -59,7 +57,6 @@ func (a *App) GetConfig() *ConfigResponse {
 	}
 }
 
-// SetAPIKey sets the Gemini API key
 func (a *App) SetAPIKey(key string) error {
 	a.config.SetGeminiAPIKey(key)
 	a.geminiClient.SetAPIKey(key)
@@ -68,10 +65,6 @@ func (a *App) SetAPIKey(key string) error {
 	return a.config.Save()
 }
 
-// ensureValidModel swaps the configured model for provider when the provider no
-// longer lists it. Cloud catalogs churn (free tiers especially), and a stale
-// default otherwise fails silently on the first dictation. Network call: run in
-// a goroutine.
 func (a *App) ensureValidModel(provider string) {
 	var (
 		models       []string
@@ -119,7 +112,6 @@ func (a *App) ensureValidModel(provider string) {
 	}
 }
 
-// reloadHotkeys re-initializes the hotkey manager with current config
 func (a *App) reloadHotkeys() error {
 	hf := a.config.GetHandsFreeHotkey()
 	ptt := a.config.GetPushToTalkHotkey()
@@ -131,7 +123,6 @@ func (a *App) reloadHotkeys() error {
 	return fmt.Errorf("hotkey manager not initialized")
 }
 
-// SetHandsFreeHotkey sets the hands-free hotkey
 func (a *App) SetHandsFreeHotkey(hotkeyStr string) error {
 	old := a.config.GetHandsFreeHotkey()
 	a.config.SetHandsFreeHotkey(hotkeyStr)
@@ -146,7 +137,6 @@ func (a *App) SetHandsFreeHotkey(hotkeyStr string) error {
 	return a.config.Save()
 }
 
-// SetPushToTalkHotkey sets the push-to-talk hotkey
 func (a *App) SetPushToTalkHotkey(hotkeyStr string) error {
 	old := a.config.GetPushToTalkHotkey()
 	a.config.SetPushToTalkHotkey(hotkeyStr)
@@ -161,7 +151,6 @@ func (a *App) SetPushToTalkHotkey(hotkeyStr string) error {
 	return a.config.Save()
 }
 
-// SetWhisperModel sets the Whisper model size
 func (a *App) SetWhisperModel(model string) error {
 	a.config.SetWhisperModel(model)
 	err := a.config.Save()
@@ -169,31 +158,26 @@ func (a *App) SetWhisperModel(model string) error {
 		return err
 	}
 
-	// Check if model needs to be downloaded
 	a.modelReady.Store(false)
 	go a.checkModelStatus()
 	return nil
 }
 
-// GetAllModels returns all available models with their download status
 func (a *App) GetAllModels() ([]whisper.ModelInfo, error) {
 	return a.whisperService.GetAllModels()
 }
 
-// SetGeminiModel sets the Gemini model
 func (a *App) SetGeminiModel(model string) error {
 	a.config.SetGeminiModel(model)
 	a.geminiClient.SetModel(model)
 	return a.config.Save()
 }
 
-// CheckResult holds the result of a model connectivity check
 type CheckResult struct {
 	LatencyMs int64   `json:"latency"`
 	TPS       float64 `json:"tps"`
 }
 
-// GetGeminiModels returns all available Gemini models
 func (a *App) GetGeminiModels() ([]string, error) {
 	if cached, ok := config.LoadModelCache("gemini"); ok {
 		return cached, nil
@@ -205,7 +189,6 @@ func (a *App) GetGeminiModels() ([]string, error) {
 	return models, err
 }
 
-// CheckGeminiModel tests a Gemini model and returns latency and TPS
 func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
 	latency, tps, err := a.geminiClient.CheckModel(model)
 	if err != nil {
@@ -214,7 +197,6 @@ func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-// GetOpenRouterModels returns all available free OpenRouter models
 func (a *App) GetOpenRouterModels() ([]string, error) {
 	if cached, ok := config.LoadModelCache("openrouter"); ok {
 		return cached, nil
@@ -226,7 +208,6 @@ func (a *App) GetOpenRouterModels() ([]string, error) {
 	return models, err
 }
 
-// CheckOpenRouterModel tests an OpenRouter model and returns latency and TPS
 func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
 	latency, tps, err := a.openRouterClient.CheckModel(model)
 	if err != nil {
@@ -235,7 +216,6 @@ func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-// SetOpenRouterAPIKey sets the OpenRouter API key
 func (a *App) SetOpenRouterAPIKey(key string) error {
 	a.config.SetOpenRouterAPIKey(key)
 	a.openRouterClient.SetAPIKey(key)
@@ -244,20 +224,17 @@ func (a *App) SetOpenRouterAPIKey(key string) error {
 	return a.config.Save()
 }
 
-// SetLLMProvider sets the LLM provider (gemini, openrouter, groq, cerebras, local)
 func (a *App) SetLLMProvider(provider string) error {
 	a.config.SetLLMProvider(provider)
 	go a.ensureValidModel(provider)
 	return a.config.Save()
 }
 
-// SetOpenRouterModel sets the OpenRouter model
 func (a *App) SetOpenRouterModel(model string) error {
 	a.config.SetOpenRouterModel(model)
 	return a.config.Save()
 }
 
-// GetGroqModels returns all available Groq models
 func (a *App) GetGroqModels() ([]string, error) {
 	if cached, ok := config.LoadModelCache("groq"); ok {
 		return cached, nil
@@ -269,7 +246,6 @@ func (a *App) GetGroqModels() ([]string, error) {
 	return models, err
 }
 
-// CheckGroqModel tests a Groq model and returns latency and TPS
 func (a *App) CheckGroqModel(model string) (*CheckResult, error) {
 	latency, tps, err := a.groqClient.CheckModel(model)
 	if err != nil {
@@ -278,7 +254,6 @@ func (a *App) CheckGroqModel(model string) (*CheckResult, error) {
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-// SetGroqAPIKey sets the Groq API key
 func (a *App) SetGroqAPIKey(key string) error {
 	a.config.SetGroqAPIKey(key)
 	a.groqClient.SetAPIKey(key)
@@ -288,13 +263,11 @@ func (a *App) SetGroqAPIKey(key string) error {
 	return a.config.Save()
 }
 
-// SetGroqModel sets the Groq model
 func (a *App) SetGroqModel(model string) error {
 	a.config.SetGroqModel(model)
 	return a.config.Save()
 }
 
-// GetCerebrasModels returns all available Cerebras models
 func (a *App) GetCerebrasModels() ([]string, error) {
 	if cached, ok := config.LoadModelCache("cerebras"); ok {
 		return cached, nil
@@ -306,7 +279,6 @@ func (a *App) GetCerebrasModels() ([]string, error) {
 	return models, err
 }
 
-// CheckCerebrasModel tests a Cerebras model and returns latency and TPS
 func (a *App) CheckCerebrasModel(model string) (*CheckResult, error) {
 	latency, tps, err := a.cerebrasClient.CheckModel(model)
 	if err != nil {
@@ -315,7 +287,6 @@ func (a *App) CheckCerebrasModel(model string) (*CheckResult, error) {
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-// CheckLocalModel sends a latency probe to the configured local server.
 func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
 	latency, tps, err := a.localClient.CheckModel(model)
 	if err != nil {
@@ -324,20 +295,18 @@ func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-// SetLocalURL updates the server URL and immediately reinitialises the local HTTP client.
+// Also reinitialises the local HTTP client.
 func (a *App) SetLocalURL(url string) error {
 	a.config.SetLocalURL(url)
 	a.localClient.SetBaseURL(url)
 	return a.config.Save()
 }
 
-// SetLocalModel sets the model name to send to the local server.
 func (a *App) SetLocalModel(model string) error {
 	a.config.SetLocalModel(model)
 	return a.config.Save()
 }
 
-// SetCerebrasAPIKey sets the Cerebras API key
 func (a *App) SetCerebrasAPIKey(key string) error {
 	a.config.SetCerebrasAPIKey(key)
 	a.cerebrasClient.SetAPIKey(key)
@@ -347,19 +316,18 @@ func (a *App) SetCerebrasAPIKey(key string) error {
 	return a.config.Save()
 }
 
-// SetCerebrasModel sets the Cerebras model
 func (a *App) SetCerebrasModel(model string) error {
 	a.config.SetCerebrasModel(model)
 	return a.config.Save()
 }
 
-// SetRefinementMode sets the refinement mode ("refine", "raw", "copy-only")
+// mode: "refine", "raw", or "copy-only".
 func (a *App) SetRefinementMode(mode string) error {
 	a.config.SetRefinementMode(mode)
 	return a.config.Save()
 }
 
-// SetVocabulary saves custom terms and pushes them to Whisper and the LLM prompt.
+// Pushes custom terms to Whisper and the LLM prompt.
 func (a *App) SetVocabulary(v string) error {
 	a.config.SetVocabulary(v)
 	a.whisperService.SetPrompt(v)
@@ -367,14 +335,13 @@ func (a *App) SetVocabulary(v string) error {
 	return a.config.Save()
 }
 
-// SetWhisperLanguage sets the transcription language ("auto" for detection).
+// lang "auto" = detection.
 func (a *App) SetWhisperLanguage(lang string) error {
 	a.config.SetWhisperLanguage(lang)
 	a.whisperService.SetLanguage(lang)
 	return a.config.Save()
 }
 
-// SetMuteSystemAudio sets whether system audio should be muted during recording
 func (a *App) SetMuteSystemAudio(val bool) error {
 	a.config.SetMuteSystemAudio(val)
 	return a.config.Save()

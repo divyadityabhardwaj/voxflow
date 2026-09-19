@@ -9,7 +9,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// GetHistory returns transcript history
 func (a *App) GetHistory(limit int) ([]*history.Transcript, error) {
 	if a.historyService == nil {
 		return nil, fmt.Errorf("history service not available")
@@ -17,15 +16,12 @@ func (a *App) GetHistory(limit int) ([]*history.Transcript, error) {
 	return a.historyService.GetAll(limit)
 }
 
-// HistoryPage is returned for paginated history requests
 type HistoryPage struct {
 	Transcripts  []*history.Transcript `json:"transcripts"`
 	NextCursorTS string                `json:"next_cursor_ts"`
 	NextCursorID int64                 `json:"next_cursor_id"`
 }
 
-// GetHistoryPage returns a page of transcripts using a cursor (RFC3339 timestamp + id)
-// If cursorTS is empty, the newest entries are returned.
 func (a *App) GetHistoryPage(cursorTS string, cursorID int64, limit int) (*HistoryPage, error) {
 	if a.historyService == nil {
 		return nil, fmt.Errorf("history service not available")
@@ -53,7 +49,6 @@ func (a *App) GetHistoryPage(cursorTS string, cursorID int64, limit int) (*Histo
 	return &HistoryPage{Transcripts: transcripts, NextCursorTS: nextTSStr, NextCursorID: nextID}, nil
 }
 
-// SearchHistoryPage searches transcripts with cursor-based pagination.
 func (a *App) SearchHistoryPage(query string, cursorTS string, cursorID int64, limit int) (*HistoryPage, error) {
 	if a.historyService == nil {
 		return nil, fmt.Errorf("history service not available")
@@ -81,7 +76,6 @@ func (a *App) SearchHistoryPage(query string, cursorTS string, cursorID int64, l
 	return &HistoryPage{Transcripts: transcripts, NextCursorTS: nextTSStr, NextCursorID: nextID}, nil
 }
 
-// DeleteTranscript deletes a transcript by ID
 func (a *App) DeleteTranscript(id int64) error {
 	if a.historyService == nil {
 		return fmt.Errorf("history service not available")
@@ -89,7 +83,6 @@ func (a *App) DeleteTranscript(id int64) error {
 	return a.historyService.Delete(id)
 }
 
-// ClearAllHistory deletes all transcripts
 func (a *App) ClearAllHistory() error {
 	if a.historyService == nil {
 		return fmt.Errorf("history service not available")
@@ -97,7 +90,6 @@ func (a *App) ClearAllHistory() error {
 	return a.historyService.DeleteAll()
 }
 
-// RetryRefinement re-processes a transcript with a custom instruction using the active LLM provider.
 func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 	if a.historyService == nil {
 		return "", fmt.Errorf("history service not available")
@@ -110,7 +102,6 @@ func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 
 	activeModel := a.activeLLMModel()
 
-	// Use raw text if no instruction, otherwise apply instruction
 	var newPolished string
 	if instruction == "" {
 		newPolished, _, _, err = a.activeRefiner().RefineText(transcript.RawText, activeModel)
@@ -122,7 +113,6 @@ func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 		return "", err
 	}
 
-	// Update in database
 	if err := a.historyService.UpdatePolishedText(id, newPolished); err != nil {
 		return "", err
 	}
@@ -130,7 +120,6 @@ func (a *App) RetryRefinement(id int64, instruction string) (string, error) {
 	return newPolished, nil
 }
 
-// CopyToClipboard copies text to clipboard
 func (a *App) CopyToClipboard(text string) error {
 	if a.injectionService == nil {
 		return fmt.Errorf("injection service not available")
@@ -138,7 +127,6 @@ func (a *App) CopyToClipboard(text string) error {
 	return a.injectionService.CopyToClipboard(text)
 }
 
-// InjectText injects text into the active cursor position
 func (a *App) InjectText(text string) error {
 	if a.injectionService == nil {
 		return fmt.Errorf("injection service not available")
@@ -146,12 +134,10 @@ func (a *App) InjectText(text string) error {
 	return a.injectionService.Inject(text)
 }
 
-// OpenHistoryWindow emits event to open history window
 func (a *App) OpenHistoryWindow() {
 	runtime.EventsEmit(a.ctx, events.OpenHistory, nil)
 }
 
-// OpenSettings emits event to open settings panel
 func (a *App) OpenSettings() {
 	runtime.EventsEmit(a.ctx, events.OpenSettings, nil)
 }

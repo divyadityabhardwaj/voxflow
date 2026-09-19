@@ -20,7 +20,6 @@ import { Events } from "./constants/events";
 
 type View = "main" | "history" | "settings";
 
-// Icons as components for cleaner code
 const MicIcon = () => (
   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
@@ -141,15 +140,14 @@ function AppContent() {
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
 
+  // Wails mini mode needs inline transparent bg; full mode clears so theme CSS applies.
   const setMiniModeTransparency = (enabled: boolean) => {
     if (enabled) {
-      // Mini mode: transparent window
       document.documentElement.style.backgroundColor = "transparent";
       document.body.style.backgroundColor = "transparent";
       const root = document.getElementById("root");
       if (root) root.style.backgroundColor = "transparent";
     } else {
-      // Full app mode: let CSS handle the background (light/dark)
       document.documentElement.style.backgroundColor = "";
       document.body.style.backgroundColor = "";
       const root = document.getElementById("root");
@@ -169,7 +167,6 @@ function AppContent() {
       setIsMiniMode(isMini);
     });
 
-    // Listen for toast events from backend
     const unsub4 = EventsOn(
       Events.Toast,
       (data: {
@@ -202,7 +199,7 @@ function AppContent() {
     };
   }, []);
 
-  // Apply transparency when mini mode changes instead of continuous polling.
+  // Re-apply when isMiniMode changes; no polling loop.
   useEffect(() => {
     setMiniModeTransparency(isMiniMode);
     return () => setMiniModeTransparency(false);
@@ -223,12 +220,10 @@ function AppContent() {
     );
   }
 
-  // Mini mode - show only recording indicator
   if (isMiniMode) {
     return <RecordingIndicator />;
   }
 
-  // Model download screen
   if (!modelReady && !modelDownloading) {
     return (
       <ModelDownloader
@@ -240,18 +235,14 @@ function AppContent() {
 
   return (
     <div className="h-full min-h-0 flex bg-background">
-      {/* Recording pill - shows at top when recording in full app mode */}
       <RecordingPill />
 
-      {/* Sidebar */}
       <aside className="sidebar">
-        {/* Draggable Titlebar Area */}
         <Tooltip content="Move" position="bottom">
           <div
             className="w-full h-9 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-surface hover:bg-surface-hover transition-colors border-b border-border"
             style={{ "--wails-draggable": "drag" } as unknown as CSSProperties}
           >
-            {/* Grip dots - macOS style */}
             <div className="flex flex-col gap-[2px] opacity-30 group-hover:opacity-60 transition-opacity text-tertiary">
               <div className="flex gap-[3px]">
                 <div className="w-1 h-1 rounded-full bg-current" />
@@ -265,12 +256,9 @@ function AppContent() {
           </div>
         </Tooltip>
 
-        {/* Top section - Traffic lights space + main nav */}
         <div className="flex flex-col items-center gap-2 pt-4">
-          {/* Spacer for macOS traffic lights */}
           <div className="h-2" />
 
-          {/* Main navigation */}
           <Tooltip content="Dictation" position="right">
             <button
               onClick={() => setCurrentView("main")}
@@ -305,10 +293,8 @@ function AppContent() {
           </Tooltip>
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Bottom section - Theme, minimize, close */}
         <div className="flex flex-col items-center gap-2 pb-4">
           <Tooltip
             content={theme === "dark" ? "Light mode" : "Dark mode"}
@@ -341,7 +327,6 @@ function AppContent() {
         </div>
       </aside>
 
-      {/* Main content */}
       <main className="flex-1 overflow-hidden relative">
         <div className="view-enter h-full">
           {currentView === "main" && <MainView />}
@@ -350,7 +335,6 @@ function AppContent() {
         </div>
       </main>
 
-      {/* Manual Resize Grip (Bottom Right) */}
       {!isMiniMode && (
         <Tooltip content="Resize" position="top">
           <div
@@ -360,7 +344,6 @@ function AppContent() {
               const startX = e.screenX;
               const startY = e.screenY;
 
-              // Get current size
               import("../wailsjs/runtime/runtime").then(
                 ({ WindowGetSize, WindowSetSize }) => {
                   WindowGetSize().then((size) => {
@@ -371,11 +354,11 @@ function AppContent() {
                       const newW = Math.max(
                         400,
                         startW + (ev.screenX - startX),
-                      ); // Min width 400
+                      );
                       const newH = Math.max(
                         300,
                         startH + (ev.screenY - startY),
-                      ); // Min height 300
+                      );
                       WindowSetSize(newW, newH);
                     };
 
@@ -391,7 +374,6 @@ function AppContent() {
               );
             }}
           >
-            {/* Visual Grip Lines */}
             <svg
               className="w-4 h-4 text-secondary opacity-50 group-hover:opacity-100 transition-opacity"
               viewBox="0 0 24 24"

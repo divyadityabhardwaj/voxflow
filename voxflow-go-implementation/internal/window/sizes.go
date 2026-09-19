@@ -1,8 +1,6 @@
 package window
 
-// Mini mode window sizes:
-// - collapsed is the minimal visible pill (record button only)
-// - expanded is the hover-reveal control strip
+// collapsed = pill only; expanded = hover control strip
 const (
 	MiniModeCollapsedW = 52
 	MiniModeCollapsedH = 32

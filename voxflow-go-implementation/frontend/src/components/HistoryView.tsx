@@ -129,9 +129,7 @@ export default function HistoryView() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState<"first" | "more" | null>("first");
-  // Paging state lives in a ref so a single stable loadNextPage always sees
-  // current values. A query change swaps in a new object; in-flight requests
-  // compare identity and drop their results.
+  // Ref + object identity so stale in-flight pages drop after query change.
   const page = useRef<PageState>(freshPage(""));
 
   const [instruction, setInstruction] = useState("");
@@ -171,8 +169,7 @@ export default function HistoryView() {
     return () => clearTimeout(t);
   }, [searchQuery, loadNextPage]);
 
-  // Callback ref: the sentinel mounts only once the list renders, so a
-  // useEffect keyed on a ref object would never see it.
+  // Callback ref: sentinel mounts after first list paint; plain ref+effect misses it.
   const observer = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useCallback(
     (el: HTMLDivElement | null) => {
@@ -285,7 +282,6 @@ export default function HistoryView() {
           )}
         </div>
 
-        {/* Search */}
         <div className="px-4 py-3 border-b-2 border-border">
           <div className="relative">
             <svg
@@ -311,7 +307,6 @@ export default function HistoryView() {
           </div>
         </div>
 
-        {/* Transcript list */}
         <div className="flex-1 overflow-y-auto">
           {loading === "first" ? (
             <div className="p-4 text-center text-tertiary font-medium">
@@ -358,11 +353,9 @@ export default function HistoryView() {
         </div>
       </div>
 
-      {/* Detail pane */}
       <div className="flex-1 flex flex-col bg-background">
         {selectedTranscript ? (
           <>
-            {/* Header */}
             <div className="p-5 border-b-2 border-border flex items-center justify-between">
               <div>
                 <p className="text-xs text-tertiary font-medium">
@@ -427,7 +420,6 @@ export default function HistoryView() {
               </button>
             </div>
 
-            {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {selectedTranscript.raw_text &&
                 selectedTranscript.raw_text !==
@@ -558,7 +550,6 @@ export default function HistoryView() {
         )}
       </div>
 
-      {/* Confirm Modal */}
       <ConfirmModalComponent />
     </div>
   );

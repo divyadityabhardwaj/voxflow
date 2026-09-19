@@ -26,7 +26,6 @@ func isRetryableStatus(code int) bool {
 		code == http.StatusServiceUnavailable
 }
 
-// chatRequest is the OpenAI-compatible /chat/completions request body.
 type chatRequest struct {
 	Model       string        `json:"model"`
 	Messages    []chatMessage `json:"messages"`
@@ -40,13 +39,11 @@ type reasoningOpts struct {
 	Enabled bool `json:"enabled"`
 }
 
-// chatMessage is a single message in a chat conversation.
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// chatResponse is the OpenAI-compatible /chat/completions response.
 type chatResponse struct {
 	Choices []struct {
 		Message chatMessage `json:"message"`
@@ -56,16 +53,12 @@ type chatResponse struct {
 	} `json:"usage"`
 }
 
-// modelsResponse is the OpenAI-compatible /models response.
 type modelsResponse struct {
 	Data []struct {
 		ID string `json:"id"`
 	} `json:"data"`
 }
 
-// OpenAIClient implements the common OpenAI /chat/completions HTTP protocol.
-// Any provider that exposes an OpenAI-compatible API can embed or reference
-// this client to avoid duplicating HTTP boilerplate.
 type OpenAIClient struct {
 	BaseURL      string
 	APIKey       string
@@ -82,8 +75,6 @@ func (c *OpenAIClient) reasoning() *reasoningOpts {
 	return nil
 }
 
-// newTunedTransport returns an http.Transport optimised for low-latency API
-// calls: HTTP/2, pre-warmed TLS, long idle timeouts, multiple idle conns.
 func newTunedTransport() *http.Transport {
 	return &http.Transport{
 		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
@@ -98,7 +89,6 @@ func newTunedTransport() *http.Transport {
 	}
 }
 
-// NewOpenAIClient creates a new OpenAIClient with a tuned HTTP transport.
 func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *OpenAIClient {
 	return &OpenAIClient{
 		BaseURL:      baseURL,
@@ -111,9 +101,6 @@ func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *Op
 	}
 }
 
-// DoWithRetry sends the request produced by newReq, retrying network errors and
-// 429/502/503 with exponential backoff. newReq is called per attempt so the body
-// reader is fresh. Returns the body and status of the final attempt.
 func DoWithRetry(hc *http.Client, newReq func() (*http.Request, error)) ([]byte, int, error) {
 	delay := retryBaseDelay
 	var lastStatus int
@@ -175,8 +162,6 @@ func (c *OpenAIClient) doGet(url string) ([]byte, int, error) {
 	})
 }
 
-// applyHeaders sets Content-Type, Authorization (when APIKey is set), and any
-// extra provider-specific headers on the given request.
 func (c *OpenAIClient) applyHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
@@ -187,9 +172,6 @@ func (c *OpenAIClient) applyHeaders(req *http.Request) {
 	}
 }
 
-// RefineText sends rawText to the model for transcription cleanup.
-// Returns (polishedText, completionTokenCount, okToGo, error).
-// okToGo == true means the LLM signalled the input was already clean.
 func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, error) {
 	req := chatRequest{
 		Model: model,
@@ -236,7 +218,6 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 	return refined, tokenCount, okToGo, nil
 }
 
-// RetryWithInstruction re-processes text with a custom instruction.
 func (c *OpenAIClient) RetryWithInstruction(text, instruction, model string) (string, error) {
 	prompt := fmt.Sprintf(`Apply the following instruction to the text:
 Instruction: %s
@@ -282,8 +263,6 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 	return StripCodeFences(apiResp.Choices[0].Message.Content), nil
 }
 
-// CheckModel runs a latency probe against the provider and returns
-// (latencyMs, tokensPerSecond, error).
 func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 	req := chatRequest{
 		Model: model,
@@ -339,10 +318,6 @@ func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 	return latency, tps, nil
 }
 
-// GetModels fetches the model list from {BaseURL}/models.
-// The filter func (if non-nil) is called for each model ID; returning false
-// excludes that model from the result. The returned slice is sorted
-// alphabetically.
 func (c *OpenAIClient) GetModels(filter func(id string) bool) ([]string, error) {
 	url := fmt.Sprintf("%s/models", c.BaseURL)
 
@@ -371,8 +346,6 @@ func (c *OpenAIClient) GetModels(filter func(id string) bool) ([]string, error) 
 	return models, nil
 }
 
-// Prewarm performs a fast background request to the API base URL to warm up
-// the TCP/TLS connection pool.
 func (c *OpenAIClient) Prewarm(model string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

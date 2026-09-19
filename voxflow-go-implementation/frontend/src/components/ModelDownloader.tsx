@@ -59,7 +59,6 @@ export default function ModelDownloader({
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-8">
       <div className="max-w-md w-full text-center">
-        {/* Logo/Icon */}
         <div className="w-20 h-20 mx-auto mb-8 rounded-2xl bg-primary flex items-center justify-center shadow-soft-md">
           <svg
             className="w-10 h-10 text-white"
@@ -107,7 +106,6 @@ export default function ModelDownloader({
                 Downloading Whisper model...
               </p>
 
-              {/* Progress bar */}
               <div className="progress-bar">
                 <div
                   style={{ width: `${progress}%` }}

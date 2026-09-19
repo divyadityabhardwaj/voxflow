@@ -30,16 +30,11 @@ func main() {
 		}
 	}
 
-	// Create an instance of the app structure
 	app := NewApp()
 
-	// Create application menu
 	appMenu := menu.NewMenu()
-
-	// App menu (macOS specific)
 	appMenu.Append(menu.AppMenu())
 
-	// File menu
 	fileMenu := appMenu.AddSubmenu("File")
 	fileMenu.AddText("Toggle Recording", keys.CmdOrCtrl("r"), func(cd *menu.CallbackData) {
 		app.ToggleRecording()
@@ -62,10 +57,8 @@ func main() {
 		app.Quit()
 	})
 
-	// Edit menu
 	appMenu.Append(menu.EditMenu())
 
-	// Create application with options - Start as floating indicator
 	err := wails.Run(&options.App{
 		Title:             "voxflow",
 		Width:             window.MiniModeCollapsedW,
@@ -80,7 +73,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0}, // Transparent
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{

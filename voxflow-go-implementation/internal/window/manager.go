@@ -11,7 +11,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// Manager handles mini/full window mode transitions and position persistence.
 type Manager struct {
 	ctx    context.Context
 	config *config.Config
@@ -25,7 +24,6 @@ type Manager struct {
 	miniResizeCancel context.CancelFunc
 }
 
-// NewManager creates a window manager bound to the Wails runtime context.
 func NewManager(ctx context.Context, cfg *config.Config) *Manager {
 	return &Manager{
 		ctx:        ctx,
@@ -50,7 +48,6 @@ func (m *Manager) UserExplicitlyMaximized() bool {
 	return m.userExplicitlyMaximized
 }
 
-// StartupMiniMode restores saved mini position and begins position watching.
 func (m *Manager) StartupMiniMode() {
 	x, y := m.config.GetMiniModePosition()
 
@@ -67,7 +64,6 @@ func (m *Manager) StartupMiniMode() {
 	m.startPositionWatch()
 }
 
-// ShowMini switches the window to the floating indicator.
 func (m *Manager) ShowMini() {
 	if m.isMiniMode {
 		return
@@ -96,7 +92,6 @@ func (m *Manager) ShowMini() {
 	logger.Infof("[Window] Switched to mini mode")
 }
 
-// HideMini restores the window to normal full-app size.
 func (m *Manager) HideMini() {
 	if !m.isMiniMode {
 		return
@@ -139,7 +134,6 @@ func (m *Manager) HideMini() {
 	logger.Infof("[Window] Restored normal mode")
 }
 
-// SetMiniExpanded tweens mini-mode window size between compact and expanded strip.
 func (m *Manager) SetMiniExpanded(expanded bool, height int) {
 	if !m.isMiniMode {
 		return
@@ -228,7 +222,6 @@ func (m *Manager) saveCurrentMiniPosition() {
 	}
 }
 
-// Shutdown persists mini-mode position when applicable.
 func (m *Manager) Shutdown() {
 	if m.positionWatchCancel != nil {
 		m.positionWatchCancel()
@@ -238,7 +231,6 @@ func (m *Manager) Shutdown() {
 	}
 }
 
-// ResetPosition centers the window and clears saved positions.
 func (m *Manager) ResetPosition() {
 	m.config.SetMiniModePosition(0, 0)
 	m.config.SetMaximizedWindowPosition(0, 0)

@@ -130,7 +130,6 @@ export default function MainView() {
     };
   }, []);
 
-  // Auto-scroll partial transcript
   useEffect(() => {
     if (partialRef.current) {
       partialRef.current.scrollTop = partialRef.current.scrollHeight;
@@ -191,7 +190,6 @@ export default function MainView() {
         </p>
       </div>
 
-      {/* Input Card */}
       <div className="w-full max-w-xl mb-10">
         <div
           className={`
@@ -200,7 +198,6 @@ export default function MainView() {
             ${status === "Processing" ? "border-processing" : ""}
           `}
         >
-          {/* Text area */}
           <div className="flex-1 min-w-0">
             {status === "Processing" && partialText ? (
               <div
@@ -221,7 +218,6 @@ export default function MainView() {
             )}
           </div>
 
-          {/* Mic button */}
           <button
             type="button"
             onClick={handleToggle}
@@ -247,17 +243,14 @@ export default function MainView() {
               active:translate-y-0 active:shadow-none
             `}
           >
-            {/* Recording ring animation */}
             {status === "Recording" && (
               <span className="absolute inset-0 rounded-2xl bg-recording/40 animate-recording-ring" />
             )}
 
-            {/* Processing spinner */}
             {status === "Processing" && (
               <span className="absolute inset-0 rounded-2xl border-2 border-white/20 border-t-white animate-spin-slow" />
             )}
 
-            {/* Icon */}
             {status === "Idle" && (
               <svg
                 className="w-5 h-5 relative z-10"
@@ -296,14 +289,12 @@ export default function MainView() {
         </div>
       </div>
 
-      {/* Error display */}
       {error && (
         <div className="w-full max-w-xl mb-6 p-4 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10">
           <p className="text-sm text-[var(--danger)]">{error}</p>
         </div>
       )}
 
-      {/* Last transcription - Only polished result */}
       {lastTranscription && (
         <div className="w-full max-w-xl animate-fade-in">
           <div className="card p-6">
@@ -333,7 +324,6 @@ export default function MainView() {
         </div>
       )}
 
-      {/* Recent recordings section */}
       {!lastTranscription && status === "Idle" && (
         <div className="w-full max-w-xl animate-fade-in">
           <div className="flex items-center justify-between mb-4">

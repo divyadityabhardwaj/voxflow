@@ -114,30 +114,25 @@ export default function SettingsView() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [whisperReady, setWhisperReady] = useState(false);
 
-  // Gemini Model State
   const [geminiModels, setGeminiModels] = useState<string[]>([]);
   const [geminiModelsLoading, setGeminiModelsLoading] = useState(false);
   const [geminiModelsError, setGeminiModelsError] = useState<string | null>(
     null,
   );
 
-  // OpenRouter Model State
   const [openRouterModels, setOpenRouterModels] = useState<string[]>([]);
   const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
 
-  // Groq Model State
   const [groqModels, setGroqModels] = useState<string[]>([]);
   const [groqModelsLoading, setGroqModelsLoading] = useState(false);
   const [groqApiKey, setGroqApiKey] = useState("");
 
-  // Cerebras Model State
   const [cerebrasModels, setCerebrasModels] = useState<string[]>([]);
   const [cerebrasModelsLoading, setCerebrasModelsLoading] = useState(false);
   const [cerebrasApiKey, setCerebrasApiKey] = useState("");
 
   const [vocabulary, setVocabulary] = useState("");
 
-  // Local Server State
   const [localURL, setLocalURL] = useState("http://localhost:11434");
   const [localModel, setLocalModel] = useState("");
   const [localCheckResult, setLocalCheckResult] = useState<{
@@ -146,7 +141,6 @@ export default function SettingsView() {
   } | null>(null);
   const [localCheckError, setLocalCheckError] = useState<string | null>(null);
 
-  // Model status (latency for each model)
   const [modelStatuses, setModelStatuses] = useState<
     Record<string, ModelStatus>
   >({});
@@ -178,7 +172,6 @@ export default function SettingsView() {
     };
   }, []);
 
-  // Load Gemini models when config (and thus API key) is loaded
   useEffect(() => {
     if (
       config?.api_key_set &&
@@ -188,7 +181,6 @@ export default function SettingsView() {
     }
   }, [config?.api_key_set, config?.llm_provider]);
 
-  // Load OpenRouter models when provider is OpenRouter
   useEffect(() => {
     if (config?.llm_provider === "openrouter") {
       loadOpenRouterModels();
@@ -839,8 +831,6 @@ export default function SettingsView() {
   };
 
   const formatHotkey = (hotkey: string) => {
-    // Optional: Prettify the string for display (e.g., cmd -> ⌘)
-    // For now, just capitalization is a good start
     return hotkey
       .split("+")
       .map((p) =>
@@ -865,7 +855,7 @@ export default function SettingsView() {
     if (!modelToDelete) return;
 
     const modelName = modelToDelete;
-    setModelToDelete(null); // Close modal immediately
+    setModelToDelete(null);
 
     try {
       await DeleteModelByName(modelName);
@@ -944,7 +934,6 @@ export default function SettingsView() {
           handleDeleteCerebrasApiKey={handleDeleteCerebrasApiKey}
         />
 
-        {/* Model Dropdown List Selection */}
         <ModelSelectionSettings
           config={config}
           saving={saving}
@@ -970,7 +959,6 @@ export default function SettingsView() {
           loadGeminiModels={loadGeminiModels}
         />
 
-        {/* Pipeline & Audio Settings */}
         <PipelineSettings
           config={config}
           saving={saving}
@@ -1007,7 +995,6 @@ export default function SettingsView() {
 
         <AppRulesSettings />
 
-        {/* Global Key Hotkeys */}
         <HotkeySettings
           config={config}
           saving={saving}

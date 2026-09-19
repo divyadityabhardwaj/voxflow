@@ -11,13 +11,11 @@ const (
 	baseAPIURL = "https://api.cerebras.ai/v1"
 )
 
-// AvailableModels is a static fallback list used when the API is unreachable.
 var AvailableModels = []string{
 	"llama3.1-8b",
 	"llama3.1-70b",
 }
 
-// Client handles communication with the Cerebras API.
 type Client struct {
 	apiKey   string
 	openai   *llm.OpenAIClient
@@ -25,7 +23,6 @@ type Client struct {
 	modelsMu sync.Mutex
 }
 
-// NewClient creates a new Cerebras client.
 func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey: apiKey,
@@ -33,22 +30,17 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-// SetAPIKey updates the API key on both the wrapper and the shared HTTP client.
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
 	c.openai.APIKey = apiKey
 }
 
-// ClearModelsCache clears the cached model list (call after an API key change).
 func (c *Client) ClearModelsCache() {
 	c.modelsMu.Lock()
 	c.models = nil
 	c.modelsMu.Unlock()
 }
 
-// GetModels fetches available chat/language models from the Cerebras API.
-// Results are cached after the first successful fetch. Falls back to
-// AvailableModels on error or when the API key is not set.
 func (c *Client) GetModels() ([]string, error) {
 	if c.apiKey == "" {
 		return AvailableModels, fmt.Errorf("API key not set")
@@ -80,8 +72,6 @@ func (c *Client) GetModels() ([]string, error) {
 	return models, nil
 }
 
-// RefineText sends rawText to the Cerebras model for transcription cleanup.
-// Delegates to the shared OpenAIClient after an API key guard.
 func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	if c.apiKey == "" {
 		return "", 0, false, fmt.Errorf("API key not set")
@@ -89,8 +79,6 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	return c.openai.RefineText(rawText, model)
 }
 
-// CheckModel runs a latency probe against the given Cerebras model and returns
-// (latencyMs, tokensPerSecond, error).
 func (c *Client) CheckModel(model string) (int64, float64, error) {
 	if c.apiKey == "" {
 		return 0, 0, fmt.Errorf("API key not set")
@@ -98,7 +86,6 @@ func (c *Client) CheckModel(model string) (int64, float64, error) {
 	return c.openai.CheckModel(model)
 }
 
-// RetryWithInstruction re-processes text with a custom instruction using Cerebras.
 func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
 	if c.apiKey == "" {
 		return "", fmt.Errorf("API key not set")
@@ -106,7 +93,6 @@ func (c *Client) RetryWithInstruction(text, instruction, model string) (string, 
 	return c.openai.RetryWithInstruction(text, instruction, model)
 }
 
-// Prewarm initiates background connection pre-warming.
 func (c *Client) Prewarm(model string) {
 	if c.apiKey != "" {
 		c.openai.Prewarm(model)

@@ -6,23 +6,19 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// GetOnboardingCompleted reports whether first-run onboarding finished.
 func (a *App) GetOnboardingCompleted() bool {
 	return a.config.GetOnboardingCompleted()
 }
 
-// CompleteOnboarding marks the first-run wizard as done.
 func (a *App) CompleteOnboarding() error {
 	a.config.SetOnboardingCompleted(true)
 	return a.config.Save()
 }
 
-// IsAccessibilityGranted exposes macOS Accessibility permission state to the UI.
 func (a *App) IsAccessibilityGranted() bool {
 	return injection.IsAccessibilityGranted()
 }
 
-// PromptAccessibilityExplanation shows why Accessibility is needed (onboarding step).
 func (a *App) PromptAccessibilityExplanation() (bool, error) {
 	selection, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
 		Type:          runtime.QuestionDialog,

@@ -95,9 +95,6 @@ func cgEventErr(ret C.int) error {
 	return fmt.Errorf("CGEventPost failed (code %d): ensure Accessibility permission is granted to this app in System Preferences → Privacy & Security → Accessibility", int(ret))
 }
 
-// simulatePaste uses CoreGraphics CGEventPost to send Cmd+V.
-// This replaces the osascript/System Events approach — permission is tied
-// to the app process itself, not a subprocess, so it survives dev rebuilds.
 func simulatePaste() error {
 	if ret := C.pressKey(keyV, C.kCGEventFlagMaskCommand); ret != 0 {
 		return cgEventErr(ret)
@@ -105,9 +102,7 @@ func simulatePaste() error {
 	return nil
 }
 
-// typeText types text as keystrokes. Newlines become real Return presses
-// because many apps ignore a unicode LF. Needs the same Accessibility
-// permission as simulatePaste.
+// typeText: newlines as Return keys (many apps ignore unicode LF).
 func typeText(text string) error {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	for i, line := range strings.Split(text, "\n") {
@@ -128,13 +123,10 @@ func typeText(text string) error {
 	return nil
 }
 
-// IsAccessibilityGranted returns true if the process has Accessibility permission.
 func IsAccessibilityGranted() bool {
 	return C.checkAccessibility() == 1
 }
 
-// PromptAccessibility shows the macOS system dialog asking the user to grant
-// Accessibility access. Call this once at startup if IsAccessibilityGranted() is false.
 func PromptAccessibility() {
 	C.promptAccessibility()
 }

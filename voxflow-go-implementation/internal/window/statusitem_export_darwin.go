@@ -6,7 +6,6 @@ import "C"
 
 // Tags match the menu items built in statusitem_darwin.go.
 //
-//export voxStatusItemAction
 func voxStatusItemAction(tag C.int) {
 	var cb func()
 	switch tag {

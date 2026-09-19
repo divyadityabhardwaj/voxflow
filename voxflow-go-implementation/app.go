@@ -23,7 +23,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// App struct holds the application state
 type App struct {
 	ctx              context.Context
 	config           *config.Config
@@ -44,7 +43,6 @@ type App struct {
 	downloadMu       sync.Mutex
 }
 
-// NewApp creates a new App application struct
 func NewApp() *App {
 	cfg := config.GetInstance()
 	app := &App{
@@ -64,7 +62,6 @@ func NewApp() *App {
 	llm.SetVocabulary(cfg.GetVocabulary())
 	app.windowMgr = window.NewManager(app.ctx, cfg)
 
-	// Initialize services that do not require Wails context
 	if histService, err := history.NewService(); err != nil {
 		logger.Warnf("Warning: Failed to initialize history: %v", err)
 	} else {

@@ -70,7 +70,6 @@ export default function RecordingIndicator() {
 
   useEffect(() => {
     const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
-      // Automatically clear toast if recording starts or processing stops
       if (newStatus === "Recording" || newStatus === "Processing") {
         setActiveToast(null);
       }
@@ -89,7 +88,6 @@ export default function RecordingIndicator() {
           type: data.type || "error",
         });
 
-        // Automatically clear after 4 seconds
         setTimeout(() => {
           setActiveToast((current) => {
             if (current && current.id === id) {
@@ -159,13 +157,11 @@ export default function RecordingIndicator() {
   const handleToastClick = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Click action: Restore normal mode to let them view details
-    HideMiniMode();
+    HideMiniMode(); // Exit mini mode so user can read full toast/details
   };
 
   const isDark = theme === "dark";
 
-  // Dynamic Styles tailored to notification type / app state
   let statusBg =
     status === "Recording"
       ? "var(--recording-bg)"
@@ -249,7 +245,6 @@ export default function RecordingIndicator() {
     }
   }
 
-  // Extract a brief, beautiful, tracked-out label for notifications
   const getShortErrorMessage = (message: string): string => {
     const msg = message.toLowerCase();
     if (msg.includes("no audio was captured")) return "No Audio Captured";
@@ -266,7 +261,6 @@ export default function RecordingIndicator() {
     }
     if (msg.includes("model download") || msg.includes("model load")) return "Model Error";
 
-    // Default fallback
     if (message.length > 20) {
       return message.substring(0, 18) + "...";
     }
@@ -282,7 +276,6 @@ export default function RecordingIndicator() {
       onMouseLeave={handlePointerLeave}
     >
       {activeToast && (
-        /* Floating Toast Card Above Pill */
         <div
           className="w-full h-[26px] flex flex-row items-center justify-between px-1.5 rounded-lg transition-all duration-300 pointer-events-auto cursor-pointer animate-slide-up-fade mb-1"
           onClick={handleToastClick}
@@ -297,7 +290,6 @@ export default function RecordingIndicator() {
             } as unknown as CSSProperties
           }
         >
-          {/* Left: Alert Icon */}
           <div className="flex-none flex items-center justify-center size-4 rounded-full bg-white/20 animate-pulse-soft">
             {activeToast.type === "error" && (
               <svg
@@ -361,7 +353,6 @@ export default function RecordingIndicator() {
             )}
           </div>
 
-          {/* Middle: Shortened message summary */}
           <div className="flex-1 px-1 min-w-0 flex items-center justify-center">
             <span
               className="text-[11px] font-semibold uppercase tracking-[0.08em] truncate whitespace-nowrap text-center animate-fade-in"
@@ -371,7 +362,6 @@ export default function RecordingIndicator() {
             </span>
           </div>
 
-          {/* Right: Dismiss button */}
           <button
             className="flex-none size-4 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors no-drag"
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
@@ -400,7 +390,6 @@ export default function RecordingIndicator() {
         </div>
       )}
 
-      {/* Main Control Pill */}
       <div
         className={`w-full h-[24px] flex flex-row items-center px-1 rounded-full transition-[box-shadow] duration-150 ease-out pointer-events-auto shadow-sm ${
           uiExpanded ? "justify-between" : "justify-center"
@@ -416,7 +405,6 @@ export default function RecordingIndicator() {
           } as unknown as CSSProperties
         }
       >
-        {/* Left: Record button + label */}
         <div className="flex items-center gap-0.5 min-w-0">
           <div
             className="flex-none size-5 flex items-center justify-center cursor-pointer no-drag"
@@ -482,7 +470,6 @@ export default function RecordingIndicator() {
           </div>
         </div>
 
-        {/* Middle: Drag handle */}
         <div
           className={`h-full flex items-center justify-center transition-all duration-200 ease-out overflow-hidden min-w-0 ${
             uiExpanded ? "flex-1 px-0.5 opacity-100" : "w-0 opacity-0 pointer-events-none"
@@ -504,7 +491,6 @@ export default function RecordingIndicator() {
           </div>
         </div>
 
-        {/* Right: Expand (hover-reveal) */}
         <div
           className={`flex-none transition-all duration-200 ease-out overflow-hidden ${
             uiExpanded ? "opacity-100 w-4" : "opacity-0 w-0"

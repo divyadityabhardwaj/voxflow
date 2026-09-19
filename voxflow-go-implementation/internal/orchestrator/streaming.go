@@ -28,7 +28,6 @@ func cleanWhisperText(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// mergeStreamingChunks combines chunks, removing overlapping/duplicate words.
 func mergeStreamingChunks(chunks []streamChunk) string {
 	if len(chunks) == 0 {
 		return ""

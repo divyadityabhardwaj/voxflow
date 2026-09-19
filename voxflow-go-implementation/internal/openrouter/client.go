@@ -13,7 +13,6 @@ const (
 	baseAPIURL = "https://openrouter.ai/api/v1"
 )
 
-// FallbackFreeModels is used when the API call to list free models fails.
 var FallbackFreeModels = []string{
 	"google/gemma-4-31b-it:free",
 	"google/gemma-4-26b-a4b-it:free",
@@ -21,7 +20,6 @@ var FallbackFreeModels = []string{
 	"z-ai/glm-5.2:free",
 }
 
-// Client handles communication with the OpenRouter API.
 type Client struct {
 	apiKey   string
 	openai   *llm.OpenAIClient
@@ -29,7 +27,6 @@ type Client struct {
 	modelsMu sync.Mutex
 }
 
-// NewClient creates a new OpenRouter client.
 func NewClient(apiKey string) *Client {
 	c := &Client{
 		apiKey: apiKey,
@@ -42,8 +39,7 @@ func NewClient(apiKey string) *Client {
 	return c
 }
 
-// SetAPIKey updates the API key and clears the cached model list, since a new
-// key may have access to a different set of models.
+// New key may list different models; clears cache.
 func (c *Client) SetAPIKey(apiKey string) {
 	c.apiKey = apiKey
 	c.openai.APIKey = apiKey
@@ -52,9 +48,6 @@ func (c *Client) SetAPIKey(apiKey string) {
 	c.modelsMu.Unlock()
 }
 
-// GetFreeModels fetches the currently available free models from OpenRouter.
-// Results are cached; call SetAPIKey to reset the cache. Falls back to
-// FallbackFreeModels on error.
 func (c *Client) GetFreeModels() ([]string, error) {
 	c.modelsMu.Lock()
 	if c.models != nil {
@@ -116,8 +109,6 @@ func (c *Client) GetFreeModels() ([]string, error) {
 	return freeModels, nil
 }
 
-// RefineText sends rawText to the OpenRouter model for transcription cleanup.
-// Delegates to the shared OpenAIClient after an API key guard.
 func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	if c.apiKey == "" {
 		return "", 0, false, fmt.Errorf("API key not set")
@@ -125,8 +116,6 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	return c.openai.RefineText(rawText, model)
 }
 
-// CheckModel runs a latency probe against the given OpenRouter model and returns
-// (latencyMs, tokensPerSecond, error).
 func (c *Client) CheckModel(model string) (int64, float64, error) {
 	if c.apiKey == "" {
 		return 0, 0, fmt.Errorf("API key not set")
@@ -134,7 +123,6 @@ func (c *Client) CheckModel(model string) (int64, float64, error) {
 	return c.openai.CheckModel(model)
 }
 
-// RetryWithInstruction re-processes text with a custom instruction using OpenRouter.
 func (c *Client) RetryWithInstruction(text, instruction, model string) (string, error) {
 	if c.apiKey == "" {
 		return "", fmt.Errorf("API key not set")
@@ -142,7 +130,6 @@ func (c *Client) RetryWithInstruction(text, instruction, model string) (string, 
 	return c.openai.RetryWithInstruction(text, instruction, model)
 }
 
-// Prewarm initiates background connection pre-warming.
 func (c *Client) Prewarm(model string) {
 	if c.apiKey != "" {
 		c.openai.Prewarm(model)

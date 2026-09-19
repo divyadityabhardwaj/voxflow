@@ -20,7 +20,6 @@ import (
 )
 
 // whisperServer is a whisper-server process holding one model resident, so each
-// transcription skips the ~0.5s process spawn, Metal init and model load of whisper-cli.
 type whisperServer struct {
 	cmd  *exec.Cmd
 	url  string
@@ -29,7 +28,6 @@ type whisperServer struct {
 
 var serverClient = &http.Client{Timeout: 5 * time.Minute}
 
-// findWhisperServer locates whisper-server next to whisper-cli, on PATH, or in Homebrew.
 func findWhisperServer(cliPath string) string {
 	var candidates []string
 	if cliPath != "" {
@@ -50,7 +48,6 @@ func findWhisperServer(cliPath string) string {
 	return ""
 }
 
-// spawnWhisperServer starts the process and returns at once; call waitReady before use.
 func spawnWhisperServer(bin, modelPath string, threads int) (*whisperServer, error) {
 	port, err := freePort()
 	if err != nil {
@@ -73,7 +70,6 @@ func spawnWhisperServer(bin, modelPath string, threads int) (*whisperServer, err
 	return srv, nil
 }
 
-// waitReady polls /health until the model is loaded. On timeout the process is killed.
 func (w *whisperServer) waitReady() error {
 	deadline := time.Now().Add(15 * time.Second)
 	for !w.healthy() {
@@ -93,7 +89,6 @@ func (w *whisperServer) waitReady() error {
 
 // macOS has no parent-death signal, so a crash or force-quit would leave the
 // server (and its resident model) running forever. Record the pid and reap it
-// on the next start.
 func pidFilePath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -139,7 +134,6 @@ func freePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// healthy reports whether the server is bound and its model loaded.
 func (w *whisperServer) healthy() bool {
 	resp, err := serverClient.Get(w.url + "/health")
 	if err != nil {
@@ -158,9 +152,7 @@ func (w *whisperServer) stop() {
 	logger.Infof("[Whisper] whisper-server stopped: pid %d", w.cmd.Process.Pid)
 }
 
-// transcribe posts wav to /inference. Every decoding field is sent on every request:
-// the server only resets its per-request params after a successful request, so a
-// failed one would otherwise leak its prompt/language into the next.
+// Send every decoding field each request: server only resets params after success, else they leak.
 func (w *whisperServer) transcribe(wav []byte, language, prompt string) (string, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -200,7 +192,6 @@ func (w *whisperServer) transcribe(wav []byte, language, prompt string) (string,
 // startServer spawns whisper-server for the loaded model and installs it unless the
 // service changed underneath (Close, another model or thread count, a server already
 // installed). Runs without s.mu held so a slow start never blocks transcription;
-// the in-flight process is tracked in s.starting so Close can kill it.
 func (s *Service) startServer() {
 	s.mu.RLock()
 	loaded, noServer, modelPath, threads := s.loaded, s.noServer, s.modelPath, s.threads
@@ -246,7 +237,7 @@ func (s *Service) startServer() {
 	go s.watchServer(srv)
 }
 
-// stopServerLocked stops the resident server and any start still in flight. Call with s.mu held.
+// Call with s.mu held.
 func (s *Service) stopServerLocked() {
 	for srv := range s.starting {
 		delete(s.starting, srv)
