@@ -110,10 +110,11 @@ export default function PipelineSettings({
             aria-checked={config.mute_system_audio}
             aria-labelledby="mute-label"
             aria-describedby="mute-desc"
-            disabled={saving === "muteSystemAudio"}
+            aria-disabled={saving === "muteSystemAudio"}
             className="toggle"
             data-on={config.mute_system_audio ? "true" : "false"}
             onClick={() =>
+              saving !== "muteSystemAudio" &&
               handleMuteSystemAudioChange(!config.mute_system_audio)
             }
           >
