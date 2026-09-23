@@ -2,8 +2,17 @@
 
 package macos
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
-func FrontmostApp() (bundleID, name string, err error) {
-	return "", "", errors.New("frontmost app detection is only supported on macOS")
+func FrontmostAppInfo() (AppInfo, error) {
+	return AppInfo{}, errors.New("frontmost app detection is only supported on macOS")
 }
+
+func StartAppTracking() {}
+
+func LastExternalApp() (AppInfo, bool) { return AppInfo{}, false }
+
+func ActivateApp(pid int, timeout time.Duration) bool { return false }
