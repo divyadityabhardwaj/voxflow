@@ -1,4 +1,11 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useId,
+  cloneElement,
+  isValidElement,
+} from "react";
 
 interface TooltipProps {
   children: React.ReactNode;
@@ -17,8 +24,10 @@ export const Tooltip: React.FC<TooltipProps> = ({
   const [coords, setCoords] = useState({ x: 0, y: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const tooltipId = useId();
 
-  const handleMouseEnter = () => {
+  const show = () => {
+    clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       if (triggerRef.current) {
         const rect = triggerRef.current.getBoundingClientRect();
@@ -50,7 +59,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
     }, delay);
   };
 
-  const handleMouseLeave = () => {
+  const hide = () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -65,33 +74,42 @@ export const Tooltip: React.FC<TooltipProps> = ({
     };
   }, []);
 
+  // The tooltip stays in the DOM (hidden) so the description is available to
+  // assistive tech as soon as the trigger is focused.
+  const trigger = isValidElement<{ "aria-describedby"?: string }>(children)
+    ? cloneElement(children, { "aria-describedby": tooltipId })
+    : children;
+
   return (
     <>
       <div
         ref={triggerRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
         className="inline-flex"
       >
-        {children}
+        {trigger}
       </div>
-      {isVisible && (
-        <div
-          className="fixed z-[100] px-3 py-1.5 bg-background text-text text-xs font-bold rounded-lg shadow-soft-md border border-border pointer-events-none whitespace-nowrap"
-          style={{
-            left: coords.x,
-            top: coords.y,
-            transform:
-              position === "bottom" || position === "top"
-                ? "translateX(-50%)"
-                : position === "left"
-                  ? "translate(-100%, -50%)"
-                  : "translateY(-50%)",
-          }}
-        >
-          {content}
-        </div>
-      )}
+      <div
+        id={tooltipId}
+        role="tooltip"
+        hidden={!isVisible}
+        className="fixed z-[100] px-3 py-1.5 bg-background text-text text-xs font-bold rounded-lg shadow-soft-md border border-border pointer-events-none whitespace-nowrap"
+        style={{
+          left: coords.x,
+          top: coords.y,
+          transform:
+            position === "bottom" || position === "top"
+              ? "translateX(-50%)"
+              : position === "left"
+                ? "translate(-100%, -50%)"
+                : "translateY(-50%)",
+        }}
+      >
+        {content}
+      </div>
     </>
   );
 };

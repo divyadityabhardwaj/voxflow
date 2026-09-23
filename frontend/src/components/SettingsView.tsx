@@ -953,6 +953,7 @@ export default function SettingsView() {
           description="Names, product terms and identifiers you say often. Whisper and the refinement model will prefer these spellings."
         >
           <textarea
+            aria-label="Vocabulary"
             className="input font-mono text-sm"
             rows={3}
             placeholder="VoxFlow, Wails, Kubernetes, camelCase, Divyaditya"

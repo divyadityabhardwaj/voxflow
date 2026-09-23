@@ -145,6 +145,7 @@ export default function AppRulesSettings() {
                 type="button"
                 className="btn btn-ghost text-[var(--danger)] shrink-0 !py-1.5 !px-2"
                 disabled={saving}
+                aria-label={`Remove rule for ${rule.app_name || rule.bundle_id}`}
                 onClick={() => removeRule(rule.bundle_id)}
               >
                 Remove

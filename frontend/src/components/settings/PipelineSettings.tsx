@@ -1,4 +1,5 @@
 import SettingsSection from "../ui/SettingsSection";
+import { onRadioGroupKeyDown } from "../../lib/radioGroup";
 
 interface Config {
   refinement_mode: string;
@@ -39,6 +40,9 @@ export default function PipelineSettings({
   handleMuteSystemAudioChange,
 }: PipelineSettingsProps) {
   const active = config.refinement_mode || "refine";
+  const selectMode = (id: string) => {
+    if (saving !== "refinementMode") handleRefinementModeChange(id);
+  };
 
   return (
     <SettingsSection
@@ -47,14 +51,25 @@ export default function PipelineSettings({
     >
       <div className="space-y-6">
         <div>
-          <span className="label">Pipeline mode</span>
-          <div className="segmented grid-cols-1 sm:grid-cols-3">
+          <span className="label" id="pipeline-mode-label">
+            Pipeline mode
+          </span>
+          <div
+            role="radiogroup"
+            aria-labelledby="pipeline-mode-label"
+            className="segmented grid-cols-1 sm:grid-cols-3"
+            onKeyDown={(e) =>
+              onRadioGroupKeyDown(e, MODES.map((m) => m.id), active, selectMode)
+            }
+          >
             {MODES.map((mode) => (
               <button
                 key={mode.id}
                 type="button"
-                onClick={() => handleRefinementModeChange(mode.id)}
-                disabled={saving === "refinementMode"}
+                role="radio"
+                aria-checked={active === mode.id}
+                tabIndex={active === mode.id ? 0 : -1}
+                onClick={() => selectMode(mode.id)}
                 className="segmented-item"
                 data-active={active === mode.id ? "true" : "false"}
               >
@@ -75,10 +90,10 @@ export default function PipelineSettings({
 
         <div className="flex items-start justify-between gap-4 pt-5 border-t border-border">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-text">
+            <p id="mute-label" className="text-sm font-medium text-text">
               Mute system audio while recording
             </p>
-            <p className="text-sm text-secondary mt-1 leading-relaxed">
+            <p id="mute-desc" className="text-sm text-secondary mt-1 leading-relaxed">
               Temporarily mute speakers to reduce feedback, then restore volume
               when done.
             </p>
@@ -93,6 +108,8 @@ export default function PipelineSettings({
             type="button"
             role="switch"
             aria-checked={config.mute_system_audio}
+            aria-labelledby="mute-label"
+            aria-describedby="mute-desc"
             disabled={saving === "muteSystemAudio"}
             className="toggle"
             data-on={config.mute_system_audio ? "true" : "false"}

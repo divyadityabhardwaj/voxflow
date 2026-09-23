@@ -104,6 +104,7 @@ function ApiKeyBlock({
         <div className="relative flex-1 min-w-0">
           <input
             type="password"
+            aria-label={title}
             placeholder={isSet ? "••••••••••••••••" : placeholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}
