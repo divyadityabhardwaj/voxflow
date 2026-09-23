@@ -137,6 +137,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.windowMgr.SetContext(ctx)
 	a.pipeline.SetContext(ctx)
+	a.pipeline.RestoreAudio()
 
 	window.FloatEverywhere()
 	a.windowMgr.WatchFrame()
@@ -227,6 +228,7 @@ func emitWarning(ctx context.Context, message string) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.pipeline.RestoreAudio()
 	if a.hotkeyManager != nil {
 		a.hotkeyManager.Stop()
 	}

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -67,8 +69,10 @@ type Pipeline struct {
 	recordingBundleID string
 	recordingAppName  string
 
-	volumeMu    sync.Mutex
-	savedVolume int
+	muteMu   sync.Mutex
+	muteWant bool
+	muteSync sync.Mutex // serialises osascript calls and guards weMuted
+	weMuted  bool
 }
 
 type Config struct {
@@ -101,7 +105,6 @@ func New(cfg Config) *Pipeline {
 		modelReady:       cfg.ModelReady,
 		onState:          cfg.OnState,
 		state:            hotkey.StateIdle,
-		savedVolume:      -1,
 	}
 	p.emit = func(name string, data ...interface{}) {
 		runtime.EventsEmit(p.ctx, name, data...)
@@ -181,24 +184,7 @@ func (p *Pipeline) StartRecording() error {
 	}
 
 	if p.config.GetMuteSystemAudio() {
-		p.volumeMu.Lock()
-		p.savedVolume = -2 // Mute is in progress
-		p.volumeMu.Unlock()
-
-		go func() {
-			vol := audio.MuteSystemAudio()
-			p.volumeMu.Lock()
-			defer p.volumeMu.Unlock()
-			if p.savedVolume == -1 {
-				// The pipeline has already stopped/errored out and restoreVolume was called.
-				// We must immediately restore the volume.
-				if vol >= 0 {
-					go audio.UnmuteSystemAudio(vol)
-				}
-			} else {
-				p.savedVolume = vol
-			}
-		}()
+		p.setMuted(true)
 	}
 
 	p.emit(events.StateChanged, "Recording")
@@ -383,8 +369,6 @@ func joinSpans(spans []span) string {
 }
 
 func (p *Pipeline) processRecording() {
-	defer p.restoreVolume()
-
 	processingStartTime := time.Now()
 
 	var stopAndWavDuration time.Duration
@@ -395,6 +379,8 @@ func (p *Pipeline) processRecording() {
 	stopAndWavStart := time.Now()
 	wavPath, err := p.audioRecorder.Stop()
 	stopAndWavDuration = time.Since(stopAndWavStart)
+	// Capture is over, so give the user their sound back before transcription and refinement.
+	p.setMuted(false)
 
 	if p.streamJobs != nil {
 		close(p.streamJobs)
@@ -666,17 +652,6 @@ func (p *Pipeline) emitToast(message, toastType string) {
 	})
 }
 
-func (p *Pipeline) restoreVolume() {
-	p.volumeMu.Lock()
-	vol := p.savedVolume
-	p.savedVolume = -1
-	p.volumeMu.Unlock()
-
-	if vol >= 0 {
-		go audio.UnmuteSystemAudio(vol)
-	}
-}
-
 func (p *Pipeline) resetToIdle() {
 	p.setState(hotkey.StateIdle)
 	if p.hotkeyManager != nil {
@@ -684,7 +659,7 @@ func (p *Pipeline) resetToIdle() {
 	}
 	p.emit(events.StateChanged, "Idle")
 
-	p.restoreVolume()
+	p.setMuted(false)
 }
 
 func (p *Pipeline) ToggleRecording() string {
@@ -706,4 +681,83 @@ func (p *Pipeline) RecordingTarget() (bundleID, appName string) {
 	p.targetMu.Lock()
 	defer p.targetMu.Unlock()
 	return p.recordingBundleID, p.recordingAppName
+}
+
+// setMuted asks for the system output to be muted or restored. Each call runs
+// in the background and applies the latest request, so a quick start/stop can't
+// leave the output muted.
+func (p *Pipeline) setMuted(want bool) {
+	p.muteMu.Lock()
+	p.muteWant = want
+	p.muteMu.Unlock()
+	go p.syncMute()
+}
+
+func (p *Pipeline) syncMute() {
+	p.muteSync.Lock()
+	defer p.muteSync.Unlock()
+	p.muteMu.Lock()
+	want := p.muteWant
+	p.muteMu.Unlock()
+
+	switch {
+	case want && !p.weMuted:
+		p.weMuted = muteOutput()
+	case !want && p.weMuted:
+		unmuteOutput()
+		p.weMuted = false
+	}
+}
+
+// RestoreAudio unmutes the output if this session, or one that crashed, muted it.
+func (p *Pipeline) RestoreAudio() {
+	p.muteMu.Lock()
+	p.muteWant = false
+	p.muteMu.Unlock()
+
+	p.muteSync.Lock()
+	defer p.muteSync.Unlock()
+	if _, err := os.Stat(muteMarkerPath()); p.weMuted || err == nil {
+		unmuteOutput()
+	}
+	p.weMuted = false
+}
+
+// The mute flag is used instead of the volume level: the level is never
+// touched, so the worst a crash can leave behind is a mute, and the marker
+// file lets the next launch undo that too.
+func muteMarkerPath() string {
+	dir, err := config.GetConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "muted-by-voxflow")
+}
+
+// muteOutput mutes the system output unless it already is, and reports whether it did.
+func muteOutput() bool {
+	out, err := exec.Command("osascript", "-e", `if output muted of (get volume settings) is true then return "already"
+set volume with output muted
+return "muted"`).Output()
+	if err != nil {
+		logger.Errorf("[Audio] Could not mute system audio: %v", err)
+		return false
+	}
+	if strings.TrimSpace(string(out)) != "muted" {
+		return false
+	}
+	if err := os.WriteFile(muteMarkerPath(), nil, 0600); err != nil {
+		logger.Warnf("[Audio] Could not record mute marker: %v", err)
+	}
+	logger.Infof("[Audio] Muted system audio")
+	return true
+}
+
+func unmuteOutput() {
+	if err := exec.Command("osascript", "-e", "set volume without output muted").Run(); err != nil {
+		logger.Errorf("[Audio] Could not unmute system audio: %v", err)
+		return // keep the marker so the next launch tries again
+	}
+	os.Remove(muteMarkerPath())
+	logger.Infof("[Audio] Unmuted system audio")
 }
