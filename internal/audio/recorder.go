@@ -38,16 +38,15 @@ func RecycleChunk(samples []int16) {
 type ChunkCallback func(samples []int16, startTime time.Duration, isFinal bool)
 
 type Recorder struct {
-	stream      *portaudio.Stream
-	buffer      []int16
-	mu          sync.Mutex
-	recording   atomic.Bool
-	stopChan    chan struct{}
-	stoppedChan chan struct{}
-	sampleRate  float64
-	initOnce    sync.Once
-	initErr     error
-	initialized atomic.Bool
+	stream         *portaudio.Stream
+	buffer         []int16
+	mu             sync.Mutex
+	recording      atomic.Bool
+	stopChan       chan struct{}
+	stoppedChan    chan struct{}
+	sampleRate     float64
+	initialized    bool         // guarded by mu
+	leakedStream   bool         // Stop gave up on a readLoop; guarded by mu
 	atomicCallback atomic.Value // readLoop hot path without mu
 }
 
@@ -75,42 +74,79 @@ func (r *Recorder) loadCallback() ChunkCallback {
 	return nil
 }
 
+// Initialize (re)starts PortAudio. PortAudio snapshots the device list and default
+// input at init, so Start re-runs this before every recording to pick up AirPods,
+// USB mics and a changed default input (about 2 ms once CoreAudio is warm).
 func (r *Recorder) Initialize() error {
-	r.initOnce.Do(func() {
-		r.initErr = portaudio.Initialize()
-		if r.initErr == nil {
-			r.initialized.Store(true)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.initializeLocked()
+}
+
+func (r *Recorder) initializeLocked() error {
+	if r.initialized {
+		if !r.canTerminateLocked() {
+			return nil
 		}
-	})
-	return r.initErr
+		if err := portaudio.Terminate(); err != nil {
+			return err
+		}
+		r.initialized = false
+	}
+	if err := portaudio.Initialize(); err != nil {
+		return err
+	}
+	r.initialized = true
+	return nil
+}
+
+// Pa_Terminate closes every open stream, so it must not run while a readLoop may
+// still be using one.
+func (r *Recorder) canTerminateLocked() bool {
+	if r.leakedStream {
+		return false
+	}
+	if r.stoppedChan == nil {
+		return true
+	}
+	select {
+	case <-r.stoppedChan:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Recorder) Terminate() error {
-	if !r.initialized.Load() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.initialized || !r.canTerminateLocked() {
 		return nil
 	}
-	err := portaudio.Terminate()
-	if err == nil {
-		r.initialized.Store(false)
+	if err := portaudio.Terminate(); err != nil {
+		return err
 	}
-	return err
+	r.initialized = false
+	return nil
 }
 
 func (r *Recorder) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if err := r.Initialize(); err != nil {
-		return fmt.Errorf("failed to initialize audio: %w", err)
-	}
-
 	if r.recording.Load() {
 		return fmt.Errorf("already recording")
 	}
 
+	if err := r.initializeLocked(); err != nil {
+		return fmt.Errorf("failed to initialize audio: %w", err)
+	}
+
 	r.buffer = make([]int16, 0)
 
-	inputBuffer := make([]int16, FramesPerBuffer)
+	// A pointer, so readLoop can shrink each Read to the frames already buffered.
+	inputBuffer := new([]int16)
+	*inputBuffer = make([]int16, FramesPerBuffer)
 
 	stream, err := portaudio.OpenDefaultStream(
 		Channels,
@@ -123,40 +159,32 @@ func (r *Recorder) Start() error {
 		return fmt.Errorf("failed to open audio stream: %w", err)
 	}
 
-	r.stream = stream
-	r.stopChan = make(chan struct{})
-	r.stoppedChan = make(chan struct{})
-
 	if err := stream.Start(); err != nil {
 		stream.Close()
 		return fmt.Errorf("failed to start audio stream: %w", err)
 	}
 
+	stop, stopped := make(chan struct{}), make(chan struct{})
+	r.stream, r.stopChan, r.stoppedChan = stream, stop, stopped
 	r.recording.Store(true)
 
-	go r.readLoop(inputBuffer)
+	go r.readLoop(stream, inputBuffer, stop, stopped)
 
 	return nil
 }
 
-// readLoop: stream pointer stable until this goroutine exits; callback via atomicCallback (no lock on hot path).
-func (r *Recorder) readLoop(inputBuffer []int16) {
-	defer close(r.stoppedChan)
+// readLoop owns one recording's stream; callback via atomicCallback (no lock on hot path).
+func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuffer *[]int16, stop <-chan struct{}, stopped chan<- struct{}) {
+	defer close(stopped)
 
-	r.mu.Lock()
-	stream := r.stream
-	r.mu.Unlock()
-	if stream == nil {
-		return
-	}
-
+	full := *inputBuffer
 	chunkSize := int(SampleRate) * ChunkDuration
 	chunkBuffer := make([]int16, 0, chunkSize)
 	chunkStartTime := time.Duration(0)
 
 	for {
 		select {
-		case <-r.stopChan:
+		case <-stop:
 			if cb := r.loadCallback(); cb != nil && len(chunkBuffer) > 0 {
 				samples := make([]int16, len(chunkBuffer))
 				copy(samples, chunkBuffer)
@@ -166,26 +194,35 @@ func (r *Recorder) readLoop(inputBuffer []int16) {
 		default:
 		}
 
-		if !r.recording.Load() {
-			return
+		// Pa_ReadStream busy-waits until it has every requested frame and never checks
+		// whether the stream stopped, so a vanished device would hang it forever and a
+		// Stop/Close under it frees its ring buffer. Only ask for frames already there.
+		n, err := stream.AvailableToRead()
+		if err != nil || n == 0 {
+			time.Sleep(10 * time.Millisecond)
+			continue
 		}
-
-		if err := stream.Read(); err != nil {
-			if !r.recording.Load() {
-				return
-			}
+		*inputBuffer = full[:min(n, len(full))]
+		// InputOverflowed still fills the buffer; it only reports frames dropped earlier.
+		if err := stream.Read(); err != nil && err != portaudio.InputOverflowed {
 			logger.Errorf("Error reading audio: %v", err)
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
+		in := *inputBuffer
 
 		r.mu.Lock()
-		if r.recording.Load() {
-			r.buffer = append(r.buffer, inputBuffer...)
+		if r.stream != stream {
+			// Stop gave up waiting for this loop; only this goroutine can close the stream safely.
+			stream.Abort()
+			stream.Close()
+			r.mu.Unlock()
+			return
 		}
+		r.buffer = append(r.buffer, in...)
 		r.mu.Unlock()
 
-		chunkBuffer = append(chunkBuffer, inputBuffer...)
+		chunkBuffer = append(chunkBuffer, in...)
 		if len(chunkBuffer) >= chunkSize {
 			cb := r.loadCallback()
 			if cb == nil {
@@ -226,28 +263,31 @@ func quietestCut(buf []int16) int {
 }
 
 func (r *Recorder) Stop() (string, error) {
-	if !r.recording.Load() {
+	if !r.recording.CompareAndSwap(true, false) {
 		return "", fmt.Errorf("not recording")
 	}
 
-	r.recording.Store(false)
+	r.mu.Lock()
+	stream, stopped := r.stream, r.stoppedChan
 	close(r.stopChan)
+	r.mu.Unlock()
 
 	select {
-	case <-r.stoppedChan:
+	case <-stopped:
+		stream.Stop()
+		stream.Close()
 	case <-time.After(2 * time.Second):
-		logger.Warnf("Warning: read loop did not stop in time")
+		// Never Stop/Close under a live readLoop: leave the stream to it and keep
+		// PortAudio up for good rather than risk a use-after-free.
+		logger.Warnf("[Audio] Read loop did not stop in time; leaking its stream")
+		r.mu.Lock()
+		r.stream, r.leakedStream = nil, true
+		r.mu.Unlock()
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	if r.stream != nil {
-		r.stream.Stop()
-		r.stream.Close()
-		r.stream = nil
-	}
-
+	r.stream = nil
 	return r.saveToWav()
 }
 
@@ -327,10 +367,6 @@ func (r *Recorder) GetDuration() time.Duration {
 	samples := len(r.buffer)
 	seconds := float64(samples) / r.sampleRate
 	return time.Duration(seconds * float64(time.Second))
-}
-
-func (r *Recorder) IsRecording() bool {
-	return r.recording.Load()
 }
 
 func (r *Recorder) HasAudioActivity() bool {
