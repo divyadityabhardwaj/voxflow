@@ -18,6 +18,8 @@ interface Transcript {
   polished_text: string;
 }
 
+const PASTE_HINT = "Paste into the app you were using";
+
 const formatElapsed = (ms: number) => {
   const seconds = ms / 1000;
   return seconds < 1 ? `${ms}ms` : `${seconds.toFixed(1)}s`;
@@ -148,20 +150,20 @@ export default function MainView() {
   const handleCopy = async (text: string) => {
     try {
       await CopyToClipboard(text);
-      showToast("Copied to clipboard", "success");
+      showToast("Copied", "success");
     } catch (err) {
       console.error("Failed to copy:", err);
       showToast("Failed to copy text", "error");
     }
   };
 
-  const handleInject = async (text: string) => {
+  const handlePaste = async (text: string) => {
     try {
       await InjectText(text);
-      showToast("Text injected", "success");
+      showToast("Pasted", "success");
     } catch (err) {
-      console.error("Failed to inject:", err);
-      showToast("Failed to inject text", "error");
+      console.error("Failed to paste:", err);
+      showToast("Couldn't paste the text", "error");
     }
   };
 
@@ -343,10 +345,11 @@ export default function MainView() {
               </button>
               <button
                 type="button"
-                onClick={() => handleInject(lastTranscription)}
+                onClick={() => handlePaste(lastTranscription)}
+                title={PASTE_HINT}
                 className="btn btn-primary !py-1.5 !px-3 !text-xs"
               >
-                Inject
+                Paste
               </button>
             </div>
           </div>
@@ -381,11 +384,12 @@ export default function MainView() {
                       {formatRecentDate(item.timestamp)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0">
                     <button
                       type="button"
                       onClick={() => handleCopy(item.polished_text || item.raw_text)}
                       title="Copy to clipboard"
+                      aria-label="Copy to clipboard"
                       className="p-1.5 text-secondary hover:text-text hover:bg-surface rounded-md transition-all"
                     >
                       <svg
@@ -404,8 +408,9 @@ export default function MainView() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleInject(item.polished_text || item.raw_text)}
-                      title="Inject text at cursor"
+                      onClick={() => handlePaste(item.polished_text || item.raw_text)}
+                      title={PASTE_HINT}
+                      aria-label={PASTE_HINT}
                       className="p-1.5 text-secondary hover:text-text hover:bg-surface rounded-md transition-all"
                     >
                       <svg

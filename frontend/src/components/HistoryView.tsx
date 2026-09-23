@@ -8,8 +8,10 @@ import {
   SearchHistoryPage,
   RetryRefinement,
 } from "../../wailsjs/go/main/App";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { useConfirmModal } from "./ConfirmModal";
 import { useToast } from "../contexts/ToastContext";
+import { Events } from "../constants/events";
 
 interface Transcript {
   id: number;
@@ -53,7 +55,9 @@ const highlightText = (text: string, highlight: string) => {
   );
 };
 
-const dateFormatter = new Intl.DateTimeFormat("en-US", {
+const PASTE_HINT = "Paste into the app you were using";
+
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
   hour: "2-digit",
@@ -96,7 +100,8 @@ const HistoryItem = memo(function HistoryItem({
           : "hover:bg-secondary border-l-4 border-l-transparent"
       }`}
     >
-      <p className="text-xs text-tertiary mb-1 font-medium">
+      <p className="text-xs text-tertiary mb-1 font-medium truncate">
+        {transcript.app_name && `${transcript.app_name} · `}
         {formatDate(transcript.timestamp)}
       </p>
       <p className="text-sm text-text font-medium line-clamp-2">
@@ -107,6 +112,12 @@ const HistoryItem = memo(function HistoryItem({
 });
 
 const PAGE_SIZE = 50;
+
+// A dictation can finish while a page is in flight, so pages and refreshes overlap.
+const withoutKnown = (prev: Transcript[], items: Transcript[]) => {
+  const known = new Set(prev.map((t) => t.id));
+  return items.filter((t) => !known.has(t.id));
+};
 
 interface PageState {
   query: string;
@@ -149,7 +160,7 @@ export default function HistoryView() {
         : await GetHistoryPage(p.cursorTS, p.cursorID, PAGE_SIZE);
       if (page.current !== p) return;
       const items: Transcript[] = res.transcripts || [];
-      setTranscripts((prev) => [...prev, ...items]);
+      setTranscripts((prev) => [...prev, ...withoutKnown(prev, items)]);
       p.cursorTS = res.next_cursor_ts || "";
       p.cursorID = res.next_cursor_id || 0;
       p.hasMore = items.length === PAGE_SIZE;
@@ -168,6 +179,21 @@ export default function HistoryView() {
     const t = setTimeout(loadNextPage, 200);
     return () => clearTimeout(t);
   }, [searchQuery, loadNextPage]);
+
+  useEffect(
+    () =>
+      EventsOn(Events.ProcessingComplete, async () => {
+        if (page.current.query) return;
+        try {
+          const res = await GetHistoryPage("", 0, PAGE_SIZE);
+          const items: Transcript[] = res.transcripts || [];
+          setTranscripts((prev) => [...withoutKnown(prev, items), ...prev]);
+        } catch (err) {
+          console.error("Failed to refresh history:", err);
+        }
+      }),
+    [],
+  );
 
   // Callback ref: sentinel mounts after first list paint; plain ref+effect misses it.
   const observer = useRef<IntersectionObserver | null>(null);
@@ -225,16 +251,20 @@ export default function HistoryView() {
   const handleCopy = async (text: string) => {
     try {
       await CopyToClipboard(text);
+      showToast("Copied", "success");
     } catch (err) {
       console.error("Failed to copy:", err);
+      showToast("Couldn't copy the text", "error");
     }
   };
 
-  const handleInject = async (text: string) => {
+  const handlePaste = async (text: string) => {
     try {
       await InjectText(text);
+      showToast("Pasted", "success");
     } catch (err) {
-      console.error("Failed to inject:", err);
+      console.error("Failed to paste:", err);
+      showToast("Couldn't paste the text", "error");
     }
   };
 
@@ -263,6 +293,7 @@ export default function HistoryView() {
             <button
               onClick={handleClearAll}
               title="Delete all transcripts"
+              aria-label="Delete all dictations"
               className="p-1.5 text-tertiary hover:text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded-lg transition-colors"
             >
               <svg
@@ -299,7 +330,8 @@ export default function HistoryView() {
             </svg>
             <input
               type="text"
-              placeholder=""
+              placeholder="Search your dictations"
+              aria-label="Search your dictations"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="input w-full pl-10 text-sm"
@@ -378,7 +410,7 @@ export default function HistoryView() {
                       selectedTranscript.tokens_per_second > 0 && (
                         <span
                           title="Generation speed"
-                          className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 text-xs font-medium"
+                          className="px-2 py-0.5 rounded-md bg-accent-soft text-secondary text-xs font-medium"
                         >
                           ⚡ {selectedTranscript.tokens_per_second.toFixed(1)}{" "}
                           t/s
@@ -388,7 +420,7 @@ export default function HistoryView() {
                       selectedTranscript.words_per_second > 0 && (
                         <span
                           title="End-to-end transcription speed"
-                          className="px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-bold"
+                          className="px-2 py-0.5 rounded-lg bg-accent-soft text-secondary text-xs font-bold"
                         >
                           {(selectedTranscript.words_per_second * 60).toFixed(
                             0,
@@ -402,6 +434,7 @@ export default function HistoryView() {
               <button
                 onClick={() => handleDelete(selectedTranscript.id)}
                 title="Delete this transcript permanently"
+                aria-label="Delete this dictation"
                 className="p-2 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-colors"
               >
                 <svg
@@ -427,7 +460,7 @@ export default function HistoryView() {
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-xs font-medium text-secondary uppercase tracking-wide">
-                        Original
+                        As you said it
                       </h3>
                       <div className="flex items-center gap-3">
                         <button
@@ -439,14 +472,14 @@ export default function HistoryView() {
                         </button>
                         <span className="text-border">|</span>
                         <button
-                          onClick={() => handleInject(selectedTranscript.raw_text)}
-                          title="Inject original text into current cursor position"
+                          onClick={() => handlePaste(selectedTranscript.raw_text)}
+                          title={PASTE_HINT}
                           className="text-xs text-tertiary hover:text-primary transition-colors font-bold flex items-center gap-1"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20" />
                           </svg>
-                          Inject
+                          Paste
                         </button>
                       </div>
                     </div>
@@ -464,7 +497,7 @@ export default function HistoryView() {
                     {selectedTranscript.raw_text &&
                     selectedTranscript.raw_text !==
                       selectedTranscript.polished_text
-                      ? "Polished"
+                      ? "Cleaned up"
                       : "Result"}
                   </h3>
                   <div className="flex items-center gap-3">
@@ -477,14 +510,14 @@ export default function HistoryView() {
                     </button>
                     <span className="text-border">|</span>
                     <button
-                      onClick={() => handleInject(selectedTranscript.polished_text)}
-                      title="Inject text into current cursor position"
+                      onClick={() => handlePaste(selectedTranscript.polished_text)}
+                      title={PASTE_HINT}
                       className="text-xs text-tertiary hover:text-primary transition-colors font-bold flex items-center gap-1"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20" />
                       </svg>
-                      Inject
+                      Paste
                     </button>
                   </div>
                 </div>
@@ -519,10 +552,10 @@ export default function HistoryView() {
                     type="button"
                     onClick={() => handleRewrite(selectedTranscript.id, "")}
                     disabled={rewriting}
-                    title="Re-run the standard refinement on the original text"
+                    title="Re-run the standard clean-up on what you said"
                     className="btn btn-secondary shrink-0"
                   >
-                    Re-refine
+                    Clean up again
                   </button>
                 </form>
               </div>
