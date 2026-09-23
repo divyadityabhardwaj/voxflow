@@ -174,7 +174,6 @@ function AppContent() {
     return () => setMiniModeTransparency(false);
   }, [isMiniMode]);
 
-
   if (onboardingDone === false && !isMiniMode) {
     return (
       <OnboardingWizard onComplete={() => setOnboardingDone(true)} />
