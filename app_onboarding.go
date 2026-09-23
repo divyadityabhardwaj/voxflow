@@ -1,9 +1,8 @@
 package main
 
 import (
+	"os/exec"
 	"voxflow/internal/injection"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func (a *App) GetOnboardingCompleted() bool {
@@ -19,20 +18,13 @@ func (a *App) IsAccessibilityGranted() bool {
 	return injection.IsAccessibilityGranted()
 }
 
+// PromptAccessibilityExplanation opens System Settings at the Accessibility pane.
+// It used to show its own dialog first, which macOS then followed with a second one.
 func (a *App) PromptAccessibilityExplanation() (bool, error) {
-	selection, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
-		Type:          runtime.QuestionDialog,
-		Title:         "Accessibility Permission",
-		Message:       "VoxFlow pastes refined text into other apps using a simulated Cmd+V. macOS requires Accessibility permission for that.\n\nClick \"Open System Settings\" to grant access, or skip for now.",
-		Buttons:       []string{"Open System Settings", "Skip"},
-		DefaultButton: "Open System Settings",
-	})
-	if err != nil {
+	// Still ask the system, since that is what adds VoxFlow to the pane's list.
+	injection.PromptAccessibility()
+	if err := exec.Command("open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility").Run(); err != nil {
 		return false, err
 	}
-	if selection == "Open System Settings" {
-		injection.PromptAccessibility()
-		return true, nil
-	}
-	return false, nil
+	return true, nil
 }
