@@ -12,7 +12,7 @@ import {
   SetMiniModeExpanded,
 } from "../../wailsjs/go/main/App";
 import { useTheme } from "../contexts/ThemeContext";
-import { useToast, type Toast } from "../contexts/ToastContext";
+import { useToastList, type Toast } from "../contexts/ToastContext";
 import { Events } from "../constants/events";
 import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 
@@ -96,7 +96,7 @@ export default function RecordingIndicator() {
   const status = useRecordingState();
   const busy = isBusy(status);
   const [hovered, setHovered] = useState(false);
-  const { toasts, dismissToast, clearToasts } = useToast();
+  const { toasts, dismissToast, clearToasts } = useToastList();
   const activeToast = toasts.length > 0 ? toasts[toasts.length - 1] : null;
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();

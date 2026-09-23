@@ -8,6 +8,9 @@ export interface Toast {
 
 interface ToastContextType {
   showToast: (message: string, type?: Toast["type"]) => void;
+}
+
+interface ToastListContextType {
   toasts: Toast[];
   dismissToast: (id: number) => void;
   clearToasts: () => void;
@@ -22,6 +25,8 @@ const TOAST_TTL_MS: Record<Toast["type"], number | null> = {
 };
 
 const ToastContext = createContext<ToastContextType | null>(null);
+// Separate so showToast callers don't re-render on every toast.
+const ToastListContext = createContext<ToastListContextType | null>(null);
 
 import { Events } from "../constants/events";
 
@@ -68,14 +73,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [dismissToast],
   );
 
-  const value = useMemo(
-    () => ({ showToast, toasts, dismissToast, clearToasts }),
-    [showToast, toasts, dismissToast, clearToasts],
+  const value = useMemo(() => ({ showToast }), [showToast]);
+  const listValue = useMemo(
+    () => ({ toasts, dismissToast, clearToasts }),
+    [toasts, dismissToast, clearToasts],
   );
 
   return (
     <ToastContext.Provider value={value}>
-      {children}
+      <ToastListContext.Provider value={listValue}>
+        {children}
+      </ToastListContext.Provider>
 
       {!isMiniMode && (
         <div
@@ -196,6 +204,14 @@ export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
     throw new Error("useToast must be used within a ToastProvider");
+  }
+  return context;
+}
+
+export function useToastList() {
+  const context = useContext(ToastListContext);
+  if (!context) {
+    throw new Error("useToastList must be used within a ToastProvider");
   }
   return context;
 }
