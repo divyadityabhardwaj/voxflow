@@ -727,36 +727,6 @@ export default function SettingsView() {
     }
   };
 
-  const handleHandsFreeChange = async (value: string) => {
-    setSaving("handsFree");
-    try {
-      await SetHandsFreeHotkey(value);
-      setConfig((prev) =>
-        prev ? { ...prev, hands_free_hotkey: value } : null,
-      );
-      showSuccess("handsFree");
-    } catch (err) {
-      console.error("Failed to save hands-free hotkey:", err);
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  const handlePushToTalkChange = async (value: string) => {
-    setSaving("ptt");
-    try {
-      await SetPushToTalkHotkey(value);
-      setConfig((prev) =>
-        prev ? { ...prev, push_to_talk_hotkey: value } : null,
-      );
-      showSuccess("ptt");
-    } catch (err) {
-      console.error("Failed to save push-to-talk hotkey:", err);
-    } finally {
-      setSaving(null);
-    }
-  };
-
   const handleModelSelect = async (modelName: string) => {
     setSaving("model");
     try {
@@ -821,28 +791,32 @@ export default function SettingsView() {
     setHotkeyModalOpen(true);
   };
 
+  // Throws a user-facing error so the recorder stays open and shows it inline.
   const handleHotkeySave = async (newHotkey: string) => {
-    if (activeHotkeyField === "ptt") {
-      await handlePushToTalkChange(newHotkey);
-    } else if (activeHotkeyField === "handsFree") {
-      await handleHandsFreeChange(newHotkey);
+    if (!activeHotkeyField) return;
+    const isPtt = activeHotkeyField === "ptt";
+    setSaving(activeHotkeyField);
+    try {
+      await (isPtt ? SetPushToTalkHotkey : SetHandsFreeHotkey)(newHotkey);
+    } catch (err) {
+      const msg = String(err);
+      throw new Error(
+        msg.includes("failed to register")
+          ? "That shortcut is taken by another app. Pick another."
+          : `Couldn't save that shortcut: ${msg}`,
+      );
+    } finally {
+      setSaving(null);
     }
-    setHotkeyModalOpen(false);
-  };
-
-  const formatHotkey = (hotkey: string) => {
-    return hotkey
-      .split("+")
-      .map((p) =>
-        p === "cmd"
-          ? "⌘"
-          : p === "shift"
-            ? "⇧"
-            : p === "opt" || p === "alt"
-              ? "⌥"
-              : p.toUpperCase(),
-      )
-      .join(" + ");
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            [isPtt ? "push_to_talk_hotkey" : "hands_free_hotkey"]: newHotkey,
+          }
+        : null,
+    );
+    showSuccess(activeHotkeyField);
   };
 
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
@@ -1000,7 +974,6 @@ export default function SettingsView() {
           saving={saving}
           success={success}
           openHotkeyModal={openHotkeyModal}
-          formatHotkey={formatHotkey}
         />
 
         <SettingsSection
@@ -1200,6 +1173,11 @@ export default function SettingsView() {
         onClose={() => setHotkeyModalOpen(false)}
         onSave={handleHotkeySave}
         initialValue={activeHotkeyValue}
+        otherHotkey={
+          activeHotkeyField === "ptt"
+            ? config.hands_free_hotkey
+            : config.push_to_talk_hotkey
+        }
       />
     </div>
   );

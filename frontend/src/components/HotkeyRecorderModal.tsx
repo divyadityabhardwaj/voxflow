@@ -1,235 +1,169 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useId } from "react";
+import {
+  formatShortcut,
+  hasShortcutKey,
+  keyFromCode,
+  modifiersOf,
+  normalizeShortcut,
+  validateShortcut,
+} from "../lib/shortcut";
+import { useDialog } from "../lib/useDialog";
 
 interface HotkeyRecorderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (hotkey: string) => void;
+  // Reject to keep the modal open; the error message is shown inline.
+  onSave: (hotkey: string) => void | Promise<void>;
   initialValue?: string;
+  otherHotkey?: string;
 }
 
-const MODIFIERS = new Set(["cmd", "ctrl", "alt", "shift", "win", "super"]);
-
-const isMac =
-  typeof navigator !== "undefined" &&
-  navigator.platform.toLowerCase().includes("mac");
+const MODIFIER_CODES = /^(Meta|Control|Alt|Shift)(Left|Right)$/;
 
 export default function HotkeyRecorderModal({
   isOpen,
   onClose,
   onSave,
   initialValue = "",
+  otherHotkey = "",
 }: HotkeyRecorderModalProps) {
-  const [currentKeys, setCurrentKeys] = useState<Set<string>>(new Set());
-  const [displayKeys, setDisplayKeys] = useState<string[]>([]);
-  const keysRef = useRef<Set<string>>(new Set());
-  const [hasStartedRecording, setHasStartedRecording] = useState(false);
-
-  const validation = useMemo(() => {
-    if (displayKeys.length === 0) {
-      return { isValid: true, message: "" };
-    }
-
-    const modifierKeys = displayKeys.filter((k) => MODIFIERS.has(k));
-    const regularKeys = displayKeys.filter((k) => !MODIFIERS.has(k));
-
-    if (modifierKeys.length === 0) {
-      return {
-        isValid: false,
-        message: isMac
-          ? "Global shortcuts require a modifier (⌘ Cmd, ⌃ Ctrl, ⌥ Alt, or ⇧ Shift)"
-          : "Global shortcuts require a modifier (Ctrl, Alt, Shift, or Win)",
-      };
-    }
-    if (regularKeys.length === 0) {
-      return {
-        isValid: false,
-        message: "Add a regular key (like D, Space, etc.) after your modifier",
-      };
-    }
-    if (regularKeys.length > 1) {
-      return {
-        isValid: false,
-        message:
-          "Global shortcuts can only have ONE regular key (e.g., ⌘+D, not ⌘+D+E)",
-      };
-    }
-    return { isValid: true, message: "" };
-  }, [displayKeys]);
+  const [combo, setCombo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   useEffect(() => {
     if (isOpen) {
-      setCurrentKeys(new Set());
-      keysRef.current = new Set();
-      setHasStartedRecording(false);
-      if (initialValue) {
-        const parts = initialValue.split("+");
-        setDisplayKeys(parts);
-      } else {
-        setDisplayKeys([]);
-      }
+      setCombo(normalizeShortcut(initialValue));
+      setError(null);
+      setSaving(false);
     }
   }, [isOpen, initialValue]);
 
-  const mapKey = (key: string, code: string): string => {
-    const codeMap: Record<string, string> = {
-      Space: "space",
-      Enter: "enter",
-      Escape: "escape",
-      Tab: "tab",
-      ArrowUp: "up",
-      ArrowDown: "down",
-      ArrowLeft: "left",
-      ArrowRight: "right",
-      Backspace: "backspace",
-      Delete: "delete",
-    };
+  const problem = combo ? validateShortcut(combo, otherHotkey) : null;
+  const canSave = !!combo && !problem && !saving;
 
-    if (codeMap[code]) return codeMap[code];
-    if (codeMap[key]) return codeMap[key];
-
-    const lowerKey = key.toLowerCase();
-    if (lowerKey === "meta" || lowerKey === "os") return "cmd";
-    if (lowerKey === "control") return "ctrl";
-    if (lowerKey === "alt") return "alt";
-    if (lowerKey === "shift") return "shift";
-
-    if (key.length === 1) return lowerKey;
-
-    return lowerKey;
+  const save = async () => {
+    if (!canSave) return;
+    if (combo === normalizeShortcut(initialValue)) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(combo);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const key = mapKey(e.key, e.code);
-
-      if (key === "enter" || key === "return") {
-        if (displayKeys.length > 0 && validation.isValid) {
-          onSave(displayKeys.join("+"));
-          onClose();
-        }
-        return;
+  const handleKeyDown = (e: KeyboardEvent) => {
+    const mods = modifiersOf(e);
+    // Bare Tab/Space/Return/Esc can't be shortcuts (a modifier is required),
+    // so they drive the dialog; with a modifier they're recorded.
+    if (mods.length === 0) {
+      if (e.code === "Tab") return;
+      const onButton = document.activeElement instanceof HTMLButtonElement;
+      if ((e.code === "Enter" || e.code === "Space") && onButton) return;
+      if (e.code === "Escape") {
+        e.preventDefault();
+        return onClose();
       }
-
-      if (key === "escape") {
-        onClose();
-        return;
+      if (e.code === "Enter") {
+        e.preventDefault();
+        return void save();
       }
-
-      if (keysRef.current.size < 3 || keysRef.current.has(key)) {
-        keysRef.current.add(key);
-      }
-
-      const newSet = new Set(keysRef.current);
-      setCurrentKeys(newSet);
-
-      const sorted = Array.from(newSet).sort((a, b) => {
-        const order = { cmd: 1, ctrl: 2, alt: 3, shift: 4 };
-        const orderA = order[a as keyof typeof order] || 99;
-        const orderB = order[b as keyof typeof order] || 99;
-        return orderA - orderB;
-      });
-
-      setDisplayKeys(sorted);
-      setHasStartedRecording(true);
-    },
-    [onSave, onClose, displayKeys, validation.isValid]
-  );
-
-  const handleKeyUp = useCallback((e: KeyboardEvent) => {
+    }
     e.preventDefault();
-    e.stopPropagation();
+    if (saving) return;
 
-    const key = mapKey(e.key, e.code);
+    setError(null);
+    if (MODIFIER_CODES.test(e.code)) {
+      setCombo(mods.join("+"));
+      return;
+    }
+    const key = keyFromCode(e.code);
+    if (!key) {
+      setError(
+        `${e.code || e.key} can't be used. Pick a letter, number, Space, Return, Esc or Tab.`,
+      );
+      return;
+    }
+    setCombo([...mods, key].join("+"));
+  };
 
-    keysRef.current.delete(key);
-    setCurrentKeys(new Set(keysRef.current));
-  }, []);
+  const panelRef = useDialog<HTMLDivElement>(isOpen, handleKeyDown);
 
   useEffect(() => {
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-      window.addEventListener("keyup", handleKeyUp);
-      return () => {
-        window.removeEventListener("keydown", handleKeyDown);
-        window.removeEventListener("keyup", handleKeyUp);
-      };
-    }
-  }, [isOpen, handleKeyDown, handleKeyUp]);
+    if (!isOpen) return;
+    // macOS drops keyup for keys released while ⌘ is held, so only track
+    // modifier releases, and only while no key has been chosen yet.
+    const handleKeyUp = (e: KeyboardEvent) =>
+      setCombo((c) => (hasShortcutKey(c) ? c : modifiersOf(e).join("+")));
+    window.addEventListener("keyup", handleKeyUp);
+    return () => window.removeEventListener("keyup", handleKeyUp);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const message = error ?? problem;
+
   return (
     <div className="modal-overlay">
-      <div className="modal-panel max-w-md">
+      <div
+        ref={panelRef}
+        className="modal-panel max-w-md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <div className="text-center space-y-5">
-          <h3 className="text-lg font-semibold text-text">Record shortcut</h3>
+          <h3 id={titleId} className="text-lg font-semibold text-text">
+            Record shortcut
+          </h3>
 
           <div
             className={`py-6 flex items-center justify-center min-h-[100px] bg-background rounded-md border border-dashed ${
-              !validation.isValid && displayKeys.length > 0
-                ? "border-[var(--danger)]"
-                : "border-border"
+              message ? "border-danger" : "border-border"
             }`}
+            aria-live="polite"
           >
-            {displayKeys.length > 0 ? (
-              <div className="flex flex-wrap gap-2 justify-center">
-                {displayKeys.map((k, i) => (
-                  <div key={i} className="flex items-center">
-                    <kbd className="px-3 py-1.5 bg-surface border border-border rounded-md text-base font-mono font-medium text-primary">
-                      {k === "cmd" || k === "win" || k === "super"
-                        ? isMac
-                          ? "⌘"
-                          : "Win"
-                        : k === "shift"
-                        ? isMac
-                          ? "⇧"
-                          : "Shift"
-                        : k === "ctrl"
-                        ? isMac
-                          ? "⌃"
-                          : "Ctrl"
-                        : k === "opt" || k === "alt"
-                        ? isMac
-                          ? "⌥"
-                          : "Alt"
-                        : k.toUpperCase()}
-                    </kbd>
-                    {i < displayKeys.length - 1 && (
-                      <span className="mx-2 text-text font-bold">
-                        +
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
+            {combo ? (
+              <kbd className="px-3 py-1.5 bg-surface border border-border rounded-md text-xl font-medium text-primary tracking-wide">
+                {formatShortcut(combo)}
+              </kbd>
             ) : (
               <p className="text-tertiary text-sm">Press keys…</p>
             )}
           </div>
 
-          {!validation.isValid && displayKeys.length > 0 && (
-            <div className="p-3 rounded-md border border-[var(--danger)]/30 bg-[var(--danger)]/10">
-              <p className="text-sm text-[var(--danger)]">{validation.message}</p>
+          {message && (
+            <div className="p-3 rounded-md border border-danger/30 bg-danger/10" role="alert">
+              <p className="text-sm text-danger">{message}</p>
             </div>
           )}
 
-          <div className="space-y-2">
-            <p className="text-sm text-secondary">
-              Press the desired key combination (max 3 keys).
-            </p>
-            <p className="text-xs text-tertiary">
-              <kbd className="font-mono bg-background px-1.5 py-0.5 rounded border border-border">
-                Enter
-              </kbd>{" "}
-              to save ·{" "}
-              <kbd className="font-mono bg-background px-1.5 py-0.5 rounded border border-border">
-                Esc
-              </kbd>{" "}
-              to cancel
-            </p>
+          <p className="text-sm text-secondary">
+            Use one key plus modifiers, like ⇧⌘D.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn btn-secondary">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={!canSave}
+              className="btn btn-primary"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
           </div>
         </div>
       </div>
