@@ -1034,7 +1034,7 @@ export default function SettingsView() {
                 Loading models...
               </p>
             ) : modelsError ? (
-              <div className="p-3 rounded-md border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+              <div className="p-3 rounded-md border border-danger/30 bg-danger/10">
                 <p className="text-sm text-[var(--danger)]">
                   Failed to load models: {modelsError}
                 </p>

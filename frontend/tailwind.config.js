@@ -7,7 +7,7 @@ export default {
       colors: {
         background: "var(--background)",
         surface: "var(--surface)",
-        "surface-hover": "var(--surface-hover)",
+        "surface-hover": "rgb(var(--surface-hover-rgb) / <alpha-value>)",
         text: "var(--text)",
         primary: "var(--primary)",
         secondary: "var(--secondary)",
@@ -17,19 +17,20 @@ export default {
           soft: "var(--accent-soft)",
         },
         recording: {
-          DEFAULT: "var(--recording)",
+          DEFAULT: "rgb(var(--recording-rgb) / <alpha-value>)",
           bg: "var(--recording-bg)",
         },
         processing: {
-          DEFAULT: "var(--processing)",
+          DEFAULT: "rgb(var(--processing-rgb) / <alpha-value>)",
           bg: "var(--processing-bg)",
         },
         idle: {
           DEFAULT: "var(--idle)",
           bg: "var(--idle-bg)",
         },
+        danger: "rgb(var(--danger-rgb) / <alpha-value>)",
         border: {
-          DEFAULT: "var(--border)",
+          DEFAULT: "rgb(var(--border-rgb) / <alpha-value>)",
           hover: "var(--border-hover)",
           strong: "var(--border-strong)",
         },

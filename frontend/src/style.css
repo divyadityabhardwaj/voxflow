@@ -9,7 +9,7 @@
   --background: #f8f9fa;
   --background-accent: #f1f2f4;
   --surface: #ffffff;
-  --surface-hover: #f3f4f6;
+  --surface-hover-rgb: 243 244 246;
   --text: #0f1115;
   --text-secondary: #4b515d;
   --text-tertiary: #717784;
@@ -20,20 +20,27 @@
   --accent: #18191d;
   --accent-hover: #2b2d35;
   --accent-soft: rgba(24, 25, 29, 0.07);
-  --border: #e2e4e8;
+  --border-rgb: 226 228 232;
   --border-hover: #cbcfd6;
   --border-strong: #0f1115;
   --shadow-sm: 0 1px 2px rgba(15, 17, 21, 0.04);
   --shadow-md: 0 6px 18px rgba(15, 17, 21, 0.06);
   --shadow-lg: 0 16px 36px rgba(15, 17, 21, 0.08);
-  --recording: #ef4444;
+  --recording-rgb: 239 68 68;
   --recording-bg: rgba(239, 68, 68, 0.1);
-  --processing: #f59e0b;
+  --processing-rgb: 245 158 11;
   --processing-bg: rgba(245, 158, 11, 0.12);
   --idle: #64748b;
   --idle-bg: rgba(100, 116, 139, 0.1);
   --success: #0284c7;
-  --danger: #ef4444;
+  --danger-rgb: 239 68 68;
+  /* Channel form lets Tailwind apply /NN opacity; themes override only the
+     -rgb variables, which resolve here because the theme class is on :root. */
+  --surface-hover: rgb(var(--surface-hover-rgb));
+  --border: rgb(var(--border-rgb));
+  --recording: rgb(var(--recording-rgb));
+  --processing: rgb(var(--processing-rgb));
+  --danger: rgb(var(--danger-rgb));
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --sidebar-width: 56px;
   --radius-sm: 6px;
@@ -47,7 +54,7 @@
   --background: #0c0d0e;
   --background-accent: #151619;
   --surface: #141518;
-  --surface-hover: #1e2024;
+  --surface-hover-rgb: 30 32 36;
   --text: #f4f4f5;
   --text-secondary: #9ca3af;
   --text-tertiary: #6b7280;
@@ -58,20 +65,20 @@
   --accent: #f4f4f5;
   --accent-hover: #e4e4e7;
   --accent-soft: rgba(244, 244, 245, 0.08);
-  --border: #23252a;
+  --border-rgb: 35 37 42;
   --border-hover: #34373e;
   --border-strong: #f4f4f5;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.7);
-  --recording: #ef4444;
+  --recording-rgb: 239 68 68;
   --recording-bg: rgba(239, 68, 68, 0.15);
-  --processing: #f59e0b;
+  --processing-rgb: 245 158 11;
   --processing-bg: rgba(245, 158, 11, 0.15);
   --idle: #94a3b8;
   --idle-bg: rgba(148, 163, 184, 0.12);
   --success: #38bdf8;
-  --danger: #ef4444;
+  --danger-rgb: 239 68 68;
   color-scheme: dark;
 }
 
@@ -79,7 +86,7 @@
   --background: #080b12;
   --background-accent: #101726;
   --surface: #0f1422;
-  --surface-hover: #182236;
+  --surface-hover-rgb: 24 34 54;
   --text: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-tertiary: #64748b;
@@ -90,20 +97,20 @@
   --accent: #38bdf8;
   --accent-hover: #7dd3fc;
   --accent-soft: rgba(56, 189, 248, 0.12);
-  --border: #1c283f;
+  --border-rgb: 28 40 63;
   --border-hover: #2b3c5c;
   --border-strong: #f1f5f9;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.7);
-  --recording: #f87171;
+  --recording-rgb: 248 113 113;
   --recording-bg: rgba(248, 113, 113, 0.15);
-  --processing: #fbbf24;
+  --processing-rgb: 251 191 36;
   --processing-bg: rgba(251, 191, 36, 0.15);
   --idle: #38bdf8;
   --idle-bg: rgba(56, 189, 248, 0.12);
   --success: #38bdf8;
-  --danger: #f87171;
+  --danger-rgb: 248 113 113;
   color-scheme: dark;
 }
 
