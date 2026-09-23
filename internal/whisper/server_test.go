@@ -40,11 +40,29 @@ func speechClip(t *testing.T) ([]int16, string) {
 	return samples, wav
 }
 
+// isolatedHome points HOME at a temp dir so tests never read or reap a running
+// VoxFlow's whisper-server pid file or touch its models.
+func isolatedHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	return home
+}
+
 func newTestService(t *testing.T, noServer bool) *Service {
 	t.Helper()
-	home, _ := os.UserHomeDir()
-	if _, err := os.Stat(filepath.Join(home, ".voxflow", "models", "ggml-base.bin")); err != nil {
+	realHome, _ := os.UserHomeDir()
+	model := filepath.Join(realHome, ".voxflow", "models", "ggml-base.bin")
+	if _, err := os.Stat(model); err != nil {
 		t.Skip("ggml-base.bin not downloaded")
+	}
+	isolatedHome(t)
+	modelsDir, err := GetModelsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(model, filepath.Join(modelsDir, "ggml-base.bin")); err != nil {
+		t.Fatal(err)
 	}
 	svc := NewService()
 	svc.noServer = noServer
