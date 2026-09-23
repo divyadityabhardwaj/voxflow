@@ -13,6 +13,7 @@ import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import {
   GetOnboardingCompleted,
   IsMiniMode,
+  IsModelReady,
   ShowMiniMode,
 } from "../wailsjs/go/main/App";
 import OnboardingWizard from "./components/OnboardingWizard";
@@ -100,7 +101,6 @@ const CloseIcon = () => (
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [modelReady, setModelReady] = useState<boolean>(false);
-  const [modelDownloading, setModelDownloading] = useState<boolean>(false);
   const [isMiniMode, setIsMiniMode] = useState<boolean>(true);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
@@ -128,6 +128,8 @@ function AppContent() {
       setIsMiniMode(isMini);
     });
     GetOnboardingCompleted().then(setOnboardingDone);
+    // The startup ModelStatus event can fire before this listener exists.
+    IsModelReady().then((ready) => ready && setModelReady(true));
 
     const unsub1 = EventsOn(Events.OpenHistory, () => setCurrentView("history"));
     const unsub2 = EventsOn(Events.OpenSettings, () => setCurrentView("settings"));
@@ -151,14 +153,8 @@ function AppContent() {
 
     const unsub5 = EventsOn(
       Events.ModelStatus,
-      (status: { downloaded: boolean; loaded: boolean }) => {
-        if (status.downloaded && status.loaded) {
-          setModelReady(true);
-          setModelDownloading(false);
-        } else if (!status.downloaded) {
-          setModelReady(false);
-          setModelDownloading(false);
-        }
+      (status: { downloaded: boolean; loaded?: boolean }) => {
+        setModelReady(Boolean(status.downloaded && status.loaded));
       },
     );
 
@@ -178,14 +174,6 @@ function AppContent() {
     return () => setMiniModeTransparency(false);
   }, [isMiniMode]);
 
-  const handleDownloadStart = () => {
-    setModelDownloading(true);
-  };
-
-  const handleDownloadComplete = () => {
-    setModelReady(true);
-    setModelDownloading(false);
-  };
 
   if (onboardingDone === false && !isMiniMode) {
     return (
@@ -197,13 +185,8 @@ function AppContent() {
     return <RecordingIndicator />;
   }
 
-  if (!modelReady && !modelDownloading) {
-    return (
-      <ModelDownloader
-        onDownloadStart={handleDownloadStart}
-        onDownloadComplete={handleDownloadComplete}
-      />
-    );
+  if (!modelReady) {
+    return <ModelDownloader onDownloadComplete={() => setModelReady(true)} />;
   }
 
   return (

@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { Events } from "../constants/events";
 import {
   CompleteOnboarding,
-  DownloadModel,
   GetConfig,
   IsAccessibilityGranted,
   IsModelDownloaded,
@@ -17,6 +14,7 @@ import {
   SetOpenRouterAPIKey,
 } from "../../wailsjs/go/main/App";
 import { KEY_URLS, PROVIDERS } from "./settings/LLMProviderSettings";
+import { useModelDownload } from "../hooks/useModelDownload";
 
 interface Props {
   onComplete: () => void;
@@ -49,10 +47,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [localURL, setLocalURL] = useState(DEFAULT_LOCAL_URL);
   const [localModel, setLocalModel] = useState("");
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [downloadedMB, setDownloadedMB] = useState(0);
-  const [totalMB, setTotalMB] = useState(0);
+  const download = useModelDownload(() => setModelReady(true));
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -76,30 +71,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
     checkAccess();
     window.addEventListener("focus", checkAccess);
 
-    const unsubDownload = EventsOn(Events.ModelDownloadProgress, (data: { progress: number; downloaded?: number; total?: number }) => {
-      setProgress(Math.round(data.progress));
-      if (data.downloaded !== undefined) {
-        setDownloadedMB(Number((data.downloaded / (1024 * 1024)).toFixed(1)));
-      }
-      if (data.total !== undefined) {
-        setTotalMB(Number((data.total / (1024 * 1024)).toFixed(1)));
-      }
-    });
-
-    const unsubModel = EventsOn(
-      Events.ModelStatus,
-      (status: { downloaded: boolean; loaded: boolean }) => {
-        if (status.downloaded && status.loaded) {
-          setModelReady(true);
-          setDownloading(false);
-        }
-      },
-    );
-
     return () => {
       window.removeEventListener("focus", checkAccess);
-      unsubDownload();
-      unsubModel();
     };
   }, []);
 
@@ -215,33 +188,39 @@ export default function OnboardingWizard({ onComplete }: Props) {
               VoxFlow runs Whisper locally. This one-time download is required
               before your first dictation.
             </p>
-            {downloading ? (
+            {download.downloading ? (
               <div className="mb-4">
                 <div className="h-2 bg-border rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary transition-all"
-                    style={{ width: `${progress}%` }}
+                    style={{ width: `${download.percent}%` }}
                   />
                 </div>
                 <p className="text-xs text-tertiary font-bold mt-2">
-                  {progress}% complete {totalMB > 0 ? `(${downloadedMB} MB / ${totalMB} MB)` : ""}
+                  {download.percent}% complete{" "}
+                  {download.totalMB > 0
+                    ? `(${download.downloadedMB} MB / ${download.totalMB} MB)`
+                    : ""}
                 </p>
               </div>
             ) : (
-              <button
-                type="button"
-                className="btn-primary w-full mb-4"
-                onClick={async () => {
-                  setDownloading(true);
-                  try {
-                    await DownloadModel();
-                  } catch {
-                    setDownloading(false);
-                  }
-                }}
-              >
-                Download model
-              </button>
+              <>
+                {download.error && (
+                  <p
+                    role="alert"
+                    className="text-xs text-[var(--danger)] font-medium mb-3 break-words"
+                  >
+                    Couldn't set up the speech model: {download.error}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="btn-primary w-full mb-4"
+                  onClick={download.start}
+                >
+                  {download.error ? "Retry" : "Download model"}
+                </button>
+              </>
             )}
           </>
         )}

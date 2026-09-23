@@ -1,60 +1,20 @@
-import { useState, useEffect } from "react";
-import { IsModelDownloaded, DownloadModel } from "../../wailsjs/go/main/App";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { Events } from "../constants/events";
+import { useEffect } from "react";
+import { IsModelReady } from "../../wailsjs/go/main/App";
+import { useModelDownload } from "../hooks/useModelDownload";
 
 interface Props {
-  onDownloadStart: () => void;
   onDownloadComplete: () => void;
 }
 
-export default function ModelDownloader({
-  onDownloadStart,
-  onDownloadComplete,
-}: Props) {
-  const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+export default function ModelDownloader({ onDownloadComplete }: Props) {
+  const { downloading, error, start, percent } =
+    useModelDownload(onDownloadComplete);
 
   useEffect(() => {
-    IsModelDownloaded().then((downloaded) => {
-      if (downloaded) {
-        onDownloadComplete();
-      }
+    IsModelReady().then((ready) => {
+      if (ready) onDownloadComplete();
     });
-
-    const unsubs = [
-      EventsOn(Events.ModelDownloadProgress, (data: { progress: number }) => {
-        setProgress(Math.round(data.progress));
-      }),
-      EventsOn(Events.ModelDownloadError, (err: string) => {
-        setError(err);
-        setDownloading(false);
-      }),
-      EventsOn(
-        Events.ModelStatus,
-        (status: { downloaded: boolean; loaded: boolean }) => {
-          if (status.downloaded && status.loaded) {
-            onDownloadComplete();
-          }
-        },
-      ),
-    ];
-    return () => unsubs.forEach((u) => u());
   }, []);
-
-  const handleDownload = async () => {
-    setDownloading(true);
-    setError(null);
-    onDownloadStart();
-
-    try {
-      await DownloadModel();
-    } catch (err) {
-      setError(String(err));
-      setDownloading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen app-shell flex items-center justify-center p-8">
@@ -71,7 +31,7 @@ export default function ModelDownloader({
         </div>
 
         <h1 className="text-2xl font-bold text-text mb-2">
-          Welcome to voxflow
+          Welcome to VoxFlow
         </h1>
         <p className="text-secondary font-medium mb-8">
           AI-powered voice dictation that runs locally on your device.
@@ -84,16 +44,13 @@ export default function ModelDownloader({
                 Before you start
               </h3>
               <p className="text-sm text-secondary font-medium">
-                voxflow needs to download a speech recognition model (~142 MB
+                VoxFlow needs to download a speech recognition model (~142 MB
                 for Base model). The model runs completely offline on your
                 device for maximum privacy.
               </p>
             </div>
 
-            <button
-              onClick={handleDownload}
-              className="btn-primary w-full"
-            >
+            <button onClick={start} className="btn-primary w-full">
               Download Model & Get Started
             </button>
           </>
@@ -107,12 +64,10 @@ export default function ModelDownloader({
               </p>
 
               <div className="progress-bar">
-                <div
-                  style={{ width: `${progress}%` }}
-                />
+                <div style={{ width: `${percent}%` }} />
               </div>
 
-              <p className="text-sm text-tertiary font-bold mt-2">{progress}%</p>
+              <p className="text-sm text-tertiary font-bold mt-2">{percent}%</p>
             </div>
 
             <p className="text-xs text-tertiary font-medium">
@@ -123,14 +78,14 @@ export default function ModelDownloader({
 
         {error && (
           <div className="space-y-4">
-            <div className="p-4 bg-[var(--danger)]/10 border border-[var(--danger)]/30 rounded-xl">
+            <div
+              role="alert"
+              className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl"
+            >
               <p className="text-sm font-medium text-[var(--danger)]">{error}</p>
             </div>
 
-            <button
-              onClick={handleDownload}
-              className="btn-secondary w-full"
-            >
+            <button onClick={start} className="btn-secondary w-full">
               Retry Download
             </button>
           </div>
