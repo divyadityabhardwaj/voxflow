@@ -342,10 +342,6 @@ func (r *cancellableProgressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (s *Service) DownloadModel(modelSize string, progress ProgressCallback) error {
-	return s.DownloadModelWithContext(context.Background(), modelSize, progress)
-}
-
 func CleanupPartialDownloads() error {
 	modelsDir, err := GetModelsDir()
 	if err != nil {

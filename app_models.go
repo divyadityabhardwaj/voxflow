@@ -59,35 +59,26 @@ func (a *App) IsModelDownloaded() bool {
 	return downloaded
 }
 
+// modelDownloadEvent is the payload of ModelDownloadProgress, ModelDownloadError and
+// ModelDownloadComplete.
+type modelDownloadEvent struct {
+	Model      string  `json:"model"`
+	Downloaded int64   `json:"downloaded"`
+	Total      int64   `json:"total"`
+	Progress   float64 `json:"progress"` // percent
+	Error      string  `json:"error"`
+}
+
+// DownloadModel downloads the configured model (cancellable via CancelDownload),
+// then loads and warms it up like a launch with the model already present.
 func (a *App) DownloadModel() error {
-	modelSize := a.config.GetWhisperModel()
-
-	err := a.whisperService.DownloadModel(modelSize, func(downloaded, total int64) {
-		progress := float64(downloaded) / float64(total) * 100
-		runtime.EventsEmit(a.ctx, events.ModelDownloadProgress, map[string]interface{}{
-			"downloaded": downloaded,
-			"total":      total,
-			"progress":   progress,
-		})
-	})
-
-	if err != nil {
-		runtime.EventsEmit(a.ctx, events.ModelDownloadError, err.Error())
+	if err := a.DownloadModelByName(a.config.GetWhisperModel()); err != nil {
 		return err
 	}
-
-	if err := a.whisperService.LoadModel(modelSize); err != nil {
-		runtime.EventsEmit(a.ctx, events.ModelLoadError, err.Error())
-		return err
+	a.checkModelStatus()
+	if !a.modelReady.Load() {
+		return fmt.Errorf("the speech model downloaded but could not be loaded")
 	}
-
-	a.modelReady.Store(true)
-	runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{
-		"downloaded": true,
-		"loaded":     true,
-		"model":      modelSize,
-	})
-
 	return nil
 }
 
@@ -97,17 +88,15 @@ func (a *App) DownloadModelByName(modelName string) error {
 		a.downloadCancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	a.downloadCancel = cancel
 	a.downloadMu.Unlock()
 
+	ev := modelDownloadEvent{Model: modelName}
 	err := a.whisperService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
-		progress := float64(downloaded) / float64(total) * 100
-		runtime.EventsEmit(a.ctx, events.ModelDownloadProgress, map[string]interface{}{
-			"model":      modelName,
-			"downloaded": downloaded,
-			"total":      total,
-			"progress":   progress,
-		})
+		ev.Downloaded, ev.Total = downloaded, total
+		ev.Progress = float64(downloaded) / float64(total) * 100
+		runtime.EventsEmit(a.ctx, events.ModelDownloadProgress, ev)
 	})
 
 	a.downloadMu.Lock()
@@ -115,14 +104,12 @@ func (a *App) DownloadModelByName(modelName string) error {
 	a.downloadMu.Unlock()
 
 	if err != nil {
-		runtime.EventsEmit(a.ctx, events.ModelDownloadError, map[string]interface{}{
-			"model": modelName,
-			"error": err.Error(),
-		})
+		ev.Error = err.Error()
+		runtime.EventsEmit(a.ctx, events.ModelDownloadError, ev)
 		return err
 	}
 
-	runtime.EventsEmit(a.ctx, events.ModelDownloadComplete, modelName)
+	runtime.EventsEmit(a.ctx, events.ModelDownloadComplete, ev)
 	return nil
 }
 
