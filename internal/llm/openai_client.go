@@ -213,7 +213,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 
 	refined, okToGo, parsed := ParseRefineResponse(result, rawText)
 	if !parsed {
-		return UnparsedFallback(result, rawText), tokenCount, false, nil
+		return rawText, tokenCount, false, nil
 	}
 	return refined, tokenCount, okToGo, nil
 }
@@ -260,7 +260,7 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 		return "", fmt.Errorf("no response generated")
 	}
 
-	return StripCodeFences(apiResp.Choices[0].Message.Content), nil
+	return StripCodeFences(stripThink(apiResp.Choices[0].Message.Content)), nil
 }
 
 func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {

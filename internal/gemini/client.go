@@ -193,7 +193,7 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 	refined, okToGo, parsed := llm.ParseRefineResponse(result, rawText)
 	if !parsed {
 		logger.Warnf("[Gemini] Warning: Response was not valid JSON")
-		return llm.UnparsedFallback(result, rawText), tokenCount, false, nil
+		return rawText, tokenCount, false, nil
 	}
 	return refined, tokenCount, okToGo, nil
 }

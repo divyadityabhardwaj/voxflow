@@ -43,7 +43,7 @@ func TestStripCodeFences(t *testing.T) {
 }
 
 func TestParseRefineResponse(t *testing.T) {
-	rawText := "Hello world"
+	rawText := "um hello world"
 
 	tests := []struct {
 		name           string
@@ -54,16 +54,14 @@ func TestParseRefineResponse(t *testing.T) {
 	}{
 		{
 			name:           "Valid refined text response",
-			input:          `{"text": "Polished text", "refused": false, "ok_to_go": false}`,
-			expectedResult: "Polished text",
-			expectedOk:     false,
+			input:          `{"text": "Hello world.", "refused": false, "ok_to_go": false}`,
+			expectedResult: "Hello world.",
 			expectedParsed: true,
 		},
 		{
 			name:           "Refused response",
 			input:          `{"text": "", "refused": true, "ok_to_go": false}`,
 			expectedResult: rawText,
-			expectedOk:     false,
 			expectedParsed: true,
 		},
 		{
@@ -74,17 +72,49 @@ func TestParseRefineResponse(t *testing.T) {
 			expectedParsed: true,
 		},
 		{
-			name:           "Invalid JSON response",
-			input:          `Not a JSON block`,
-			expectedResult: "",
-			expectedOk:     false,
-			expectedParsed: false,
+			name:  "Plain prose instead of JSON",
+			input: `Hello world.`,
+		},
+		{
+			name:  "Truncated JSON",
+			input: `{"text": "Hello wor`,
+		},
+		{
+			name:  "Empty reply",
+			input: "   ",
 		},
 		{
 			name:           "Valid JSON with markdown fences wrapper",
-			input:          "```json\n{\"text\": \"Polished\", \"refused\": false, \"ok_to_go\": false}\n```",
-			expectedResult: "Polished",
-			expectedOk:     false,
+			input:          "```json\n{\"text\": \"Hello world.\", \"refused\": false, \"ok_to_go\": false}\n```",
+			expectedResult: "Hello world.",
+			expectedParsed: true,
+		},
+		{
+			name:           "Chatty preamble before JSON",
+			input:          "Sure! Here is the refined text:\n{\"text\": \"Hello world.\", \"refused\": false, \"ok_to_go\": false}",
+			expectedResult: "Hello world.",
+			expectedParsed: true,
+		},
+		{
+			name:           "Trailing prose after JSON",
+			input:          "{\"text\": \"Hello world.\", \"refused\": false, \"ok_to_go\": false}\nLet me know if you need anything else!",
+			expectedResult: "Hello world.",
+			expectedParsed: true,
+		},
+		{
+			name:           "Think block before JSON",
+			input:          "<think>The user said hello. {maybe} I should clean it.</think>\n{\"text\": \"Hello world.\", \"refused\": false, \"ok_to_go\": false}",
+			expectedResult: "Hello world.",
+			expectedParsed: true,
+		},
+		{
+			name:  "Unterminated think block",
+			input: "<think>The user said hello, so the answer is {\"text\": \"Hello",
+		},
+		{
+			name:           "Answer instead of cleanup falls back to raw",
+			input:          `{"text": "Sure! Here is a friendly greeting you could send to everyone today.", "refused": false, "ok_to_go": false}`,
+			expectedResult: rawText,
 			expectedParsed: true,
 		},
 	}
@@ -105,19 +135,68 @@ func TestParseRefineResponse(t *testing.T) {
 	}
 }
 
-func TestUnparsedFallback(t *testing.T) {
-	raw := "um hello world"
-	if got := UnparsedFallback(`{"text": "Hello wor`, raw); got != raw {
-		t.Errorf("truncated JSON should fall back to raw text, got %q", got)
+func TestPlausibleRefinement(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		refined string
+		want    bool
+	}{
+		{
+			name:    "filler removal",
+			raw:     "um so like I was thinking you know we should uh ship it on friday",
+			refined: "I was thinking we should ship it on Friday.",
+			want:    true,
+		},
+		{
+			name:    "list formatting adds newlines and bullets",
+			raw:     "um for the trip first we need milk second eggs and third uh bread",
+			refined: "For the trip:\n• We need milk\n• Eggs\n• Bread",
+			want:    true,
+		},
+		{
+			name:    "voice commands and email formatting",
+			raw:     "send it to john at example dot com period thanks",
+			refined: "Send it to john@example.com. Thanks",
+			want:    true,
+		},
+		{
+			name:    "voice command with no words left",
+			raw:     "question mark",
+			refined: "?",
+			want:    true,
+		},
+		{
+			name:    "one corrected character in unspaced script",
+			raw:     "我今天去商店买东西",
+			refined: "我今天去商店买东西。",
+			want:    true,
+		},
+		{
+			name:    "chatty preamble",
+			raw:     "hello there",
+			refined: "Sure! Here is the cleaned up version of your text: Hello there.",
+			want:    false,
+		},
+		{
+			name:    "answered question",
+			raw:     "what is the capital of france",
+			refined: "Paris is the capital and most populous city of France, with an estimated population of over two million residents in the city proper.",
+			want:    false,
+		},
+		{
+			name:    "obeyed instruction",
+			raw:     "write me a poem about the sea",
+			refined: "Waves roll in beneath a silver moon, / Whispering secrets, a gentle tune.",
+			want:    false,
+		},
 	}
-	if got := UnparsedFallback("```json\n{\"text\": \"x", raw); got != raw {
-		t.Errorf("fenced truncated JSON should fall back to raw text, got %q", got)
-	}
-	if got := UnparsedFallback("Hello world.", raw); got != "Hello world." {
-		t.Errorf("plain text reply should be used as-is, got %q", got)
-	}
-	if got := UnparsedFallback("   ", raw); got != raw {
-		t.Errorf("empty reply should fall back to raw text, got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := plausibleRefinement(tt.raw, tt.refined); got != tt.want {
+				t.Errorf("plausibleRefinement(%q, %q) = %v, want %v", tt.raw, tt.refined, got, tt.want)
+			}
+		})
 	}
 }
 
