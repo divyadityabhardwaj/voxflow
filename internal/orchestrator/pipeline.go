@@ -42,6 +42,12 @@ type Pipeline struct {
 	modelReady     func() bool
 	onState        func(hotkey.State)
 
+	// Seams for tests; they default to the Wails runtime and the injection service.
+	emit     func(name string, data ...interface{})
+	inject   func(text string) error
+	typeText func(text string) error
+	copyText func(text string) error
+
 	stateMu sync.Mutex
 	state   hotkey.State
 
@@ -72,11 +78,11 @@ type Config struct {
 	Refiner        func() llm.Refiner
 	ActiveLLMModel func() string
 	ModelReady     func() bool
-	OnState func(hotkey.State)
+	OnState        func(hotkey.State)
 }
 
 func New(cfg Config) *Pipeline {
-	return &Pipeline{
+	p := &Pipeline{
 		ctx:              cfg.Ctx,
 		config:           cfg.AppConfig,
 		audioRecorder:    cfg.Audio,
@@ -92,6 +98,13 @@ func New(cfg Config) *Pipeline {
 		state:            hotkey.StateIdle,
 		savedVolume:      -1,
 	}
+	p.emit = func(name string, data ...interface{}) {
+		runtime.EventsEmit(p.ctx, name, data...)
+	}
+	if s := cfg.Injection; s != nil {
+		p.inject, p.typeText, p.copyText = s.Inject, s.Type, s.CopyToClipboard
+	}
+	return p
 }
 
 func (p *Pipeline) SetContext(ctx context.Context) {
@@ -115,7 +128,7 @@ func (p *Pipeline) setState(state hotkey.State) {
 
 func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 	p.setState(state)
-	runtime.EventsEmit(p.ctx, events.StateChanged, state.String())
+	p.emit(events.StateChanged, state.String())
 
 	switch state {
 	case hotkey.StateRecording:
@@ -138,7 +151,7 @@ func (p *Pipeline) StartRecording() error {
 		// pill and menu bar stay red and the next press tries to stop nothing.
 		p.resetToIdle()
 		err := fmt.Errorf("model not ready")
-		runtime.EventsEmit(p.ctx, events.Error, err.Error())
+		p.emit(events.Error, err.Error())
 		return err
 	}
 
@@ -152,18 +165,14 @@ func (p *Pipeline) StartRecording() error {
 		if p.hotkeyManager != nil {
 			p.hotkeyManager.SetState(hotkey.StateIdle)
 		}
-		runtime.EventsEmit(p.ctx, events.Error, err.Error())
+		p.emit(events.Error, err.Error())
 		return err
 	}
 
 	p.startStreamingTranscription()
 
 	if p.refiner != nil {
-		activeModel := ""
-		if p.activeLLMModel != nil {
-			activeModel = p.activeLLMModel()
-		}
-		go p.refiner().Prewarm(activeModel)
+		go p.refiner().Prewarm(p.llmModel())
 	}
 
 	if p.config.GetMuteSystemAudio() {
@@ -187,8 +196,8 @@ func (p *Pipeline) StartRecording() error {
 		}()
 	}
 
-	runtime.EventsEmit(p.ctx, events.StateChanged, "Recording")
-	runtime.EventsEmit(p.ctx, events.RecordingStarted, nil)
+	p.emit(events.StateChanged, "Recording")
+	p.emit(events.RecordingStarted, nil)
 	logger.Infof("Recording started...")
 
 	return nil
@@ -216,8 +225,8 @@ func (p *Pipeline) StopRecording() {
 	if p.hotkeyManager != nil {
 		p.hotkeyManager.SetState(hotkey.StateProcessing)
 	}
-	runtime.EventsEmit(p.ctx, events.StateChanged, "Processing")
-	runtime.EventsEmit(p.ctx, events.RecordingStopped, nil)
+	p.emit(events.StateChanged, "Processing")
+	p.emit(events.RecordingStopped, nil)
 	logger.Infof("Recording stopped, processing...")
 
 	go p.processRecording()
@@ -270,7 +279,7 @@ func (p *Pipeline) streamingWorker() {
 		p.streamTextMu.Unlock()
 
 		if shouldEmit {
-			runtime.EventsEmit(p.ctx, events.PartialTranscript, map[string]interface{}{
+			p.emit(events.PartialTranscript, map[string]interface{}{
 				"text":      currentText,
 				"timestamp": time.Now().Unix(),
 			})
@@ -465,51 +474,20 @@ func (p *Pipeline) processRecording() {
 	}
 
 	llmProvider := p.config.GetLLMProvider()
-	llmModel := p.activeLLMModel()
+	llmModel := p.llmModel()
 
 	// Read the target only now: by this point the frontmost-app lookup has had
 	// the whole stop/transcribe window to finish.
 	targetBundleID, targetAppName := p.RecordingTarget()
-	mode := p.config.ResolveRefinementMode(targetBundleID)
+	d := p.deliver(rawText, targetBundleID)
 
-	var polishedText string
-	var tokenCount int
-	var okToGo bool
-	var llmDuration time.Duration
-
-	if mode == "raw" || mode == "copy-only" {
-		polishedText = rawText
-		okToGo = true
-		logger.Infof("[Pipeline] Refinement mode '%s' for app %q — bypassing LLM", mode, targetBundleID)
-	} else {
-		runtime.EventsEmit(p.ctx, events.StateChanged, "Refining")
-		refiner := p.refiner()
-		llmStart := time.Now()
-		polishedText, tokenCount, okToGo, err = refiner.RefineText(rawText, llmModel)
-		llmDuration = time.Since(llmStart)
-
-		if err != nil {
-			// Losing the dictation is worse than pasting it unpolished.
-			logger.Warnf("[Pipeline] %s refinement failed, using raw transcription: %v", llmProvider, err)
-			p.emitToast(llmProvider+" error: "+err.Error()+" — pasted raw transcription", "warning")
-			polishedText, tokenCount, okToGo = rawText, 0, false
-		}
-
-		if okToGo {
-			polishedText = rawText
-		} else if polishedText == "" {
-			polishedText = rawText
-			p.emitToast("LLM refining failed - using raw transcription", "warning")
-		}
-	}
-
-	timeMs := llmDuration.Milliseconds()
+	timeMs := d.llmTime.Milliseconds()
 	var tps float64
-	if timeMs > 0 && tokenCount > 0 {
-		tps = float64(tokenCount) / (float64(timeMs) / 1000.0)
+	if timeMs > 0 && d.tokens > 0 {
+		tps = float64(d.tokens) / (float64(timeMs) / 1000.0)
 	}
 
-	wordCount := len(strings.Fields(polishedText))
+	wordCount := len(strings.Fields(d.text))
 	totalProcessingTime := time.Since(processingStartTime)
 	totalTimeFromStart := audioDuration + totalProcessingTime
 	effectiveWPM := 0.0
@@ -519,41 +497,15 @@ func (p *Pipeline) processRecording() {
 		effectiveWPS = float64(wordCount) / totalTimeFromStart.Seconds()
 	}
 
-	// Fire-and-forget history save — off the critical path.
 	if p.historyService != nil {
 		go func() {
-			if err := p.historyService.SaveAsync(targetAppName, rawText, polishedText, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
+			if err := p.historyService.SaveAsync(targetAppName, rawText, d.text, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
 				logger.Errorf("Failed to save to history: %v", err)
 			}
 		}()
 	}
 
-	if p.injectionService != nil {
-		method := p.config.InjectMethodFor(targetBundleID)
-		if mode == "copy-only" {
-			method = "clipboard"
-		}
-		var err error
-		switch method {
-		case "clipboard":
-			_ = p.injectionService.CopyToClipboard(polishedText)
-			logger.Infof("Text copied to clipboard")
-			if mode != "copy-only" {
-				logger.Infof("[Pipeline] Per-app rule: clipboard-only for %q", targetBundleID)
-			}
-		case "type":
-			logger.Infof("[Pipeline] Per-app rule: typing keystrokes for %q", targetBundleID)
-			err = p.injectionService.Type(polishedText)
-		default:
-			err = p.injectionService.Inject(polishedText)
-		}
-		if err != nil {
-			logger.Warnf("Could not inject text: %v", err)
-			p.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
-		}
-	}
-
-	logger.Debugf("[Pipeline] Output: %d chars", len(polishedText))
+	logger.Debugf("[Pipeline] Output: %d chars", len(d.text))
 
 	llmName := providerDisplayName(llmProvider)
 	output := fmt.Sprintf(
@@ -574,7 +526,7 @@ func (p *Pipeline) processRecording() {
 		whisperDuration.Seconds(),
 		cleanTextDuration.Seconds(),
 		llmName,
-		llmDuration.Seconds(),
+		d.llmTime.Seconds(),
 		tps,
 		effectiveWPS,
 		totalProcessingTime.Seconds(),
@@ -586,11 +538,11 @@ func (p *Pipeline) processRecording() {
 	if p.hotkeyManager != nil {
 		p.hotkeyManager.SetState(hotkey.StateIdle)
 	}
-	runtime.EventsEmit(p.ctx, events.StateChanged, "Idle")
-	runtime.EventsEmit(p.ctx, events.ProcessingComplete, map[string]interface{}{
-		"polished":         polishedText,
+	p.emit(events.StateChanged, "Idle")
+	p.emit(events.ProcessingComplete, map[string]interface{}{
+		"polished":         d.text,
 		"raw":              rawText,
-		"used_raw":         okToGo,
+		"used_raw":         d.usedRaw,
 		"elapsed":          totalProcessingTime.Milliseconds(),
 		"words_per_second": effectiveWPS,
 		"details": map[string]float64{
@@ -598,10 +550,106 @@ func (p *Pipeline) processRecording() {
 			"stop_wav":   stopAndWavDuration.Seconds(),
 			"whisper":    whisperDuration.Seconds(),
 			"clean_text": cleanTextDuration.Seconds(),
-			"llm":        llmDuration.Seconds(),
+			"llm":        d.llmTime.Seconds(),
 			"wav_mb":     float64(wavBytes) / (1024.0 * 1024.0),
 		},
 	})
+}
+
+type delivery struct {
+	text    string
+	method  string // "paste", "type" or "clipboard"
+	usedRaw bool   // raw text on purpose: raw mode, no key, or the LLM judged it already clean
+	tokens  int
+	llmTime time.Duration
+}
+
+// deliver refines rawText as the mode for bundleID asks, then hands it to the
+// target app. A refinement failure always falls back to rawText.
+func (p *Pipeline) deliver(rawText, bundleID string) delivery {
+	mode := p.config.ResolveRefinementMode(bundleID)
+	provider := p.config.GetLLMProvider()
+	d := delivery{text: rawText, usedRaw: true}
+
+	switch {
+	case mode == "raw" || mode == "copy-only":
+		logger.Infof("[Pipeline] Refinement mode '%s' for app %q — bypassing LLM", mode, bundleID)
+	case !providerConfigured(p.config, provider):
+		// Skipping the key in onboarding shouldn't make every dictation show an error.
+		logger.Infof("[Pipeline] No %s API key set — pasting raw transcription", provider)
+	default:
+		p.emit(events.StateChanged, "Refining")
+		llmStart := time.Now()
+		text, tokens, okToGo, err := p.refiner().RefineText(rawText, p.llmModel())
+		d.llmTime = time.Since(llmStart)
+
+		switch {
+		case err != nil:
+			// Losing the dictation is worse than pasting it unpolished.
+			logger.Warnf("[Pipeline] %s refinement failed, using raw transcription: %v", provider, err)
+			p.emitToast(provider+" error: "+truncate(err.Error(), maxToastDetail)+" — pasted raw transcription", "warning")
+			d.usedRaw = false
+		case okToGo:
+			d.tokens = tokens
+		case text == "":
+			p.emitToast("LLM refining failed - using raw transcription", "warning")
+			d.tokens, d.usedRaw = tokens, false
+		default:
+			d.text, d.tokens, d.usedRaw = text, tokens, false
+		}
+	}
+
+	if p.inject == nil {
+		return d
+	}
+	d.method = p.config.InjectMethodFor(bundleID)
+	if mode == "copy-only" {
+		d.method = "clipboard"
+	}
+
+	var err error
+	switch d.method {
+	case "clipboard":
+		if copyErr := p.copyText(d.text); copyErr != nil {
+			logger.Warnf("Could not copy text: %v", copyErr)
+		} else {
+			logger.Infof("Text copied to clipboard")
+		}
+	case "type":
+		logger.Infof("[Pipeline] Per-app rule: typing keystrokes for %q", bundleID)
+		err = p.typeText(d.text)
+	default:
+		err = p.inject(d.text)
+	}
+	if err != nil {
+		logger.Warnf("Could not inject text: %v", err)
+		p.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
+	}
+	return d
+}
+
+// providerConfigured reports whether refinement can be attempted at all. The
+// local server needs no key, only a URL.
+func providerConfigured(c *config.Config, provider string) bool {
+	switch provider {
+	case "openrouter":
+		return c.GetOpenRouterAPIKey() != ""
+	case "groq":
+		return c.GetGroqAPIKey() != ""
+	case "cerebras":
+		return c.GetCerebrasAPIKey() != ""
+	case "local":
+		return c.GetLocalURL() != ""
+	default:
+		return c.GetGeminiAPIKey() != ""
+	}
+}
+
+func (p *Pipeline) llmModel() string {
+	if p.activeLLMModel == nil {
+		return ""
+	}
+	return p.activeLLMModel()
 }
 
 func providerDisplayName(provider string) string {
@@ -619,8 +667,19 @@ func providerDisplayName(provider string) string {
 	}
 }
 
+// Provider errors can carry whole HTML pages or response bodies.
+const maxToastDetail = 160
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
 func (p *Pipeline) emitToast(message, toastType string) {
-	runtime.EventsEmit(p.ctx, events.Toast, map[string]interface{}{
+	p.emit(events.Toast, map[string]interface{}{
 		"message": message,
 		"type":    toastType,
 	})
@@ -642,7 +701,7 @@ func (p *Pipeline) resetToIdle() {
 	if p.hotkeyManager != nil {
 		p.hotkeyManager.SetState(hotkey.StateIdle)
 	}
-	runtime.EventsEmit(p.ctx, events.StateChanged, "Idle")
+	p.emit(events.StateChanged, "Idle")
 
 	p.restoreVolume()
 }
