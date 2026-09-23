@@ -77,6 +77,8 @@ func (r *Recorder) loadCallback() ChunkCallback {
 // Initialize (re)starts PortAudio. PortAudio snapshots the device list and default
 // input at init, so Start re-runs this before every recording to pick up AirPods,
 // USB mics and a changed default input (about 2 ms once CoreAudio is warm).
+// ponytail: re-enumerates on every recording; if Bluetooth devices make that slow,
+// re-init only from a kAudioHardwarePropertyDefaultInputDevice listener.
 func (r *Recorder) Initialize() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
