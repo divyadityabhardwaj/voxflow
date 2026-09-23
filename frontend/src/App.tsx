@@ -218,6 +218,8 @@ function AppContent() {
           <Tooltip content="Dictation" position="right">
             <button
               onClick={() => setCurrentView("main")}
+              aria-label="Dictation"
+              aria-current={currentView === "main" ? "page" : undefined}
               className={`sidebar-btn no-drag ${
                 currentView === "main" ? "active" : ""
               }`}
@@ -229,6 +231,8 @@ function AppContent() {
           <Tooltip content="History" position="right">
             <button
               onClick={() => setCurrentView("history")}
+              aria-label="History"
+              aria-current={currentView === "history" ? "page" : undefined}
               className={`sidebar-btn no-drag ${
                 currentView === "history" ? "active" : ""
               }`}
@@ -240,6 +244,8 @@ function AppContent() {
           <Tooltip content="Settings" position="right">
             <button
               onClick={() => setCurrentView("settings")}
+              aria-label="Settings"
+              aria-current={currentView === "settings" ? "page" : undefined}
               className={`sidebar-btn no-drag ${
                 currentView === "settings" ? "active" : ""
               }`}
@@ -256,6 +262,7 @@ function AppContent() {
           <Tooltip content="Mini mode" position="right">
             <button
               onClick={() => ShowMiniMode()}
+              aria-label="Mini mode"
               className="sidebar-btn no-drag"
             >
               <MinimizeIcon />
@@ -264,9 +271,10 @@ function AppContent() {
 
           <div className="h-px w-6 bg-border my-1" />
 
-          <Tooltip content="Quit" position="right">
+          <Tooltip content="Quit VoxFlow" position="right">
             <button
               onClick={() => Quit()}
+              aria-label="Quit VoxFlow"
               className="sidebar-btn no-drag hover:!text-[var(--danger)] hover:!bg-[var(--danger)]/10"
             >
               <CloseIcon />
