@@ -45,6 +45,8 @@ import HotkeySettings from "./settings/HotkeySettings";
 import AppRulesSettings from "./settings/AppRulesSettings";
 import AppearanceSettings from "./ui/AppearanceSettings";
 import SettingsSection from "./ui/SettingsSection";
+import ConfirmModal from "./ConfirmModal";
+import { useToast } from "../contexts/ToastContext";
 
 interface Config {
   hands_free_hotkey: string;
@@ -102,6 +104,12 @@ interface ModelStatus {
 }
 
 export default function SettingsView() {
+  const { showToast } = useToast();
+  const reportError = (action: string, err: unknown) => {
+    console.error(`${action}:`, err);
+    showToast(`${action}: ${String(err)}`, "error");
+  };
+
   const [config, setConfig] = useState<Config | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
@@ -199,7 +207,7 @@ export default function SettingsView() {
       setLocalModel((cfg as Config).local_model || "");
       setVocabulary((cfg as Config).vocabulary || "");
     } catch (err) {
-      console.error("Failed to load config:", err);
+      reportError("Couldn't load settings", err);
     }
   };
 
@@ -220,7 +228,7 @@ export default function SettingsView() {
                                  modelsList.find(m => m.includes("flash")) ||
                                  modelsList[0];
             if (defaultModel) {
-              SetGeminiModel(defaultModel).catch(err => console.error("Failed to auto-set Gemini model:", err));
+              SetGeminiModel(defaultModel).catch(err => reportError("Couldn't save the Gemini model", err));
               return { ...prev, gemini_model: defaultModel };
             }
           }
@@ -249,7 +257,7 @@ export default function SettingsView() {
           if (!currentModel || !modelsList.includes(currentModel)) {
             const defaultModel = modelsList.find(m => m.includes("gemma")) || modelsList[0];
             if (defaultModel) {
-              SetOpenRouterModel(defaultModel).catch(err => console.error("Failed to auto-set OpenRouter model:", err));
+              SetOpenRouterModel(defaultModel).catch(err => reportError("Couldn't save the OpenRouter model", err));
               return { ...prev, openrouter_model: defaultModel };
             }
           }
@@ -257,7 +265,7 @@ export default function SettingsView() {
         });
       }
     } catch (err) {
-      console.error("Failed to load OpenRouter models:", err);
+      reportError("Couldn't load OpenRouter models", err);
     } finally {
       setOpenRouterModelsLoading(false);
     }
@@ -279,7 +287,7 @@ export default function SettingsView() {
                                  modelsList.find(m => m.includes("gpt-oss")) ||
                                  modelsList[0];
             if (defaultModel) {
-              SetGroqModel(defaultModel).catch(err => console.error("Failed to auto-set Groq model:", err));
+              SetGroqModel(defaultModel).catch(err => reportError("Couldn't save the Groq model", err));
               return { ...prev, groq_model: defaultModel };
             }
           }
@@ -287,7 +295,7 @@ export default function SettingsView() {
         });
       }
     } catch (err) {
-      console.error("Failed to load Groq models:", err);
+      reportError("Couldn't load Groq models", err);
     } finally {
       setGroqModelsLoading(false);
     }
@@ -307,7 +315,7 @@ export default function SettingsView() {
           if (!currentModel || !modelsList.includes(currentModel)) {
             const defaultModel = modelsList.find(m => m.includes("llama3.1-8b")) || modelsList[0];
             if (defaultModel) {
-              SetCerebrasModel(defaultModel).catch(err => console.error("Failed to auto-set Cerebras model:", err));
+              SetCerebrasModel(defaultModel).catch(err => reportError("Couldn't save the Cerebras model", err));
               return { ...prev, cerebras_model: defaultModel };
             }
           }
@@ -315,7 +323,7 @@ export default function SettingsView() {
         });
       }
     } catch (err) {
-      console.error("Failed to load Cerebras models:", err);
+      reportError("Couldn't load Cerebras models", err);
     } finally {
       setCerebrasModelsLoading(false);
     }
@@ -435,7 +443,7 @@ export default function SettingsView() {
       const ready = await IsWhisperCLIReady();
       setWhisperReady(ready);
     } catch (err) {
-      console.error("Failed to check whisper CLI:", err);
+      reportError("Couldn't check the speech engine", err);
     }
   };
 
@@ -454,7 +462,7 @@ export default function SettingsView() {
       showSuccess("apiKey");
       await loadGeminiModels();
     } catch (err) {
-      console.error("Failed to save API key:", err);
+      reportError("Couldn't save the Gemini API key", err);
     } finally {
       setSaving(null);
     }
@@ -472,7 +480,7 @@ export default function SettingsView() {
       showSuccess("openRouterApiKey");
       await loadOpenRouterModels();
     } catch (err) {
-      console.error("Failed to save OpenRouter API key:", err);
+      reportError("Couldn't save the OpenRouter API key", err);
     } finally {
       setSaving(null);
     }
@@ -488,7 +496,7 @@ export default function SettingsView() {
       showSuccess("groqApiKey");
       await loadGroqModels();
     } catch (err) {
-      console.error("Failed to save Groq API key:", err);
+      reportError("Couldn't save the Groq API key", err);
     } finally {
       setSaving(null);
     }
@@ -506,7 +514,7 @@ export default function SettingsView() {
       showSuccess("cerebrasApiKey");
       await loadCerebrasModels();
     } catch (err) {
-      console.error("Failed to save Cerebras API key:", err);
+      reportError("Couldn't save the Cerebras API key", err);
     } finally {
       setSaving(null);
     }
@@ -521,7 +529,7 @@ export default function SettingsView() {
       showSuccess("apiKey");
       setGeminiModels([]);
     } catch (err) {
-      console.error("Failed to delete API key:", err);
+      reportError("Couldn't delete the Gemini API key", err);
     } finally {
       setSaving(null);
     }
@@ -538,7 +546,7 @@ export default function SettingsView() {
       showSuccess("openRouterApiKey");
       setOpenRouterModels([]);
     } catch (err) {
-      console.error("Failed to delete OpenRouter API key:", err);
+      reportError("Couldn't delete the OpenRouter API key", err);
     } finally {
       setSaving(null);
     }
@@ -553,7 +561,7 @@ export default function SettingsView() {
       showSuccess("groqApiKey");
       setGroqModels([]);
     } catch (err) {
-      console.error("Failed to delete Groq API key:", err);
+      reportError("Couldn't delete the Groq API key", err);
     } finally {
       setSaving(null);
     }
@@ -570,7 +578,7 @@ export default function SettingsView() {
       showSuccess("cerebrasApiKey");
       setCerebrasModels([]);
     } catch (err) {
-      console.error("Failed to delete Cerebras API key:", err);
+      reportError("Couldn't delete the Cerebras API key", err);
     } finally {
       setSaving(null);
     }
@@ -583,7 +591,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, local_url: localURL } : null));
       showSuccess("localURL");
     } catch (err) {
-      console.error("Failed to save local URL:", err);
+      reportError("Couldn't save the server URL", err);
     } finally {
       setSaving(null);
     }
@@ -596,7 +604,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, local_model: localModel } : null));
       showSuccess("localModel");
     } catch (err) {
-      console.error("Failed to save local model:", err);
+      reportError("Couldn't save the model name", err);
     } finally {
       setSaving(null);
     }
@@ -626,7 +634,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, llm_provider: provider } : null));
       showSuccess("llmProvider");
     } catch (err) {
-      console.error("Failed to save LLM provider:", err);
+      reportError("Couldn't change the AI clean-up service", err);
     } finally {
       setSaving(null);
     }
@@ -641,7 +649,7 @@ export default function SettingsView() {
       );
       showSuccess("openrouter_model");
     } catch (err) {
-      console.error("Failed to save OpenRouter model:", err);
+      reportError("Couldn't save the OpenRouter model", err);
     } finally {
       setSaving(null);
     }
@@ -654,7 +662,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, groq_model: modelName } : null));
       showSuccess("groq_model");
     } catch (err) {
-      console.error("Failed to save Groq model:", err);
+      reportError("Couldn't save the Groq model", err);
     } finally {
       setSaving(null);
     }
@@ -669,7 +677,7 @@ export default function SettingsView() {
       );
       showSuccess("cerebras_model");
     } catch (err) {
-      console.error("Failed to save Cerebras model:", err);
+      reportError("Couldn't save the Cerebras model", err);
     } finally {
       setSaving(null);
     }
@@ -682,7 +690,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, refinement_mode: value } : null));
       showSuccess("refinementMode");
     } catch (err) {
-      console.error("Failed to save refinement mode:", err);
+      reportError("Couldn't save what happens after you speak", err);
     } finally {
       setSaving(null);
     }
@@ -695,7 +703,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, vocabulary } : null));
       showSuccess("vocabulary");
     } catch (err) {
-      console.error("Failed to save vocabulary:", err);
+      reportError("Couldn't save your vocabulary", err);
     } finally {
       setSaving(null);
     }
@@ -708,7 +716,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, whisper_language: lang } : null));
       showSuccess("language");
     } catch (err) {
-      console.error("Failed to save language:", err);
+      reportError("Couldn't save the language", err);
     } finally {
       setSaving(null);
     }
@@ -721,7 +729,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, mute_system_audio: value } : null));
       showSuccess("muteSystemAudio");
     } catch (err) {
-      console.error("Failed to save mute system audio setting:", err);
+      reportError("Couldn't save the mute setting", err);
     } finally {
       setSaving(null);
     }
@@ -736,7 +744,7 @@ export default function SettingsView() {
       );
       showSuccess("model");
     } catch (err) {
-      console.error("Failed to save model:", err);
+      reportError("Couldn't switch speech models", err);
     } finally {
       setSaving(null);
     }
@@ -749,7 +757,7 @@ export default function SettingsView() {
       setConfig((prev) => (prev ? { ...prev, gemini_model: modelName } : null));
       showSuccess("gemini_model");
     } catch (err) {
-      console.error("Failed to save Gemini model:", err);
+      reportError("Couldn't save the Gemini model", err);
     } finally {
       setSaving(null);
     }
@@ -761,7 +769,7 @@ export default function SettingsView() {
     try {
       await DownloadModelByName(modelName);
     } catch (err) {
-      console.error("Failed to download model:", err);
+      reportError("Couldn't download the model", err);
       setDownloading(null);
     }
   };
@@ -772,7 +780,7 @@ export default function SettingsView() {
       setDownloading(null);
       setDownloadProgress(0);
     } catch (err) {
-      console.error("Failed to cancel download:", err);
+      reportError("Couldn't cancel the download", err);
     }
   };
 
@@ -835,8 +843,7 @@ export default function SettingsView() {
       await DeleteModelByName(modelName);
       loadModels();
     } catch (err) {
-      console.error("Failed to delete model:", err);
-      alert(String(err));
+      reportError("Couldn't delete the model", err);
     }
   };
 
@@ -1138,35 +1145,15 @@ export default function SettingsView() {
         </div>
       </div>
 
-      {modelToDelete && (
-        <div className="modal-overlay">
-          <div className="modal-panel" role="dialog" aria-modal="true">
-            <h3 className="text-lg font-semibold text-text mb-2">
-              Delete model?
-            </h3>
-            <p className="text-sm text-secondary mb-6">
-              Delete <span className="font-medium text-text">{modelToDelete}</span>?
-              You will need to download it again.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setModelToDelete(null)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteModel}
-                className="btn btn-danger"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={!!modelToDelete}
+        title="Delete model?"
+        message={`Delete ${modelToDelete}? You will need to download it again.`}
+        confirmText="Delete"
+        isDestructive
+        onConfirm={confirmDeleteModel}
+        onCancel={() => setModelToDelete(null)}
+      />
 
       <HotkeyRecorderModal
         isOpen={hotkeyModalOpen}

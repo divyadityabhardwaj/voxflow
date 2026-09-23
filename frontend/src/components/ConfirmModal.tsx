@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useId, useState } from "react";
+import { useDialog } from "../lib/useDialog";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -21,13 +22,37 @@ export default function ConfirmModal({
   onCancel,
   isDestructive = false,
 }: ConfirmModalProps) {
+  const titleId = useId();
+  const messageId = useId();
+  const panelRef = useDialog<HTMLDivElement>(isOpen, (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+    } else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      onConfirm();
+    }
+  });
+
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay">
-      <div className="modal-panel" role="dialog" aria-modal="true">
-        <h3 className="text-lg font-semibold text-text mb-2">{title}</h3>
-        <p className="text-sm text-secondary mb-5">{message}</p>
+      <div
+        ref={panelRef}
+        className="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        tabIndex={-1}
+      >
+        <h3 id={titleId} className="text-lg font-semibold text-text mb-2">
+          {title}
+        </h3>
+        <p id={messageId} className="text-sm text-secondary mb-5">
+          {message}
+        </p>
 
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={onCancel} className="btn btn-secondary">
@@ -37,6 +62,7 @@ export default function ConfirmModal({
             type="button"
             onClick={onConfirm}
             className={`btn ${isDestructive ? "btn-danger" : "btn-primary"}`}
+            data-autofocus
           >
             {confirmText}
           </button>
@@ -85,7 +111,9 @@ export function useConfirmModal() {
     setState((s) => ({ ...s, isOpen: false }));
   };
 
-  const ConfirmModalComponent = () => (
+  // Stable while the dialog state is unchanged, so a re-render of the caller
+  // doesn't remount the dialog and reset its focus.
+  const ConfirmModalComponent = useCallback(() => (
     <ConfirmModal
       isOpen={state.isOpen}
       title={state.title}
@@ -95,7 +123,7 @@ export function useConfirmModal() {
       onConfirm={handleConfirm}
       onCancel={handleCancel}
     />
-  );
+  ), [state]);
 
   return { confirm, ConfirmModalComponent };
 }
