@@ -6,7 +6,14 @@ import (
 	"os"
 	"reflect"
 	"testing"
+
+	"golang.design/x/hotkey/mainthread"
 )
+
+// The keyboard-layout lookup runs on the main thread, so tests need its run loop.
+func TestMain(m *testing.M) {
+	mainthread.Init(func() { os.Exit(m.Run()) })
+}
 
 // testService works on a private pasteboard so tests never touch the user's clipboard.
 func testService(t *testing.T, preserve bool) *Service {
@@ -101,5 +108,27 @@ func TestInjectWithoutAccessibilityCopies(t *testing.T) {
 			t.Fatalf("%s error = %v, want ErrNoAccessibility", name, err)
 		}
 		assertPasteboard(t, s, []pbItem{textItem(name, false)})
+	}
+}
+
+func TestPasteKeyCode(t *testing.T) {
+	tests := []struct {
+		layout string
+		want   int
+	}{
+		{"com.apple.keylayout.US", 9},
+		{"com.apple.keylayout.Dvorak", 47},
+		{"com.apple.keylayout.DVORAK-QWERTYCMD", 9},
+		{"com.apple.keylayout.Colemak", 9},
+		{"com.apple.keylayout.Russian", 9},
+		{"com.example.no-such-layout", keyV},
+	}
+	for _, tt := range tests {
+		if got := pasteKeyCode(tt.layout); got != tt.want {
+			t.Errorf("pasteKeyCode(%q) = %d, want %d", tt.layout, got, tt.want)
+		}
+	}
+	if got := pasteKeyCode(""); got < 0 || got > 127 {
+		t.Errorf("pasteKeyCode(current layout) = %d", got)
 	}
 }

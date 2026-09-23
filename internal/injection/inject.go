@@ -39,6 +39,7 @@ func (s *Service) Inject(text string) error {
 		_ = s.CopyToClipboard(text)
 		return ErrNoAccessibility
 	}
+	key := pasteKeyCode("") // before locking: it waits for the main thread
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -47,7 +48,7 @@ func (s *Service) Inject(text string) error {
 
 	time.Sleep(30 * time.Millisecond)
 
-	if err := simulatePaste(); err != nil { // Accessibility on this process, not osascript
+	if err := simulatePaste(key); err != nil { // Accessibility on this process, not osascript
 		return err
 	}
 

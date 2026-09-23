@@ -1,13 +1,14 @@
 package injection
 
 /*
-#cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework CoreGraphics -framework ApplicationServices -framework Foundation
+#cgo CFLAGS: -x objective-c -fobjc-arc
+#cgo LDFLAGS: -framework CoreGraphics -framework ApplicationServices -framework Foundation -framework Carbon
 
 #include <unistd.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <Foundation/Foundation.h>
+#include <Carbon/Carbon.h>
 
 // pressKey synthesizes a key down/up pair using CGEvent.
 // This requires Accessibility permission for the calling process (not osascript).
@@ -65,6 +66,50 @@ static int typeUnicode(const UniChar *chars, int len) {
     return 0;
 }
 
+static int keyCodeFor(CFDataRef layoutData, UniChar want) {
+    const UCKeyboardLayout *layout = (const UCKeyboardLayout *)CFDataGetBytePtr(layoutData);
+    for (UInt16 code = 0; code < 128; code++) {
+        UInt32 deadKeys = 0;
+        UniChar chars[4];
+        UniCharCount n = 0;
+        // Translate with ⌘ held: layouts such as "Dvorak – QWERTY ⌘" switch to QWERTY for shortcuts.
+        if (UCKeyTranslate(layout, code, kUCKeyActionDown, (cmdKey >> 8) & 0xFF, LMGetKbdType(),
+                           kUCKeyTranslateNoDeadKeysMask, &deadKeys, 4, &n, chars) == noErr &&
+            n == 1 && chars[0] == want) {
+            return code;
+        }
+    }
+    return -1;
+}
+
+// keyCodeForV returns the keycode that types v on a keyboard layout ("" for
+// the current one), or -1 if there is none.
+static int keyCodeForV(_GoString_ layoutID) {
+    @autoreleasepool {
+        NSString *wanted = [[NSString alloc] initWithBytes:_GoStringPtr(layoutID) length:_GoStringLen(layoutID) encoding:NSUTF8StringEncoding];
+        __block int code = -1;
+        void (^lookup)(void) = ^{
+            @autoreleasepool {
+                TISInputSourceRef src = NULL;
+                if (wanted.length == 0) {
+                    src = TISCopyCurrentKeyboardLayoutInputSource();
+                } else {
+                    NSArray *found = CFBridgingRelease(TISCreateInputSourceList(
+                        (__bridge CFDictionaryRef)@{(__bridge NSString *)kTISPropertyInputSourceID: wanted}, true));
+                    if (found.count) src = (TISInputSourceRef)CFBridgingRetain(found[0]);
+                }
+                if (!src) return;
+                CFDataRef data = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData);
+                if (data) code = keyCodeFor(data, 'v');
+                CFRelease(src);
+            }
+        };
+        // Text Input Sources are main-thread-only.
+        if (NSThread.isMainThread) lookup(); else dispatch_sync(dispatch_get_main_queue(), lookup);
+        return code;
+    }
+}
+
 // checkAccessibility returns 1 if Accessibility access is granted, 0 otherwise.
 static int checkAccessibility() {
     return AXIsProcessTrusted() ? 1 : 0;
@@ -95,8 +140,18 @@ func cgEventErr(ret C.int) error {
 	return fmt.Errorf("CGEventPost failed (code %d): ensure Accessibility permission is granted to this app in System Preferences → Privacy & Security → Accessibility", int(ret))
 }
 
-func simulatePaste() error {
-	if ret := C.pressKey(keyV, C.kCGEventFlagMaskCommand); ret != 0 {
+// pasteKeyCode is the key that types v on layoutID ("" for the current
+// layout), so ⌘V still pastes on Dvorak and the like. Looking it up per paste
+// costs microseconds and follows input-source switches with no observer.
+func pasteKeyCode(layoutID string) int {
+	if code := int(C.keyCodeForV(layoutID)); code >= 0 {
+		return code
+	}
+	return keyV
+}
+
+func simulatePaste(key int) error {
+	if ret := C.pressKey(C.CGKeyCode(key), C.kCGEventFlagMaskCommand); ret != 0 {
 		return cgEventErr(ret)
 	}
 	return nil
