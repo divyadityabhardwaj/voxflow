@@ -123,6 +123,11 @@ func (a *App) reloadHotkeys() error {
 	return fmt.Errorf("hotkey manager not initialized")
 }
 
+// SuspendHotkeys releases the global shortcuts while the frontend records a new one.
+func (a *App) SuspendHotkeys(suspend bool) error {
+	return a.hotkeyManager.Suspend(suspend)
+}
+
 func (a *App) SetHandsFreeHotkey(hotkeyStr string) error {
 	old := a.config.GetHandsFreeHotkey()
 	a.config.SetHandsFreeHotkey(hotkeyStr)

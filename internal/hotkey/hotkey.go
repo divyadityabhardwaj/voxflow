@@ -1,6 +1,7 @@
 package hotkey
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -42,28 +43,46 @@ const (
 
 type Callback func(state State)
 
-type reconfigRequest struct {
-	handsFreeStr string
-	pttStr       string
-	result       chan error
+type keyEvent int
+
+const (
+	handsFreeDown keyEvent = iota
+	handsFreeUp
+	pushToTalkDown
+	pushToTalkUp
+)
+
+type request struct {
+	fn     func() error
+	result chan error
 }
 
 type Manager struct {
 	state         State
-	handsFreeHK   *hotkey.Hotkey
-	pushToTalkHK  *hotkey.Hotkey
 	callback      Callback
 	mu            sync.RWMutex
 	running       bool
 	activeTrigger TriggerType
-	reconfigCh    chan reconfigRequest
+
+	// Owned by the loop goroutine.
+	handsFreeHK  *hotkey.Hotkey
+	pushToTalkHK *hotkey.Hotkey
+	handsFreeStr string
+	pttStr       string
+	suspended    bool
+
+	requests chan request
+	// One channel for every key event, so a down queued behind a slow callback
+	// is still handled before its up.
+	keyEvents chan keyEvent
 }
 
 func NewManager(callback Callback) *Manager {
 	return &Manager{
-		state:      StateIdle,
-		callback:   callback,
-		reconfigCh: make(chan reconfigRequest),
+		state:     StateIdle,
+		callback:  callback,
+		requests:  make(chan request),
+		keyEvents: make(chan keyEvent, 64),
 	}
 }
 
@@ -125,15 +144,34 @@ func parseKey(keyStr string) (hotkey.Key, error) {
 	return 0, fmt.Errorf("unknown key: %s", keyStr)
 }
 
+// Update re-registers both hotkeys. While suspended it only validates them;
+// they are registered when the suspension ends.
 func (m *Manager) Update(handsFreeStr, pttStr string) error {
-	req := reconfigRequest{
-		handsFreeStr: handsFreeStr,
-		pttStr:       pttStr,
-		result:       make(chan error, 1),
-	}
+	return m.do(func() error {
+		m.handsFreeStr, m.pttStr = handsFreeStr, pttStr
+		if m.suspended {
+			return validate(handsFreeStr, pttStr)
+		}
+		return m.rebind()
+	})
+}
 
-	select { // reconfig runs on hotkey goroutine — no locks here
-	case m.reconfigCh <- req:
+// Suspend unregisters the global hotkeys so their combos reach the app window
+// (e.g. while recording a new shortcut), and registers them again when false.
+func (m *Manager) Suspend(suspend bool) error {
+	return m.do(func() error {
+		if suspend == m.suspended {
+			return nil
+		}
+		m.suspended = suspend
+		return m.rebind()
+	})
+}
+
+func (m *Manager) do(fn func() error) error {
+	req := request{fn: fn, result: make(chan error, 1)}
+	select { // runs on the hotkey goroutine — no locks here
+	case m.requests <- req:
 		return <-req.result
 	case <-time.After(5 * time.Second):
 		return fmt.Errorf("timeout waiting for hotkey update")
@@ -141,6 +179,7 @@ func (m *Manager) Update(handsFreeStr, pttStr string) error {
 }
 
 // Start registers hotkeys. No mainthread.Init — Wails owns Cocoa; a second loop caused ~100% idle CPU. Idempotent via m.running.
+// The listener runs even when a registration fails; the error names which one.
 func (m *Manager) Start(handsFreeStr, pttStr string) error {
 	m.mu.Lock()
 	if m.running {
@@ -150,118 +189,89 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 	m.running = true
 	m.mu.Unlock()
 
-	if handsFreeStr != "" {
-		mods, key, err := parseHotkey(handsFreeStr)
-		if err == nil {
-			m.handsFreeHK = hotkey.New(mods, key)
-			if err := m.handsFreeHK.Register(); err != nil {
-				logger.Errorf("Failed to register initial hands-free: %v", err)
-				m.handsFreeHK = nil
-			}
-		}
-	}
-	if pttStr != "" {
-		mods, key, err := parseHotkey(pttStr)
-		if err == nil {
-			m.pushToTalkHK = hotkey.New(mods, key)
-			if err := m.pushToTalkHK.Register(); err != nil {
-				logger.Errorf("Failed to register initial ptt: %v", err)
-				m.pushToTalkHK = nil
-			}
-		}
-	}
+	m.handsFreeStr, m.pttStr = handsFreeStr, pttStr
+	err := m.rebind()
+	go m.loop()
+	return err
+}
 
-	go func() {
-		for {
-			hf := m.handsFreeHK
-			ptt := m.pushToTalkHK
-
-			var hfDown <-chan hotkey.Event
-			var pttDown, pttUp <-chan hotkey.Event
-
-			if hf != nil {
-				hfDown = hf.Keydown()
-			}
-			if ptt != nil {
-				pttDown = ptt.Keydown()
-				pttUp = ptt.Keyup()
-			}
-
-			select {
-			case req := <-m.reconfigCh:
-				err := m.handleReconfigure(req.handsFreeStr, req.pttStr)
-				req.result <- err
-				continue
-
-			case _, ok := <-hfDown:
-				if !ok {
-					m.handsFreeHK = nil
-					continue
-				}
+func (m *Manager) loop() {
+	for {
+		select {
+		case req := <-m.requests:
+			req.result <- req.fn()
+		case ev := <-m.keyEvents:
+			switch ev {
+			case handsFreeDown:
 				m.handleHandsFree()
-
-			case _, ok := <-pttDown:
-				if !ok {
-					m.pushToTalkHK = nil
-					continue
-				}
+			case pushToTalkDown:
 				m.handlePushToTalkDown()
-
-			case _, ok := <-pttUp:
-				if !ok {
-					m.pushToTalkHK = nil
-					continue
-				}
+			case pushToTalkUp:
 				m.handlePushToTalkUp()
 			}
 		}
-	}()
-
-	return nil
+	}
 }
 
-func (m *Manager) handleReconfigure(handsFreeStr, pttStr string) error {
-	if m.handsFreeHK != nil {
-		m.handsFreeHK.Unregister()
-		m.handsFreeHK = nil
-	}
-	if m.pushToTalkHK != nil {
-		m.pushToTalkHK.Unregister()
-		m.pushToTalkHK = nil
-	}
-
-	if handsFreeStr != "" {
-		mods, key, err := parseHotkey(handsFreeStr)
-		if err != nil {
-			return fmt.Errorf("invalid hands-free hotkey: %w", err)
+// rebind replaces both registrations. Each hotkey registers on its own, so one
+// bad combo doesn't take the other down.
+func (m *Manager) rebind() error {
+	for _, hk := range []*hotkey.Hotkey{m.handsFreeHK, m.pushToTalkHK} {
+		if hk != nil {
+			hk.Unregister()
 		}
-		m.handsFreeHK = hotkey.New(mods, key)
-		if err := m.handsFreeHK.Register(); err != nil {
-			m.handsFreeHK = nil
-			return fmt.Errorf("failed to register hands-free: %w", err)
-		}
+	}
+	m.handsFreeHK, m.pushToTalkHK = nil, nil
+	if m.suspended {
+		return nil
 	}
 
-	if pttStr != "" {
-		mods, key, err := parseHotkey(pttStr)
-		if err != nil {
-			if m.handsFreeHK != nil {
-				m.handsFreeHK.Unregister()
-				m.handsFreeHK = nil
-			}
-			return fmt.Errorf("invalid ptt hotkey: %w", err)
-		}
-		m.pushToTalkHK = hotkey.New(mods, key)
-		if err := m.pushToTalkHK.Register(); err != nil {
-			m.pushToTalkHK = nil
-			if m.handsFreeHK != nil {
-				m.handsFreeHK.Unregister()
-				m.handsFreeHK = nil
-			}
-			return fmt.Errorf("failed to register ptt: %w", err)
+	var errs []error
+	var err error
+	if m.handsFreeStr != "" {
+		if m.handsFreeHK, err = m.bind(m.handsFreeStr, handsFreeDown, handsFreeUp); err != nil {
+			errs = append(errs, fmt.Errorf("hands-free hotkey %s: %w", m.handsFreeStr, err))
 		}
 	}
+	if m.pttStr != "" {
+		if m.pushToTalkHK, err = m.bind(m.pttStr, pushToTalkDown, pushToTalkUp); err != nil {
+			errs = append(errs, fmt.Errorf("push-to-talk hotkey %s: %w", m.pttStr, err))
+		}
+	}
+	return errors.Join(errs...)
+}
 
+func (m *Manager) bind(hotkeyStr string, down, up keyEvent) (*hotkey.Hotkey, error) {
+	mods, key, err := parseHotkey(hotkeyStr)
+	if err != nil {
+		return nil, err
+	}
+	hk := hotkey.New(mods, key)
+	if err := hk.Register(); err != nil {
+		return nil, err
+	}
+	// The library delivers down and up on separate channels; merging them as
+	// they arrive keeps their order. Both goroutines end on Unregister.
+	go m.forward(hk.Keydown(), down)
+	go m.forward(hk.Keyup(), up)
+	return hk, nil
+}
+
+func (m *Manager) forward(events <-chan hotkey.Event, ev keyEvent) {
+	for range events {
+		m.keyEvents <- ev
+	}
+}
+
+func validate(hotkeyStrs ...string) error {
+	for _, s := range hotkeyStrs {
+		if s == "" {
+			continue
+		}
+		if _, _, err := parseHotkey(s); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

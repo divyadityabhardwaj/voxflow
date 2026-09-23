@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"voxflow/internal/audio"
 	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
+	"voxflow/internal/events"
 	"voxflow/internal/gemini"
 	"voxflow/internal/groq"
 	"voxflow/internal/history"
@@ -41,6 +43,10 @@ type App struct {
 	modelReady       atomic.Bool
 	downloadCancel   context.CancelFunc
 	downloadMu       sync.Mutex
+
+	warningsMu      sync.Mutex
+	domReady        bool
+	pendingWarnings []string
 }
 
 func NewApp() *App {
@@ -190,8 +196,34 @@ func (a *App) startup(ctx context.Context) {
 
 	logger.Infof("Starting hotkey manager: HF=%s, PTT=%s", hfHotkey, pttHotkey)
 	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey); err != nil {
-		logger.Errorf("Failed to start hotkey listener: %v", err)
+		logger.Errorf("Failed to register hotkeys: %v", err)
+		a.warn("Couldn't register a shortcut (" + strings.ReplaceAll(err.Error(), "\n", "; ") + "). Choose another in Settings.")
 	}
+}
+
+// warn shows a warning toast, holding it until the frontend has loaded if needed.
+func (a *App) warn(message string) {
+	a.warningsMu.Lock()
+	defer a.warningsMu.Unlock()
+	if !a.domReady {
+		a.pendingWarnings = append(a.pendingWarnings, message)
+		return
+	}
+	emitWarning(a.ctx, message)
+}
+
+func (a *App) onDomReady(ctx context.Context) {
+	a.warningsMu.Lock()
+	defer a.warningsMu.Unlock()
+	a.domReady = true
+	for _, message := range a.pendingWarnings {
+		emitWarning(ctx, message)
+	}
+	a.pendingWarnings = nil
+}
+
+func emitWarning(ctx context.Context, message string) {
+	runtime.EventsEmit(ctx, events.Toast, map[string]interface{}{"message": message, "type": "warning"})
 }
 
 func (a *App) shutdown(ctx context.Context) {
