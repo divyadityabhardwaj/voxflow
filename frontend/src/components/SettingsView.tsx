@@ -47,6 +47,7 @@ import AppearanceSettings from "./ui/AppearanceSettings";
 import SettingsSection from "./ui/SettingsSection";
 import ConfirmModal from "./ConfirmModal";
 import { useToast } from "../contexts/ToastContext";
+import { LANGUAGES } from "../lib/languages";
 
 interface Config {
   hands_free_hotkey: string;
@@ -70,23 +71,6 @@ interface Config {
   vocabulary: string;
   whisper_language: string;
 }
-
-const LANGUAGES: [string, string][] = [
-  ["auto", "Auto-detect"],
-  ["en", "English"],
-  ["es", "Spanish"],
-  ["fr", "French"],
-  ["de", "German"],
-  ["it", "Italian"],
-  ["pt", "Portuguese"],
-  ["nl", "Dutch"],
-  ["hi", "Hindi"],
-  ["ja", "Japanese"],
-  ["ko", "Korean"],
-  ["zh", "Chinese"],
-  ["ru", "Russian"],
-  ["ar", "Arabic"],
-];
 
 interface ModelInfo {
   name: string;
