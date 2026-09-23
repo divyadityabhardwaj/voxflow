@@ -27,9 +27,17 @@ var (
 	level        Level
 	mu           sync.Mutex
 	logFile      *os.File
+	logPath      string
+	writeCount   int
 	callDepth    = 3
 	enableColors bool
+
+	// ponytail: single rotation, add numbered rotation if anyone asks for history.
+	maxLogSize = int64(5 * 1024 * 1024)
 )
+
+// Stat-ing on every line would cost a syscall per log call.
+const rotateCheckEvery = 500
 
 func init() {
 	Setup(os.Stdout, INFO)
@@ -135,6 +143,15 @@ func logWithContext(lvl Level, format string, args ...interface{}) {
 	} else {
 		logger.Printf("[%s] %s %s → %s", timestamp, levelString(lvl), location, msg)
 	}
+
+	if logFile != nil {
+		if writeCount++; writeCount >= rotateCheckEvery {
+			writeCount = 0
+			if info, err := logFile.Stat(); err == nil && info.Size() > maxLogSize {
+				_ = openLogFile(logPath)
+			}
+		}
+	}
 }
 
 func Debug(format string, args ...interface{}) {
@@ -225,26 +242,36 @@ func File(path string, lvl Level) error {
 	mu.Lock()
 	defer mu.Unlock()
 
+	if err := openLogFile(path); err != nil {
+		return err
+	}
+	level = lvl
+	enableColors = false // ANSI escapes would land in the file
+
+	return nil
+}
+
+// openLogFile moves path aside once it is over maxLogSize, then mirrors output to it. mu must be held.
+func openLogFile(path string) error {
 	if logFile != nil {
 		logFile.Close()
+		logFile = nil
 	}
 
-	// ponytail: single rotation at 5MB, add numbered rotation if anyone asks for history.
-	if info, err := os.Stat(path); err == nil && info.Size() > 5*1024*1024 {
+	if info, err := os.Stat(path); err == nil && info.Size() > maxLogSize {
 		_ = os.Rename(path, path+".1")
 	}
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
+		output = os.Stdout
+		logger.SetOutput(output)
 		return err
 	}
 
-	logFile = f
+	logFile, logPath = f, path
 	output = io.MultiWriter(os.Stdout, f)
 	logger.SetOutput(output)
-	level = lvl
-	enableColors = false // ANSI escapes would land in the file
-
 	return nil
 }
 

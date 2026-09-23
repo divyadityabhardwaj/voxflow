@@ -2,7 +2,9 @@ package main
 
 import (
 	"embed"
+	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	"voxflow/internal/config"
 	"voxflow/internal/logger"
@@ -27,6 +29,13 @@ func main() {
 	if dir, err := config.GetConfigDir(); err == nil {
 		if err := logger.File(filepath.Join(dir, "voxflow.log"), logger.INFO); err != nil {
 			logger.Warnf("Could not open log file: %v", err)
+		}
+		// A Finder-launched app's stderr goes nowhere, so a fatal panic would leave no trace.
+		if f, err := os.OpenFile(filepath.Join(dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600); err == nil {
+			if err := debug.SetCrashOutput(f, debug.CrashOptions{}); err != nil {
+				logger.Warnf("Could not set crash output: %v", err)
+			}
+			f.Close()
 		}
 	}
 

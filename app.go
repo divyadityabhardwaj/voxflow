@@ -221,3 +221,8 @@ func (a *App) IsMiniMode() bool {
 func (a *App) Quit() {
 	runtime.Quit(a.ctx)
 }
+
+// LogFrontendError records errors caught by the frontend's ErrorBoundary and global handlers.
+func (a *App) LogFrontendError(message, stack string) {
+	logger.Errorf("[Frontend] %s\n%s", message, stack)
+}
