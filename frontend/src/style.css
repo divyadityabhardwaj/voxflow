@@ -678,6 +678,11 @@ body {
   animation: scale-in 0.2s ease-out;
 }
 
+/* The panel only takes focus as a fallback target when a dialog opens. */
+.modal-panel:focus-visible {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
