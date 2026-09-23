@@ -67,3 +67,29 @@ func TestActivateAppUnknownPID(t *testing.T) {
 		t.Fatal("a nonexistent pid should fail without waiting for the timeout")
 	}
 }
+
+func TestMicrophoneStatus(t *testing.T) {
+	switch s := MicrophoneStatus(); s {
+	case "authorized", "denied", "restricted", "notDetermined":
+	default:
+		t.Fatalf("unexpected status %q", s)
+	}
+}
+
+func TestPrivacySettingsURL(t *testing.T) {
+	tests := []struct {
+		pane, want string
+		wantErr    bool
+	}{
+		{"accessibility", "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", false},
+		{"microphone", "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone", false},
+		{"camera", "", true},
+		{"", "", true},
+	}
+	for _, tt := range tests {
+		got, err := privacySettingsURL(tt.pane)
+		if got != tt.want || (err != nil) != tt.wantErr {
+			t.Errorf("privacySettingsURL(%q) = %q, %v", tt.pane, got, err)
+		}
+	}
+}
