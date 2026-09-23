@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import {
   ToggleRecording,
-  GetStatus,
   GetConfig,
   GetHistory,
   CopyToClipboard,
@@ -10,8 +9,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
 import { useToast } from "../contexts/ToastContext";
-
-type Status = "Idle" | "Recording" | "Processing" | "Refining";
+import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 
 interface Transcript {
   id: number;
@@ -40,7 +38,8 @@ const formatRecentDate = (timestamp: string) => {
 };
 
 export default function MainView() {
-  const [status, setStatus] = useState<Status>("Idle");
+  const status = useRecordingState();
+  const busy = isBusy(status);
   const [handsFreeHotkey, setHandsFreeHotkey] = useState<string>("");
   const [pttHotkey, setPttHotkey] = useState<string>("");
   const [lastTranscription, setLastTranscription] = useState<string | null>(
@@ -56,7 +55,6 @@ export default function MainView() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    GetStatus().then((s) => setStatus(s as Status));
     GetConfig().then((cfg) => {
       if (cfg) {
         setHandsFreeHotkey(cfg.hands_free_hotkey || cfg.hotkey || "");
@@ -76,8 +74,9 @@ export default function MainView() {
 
     loadRecents();
 
+    // Reset here rather than in an effect on status: the Error event for a failed
+    // start arrives right after "Recording" and must not be wiped by a later effect.
     const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
-      setStatus(newStatus as Status);
       if (newStatus === "Recording") {
         setError(null);
         setLastTranscription(null);
@@ -166,6 +165,15 @@ export default function MainView() {
     }
   };
 
+  const toggleLabel =
+    status === "Idle"
+      ? "Start recording"
+      : status === "Recording"
+        ? "Stop recording"
+        : status === "Refining"
+          ? "Cleaning up…"
+          : "Processing…";
+
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-0 px-6 py-8 overflow-y-auto animate-fade-in">
       <div className="text-center mb-6 max-w-lg">
@@ -173,7 +181,7 @@ export default function MainView() {
           {status === "Idle" && "Capture a quick thought"}
           {status === "Recording" && "Listening…"}
           {status === "Processing" && "Processing…"}
-          {status === "Refining" && "Refining…"}
+          {status === "Refining" && "Cleaning up…"}
         </h1>
         {status === "Idle" ? (
           <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-secondary mt-2">
@@ -195,7 +203,7 @@ export default function MainView() {
               (partialText
                 ? "Transcribing your recording…"
                 : "Transcribing your recording")}
-            {status === "Refining" && "Polishing transcription with AI…"}
+            {status === "Refining" && "Cleaning up your text…"}
           </p>
         )}
       </div>
@@ -205,11 +213,11 @@ export default function MainView() {
           className={`
             card p-3 pl-4 flex items-center gap-3 transition-all duration-200
             ${status === "Recording" ? "border-recording ring-1 ring-recording/30" : ""}
-            ${status === "Processing" ? "border-processing ring-1 ring-processing/30" : ""}
+            ${busy ? "border-processing ring-1 ring-processing/30" : ""}
           `}
         >
           <div className="flex-1 min-w-0">
-            {status === "Processing" && partialText ? (
+            {busy && partialText ? (
               <div
                 ref={partialRef}
                 className="max-h-20 overflow-y-auto"
@@ -224,7 +232,7 @@ export default function MainView() {
                 {status === "Idle" && "Take a quick note with your voice…"}
                 {status === "Recording" && "Recording in progress…"}
                 {status === "Processing" && "Transcribing…"}
-                {status === "Refining" && "Polishing transcription…"}
+                {status === "Refining" && "Cleaning up…"}
               </p>
             )}
           </div>
@@ -232,14 +240,9 @@ export default function MainView() {
           <button
             type="button"
             onClick={handleToggle}
-            disabled={status === "Processing"}
-            title={
-              status === "Idle"
-                ? "Start recording"
-                : status === "Recording"
-                  ? "Stop recording"
-                  : "Processing…"
-            }
+            disabled={busy}
+            title={toggleLabel}
+            aria-label={toggleLabel}
             className={`
               relative w-10 h-10 rounded-xl transition-all duration-200
               flex items-center justify-center flex-shrink-0 cursor-pointer
@@ -257,7 +260,7 @@ export default function MainView() {
               <span className="absolute inset-0 rounded-xl bg-recording/40 animate-recording-ring" />
             )}
 
-            {status === "Processing" && (
+            {busy && (
               <span className="absolute inset-0 rounded-xl border-2 border-white/20 border-t-white animate-spin-slow" />
             )}
 
@@ -280,7 +283,7 @@ export default function MainView() {
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
             )}
-            {status === "Processing" && (
+            {busy && (
               <svg
                 className="w-4 h-4 relative z-10 animate-pulse"
                 fill="none"

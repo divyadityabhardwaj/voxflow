@@ -13,7 +13,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import { useTheme } from "../contexts/ThemeContext";
 import { Events } from "../constants/events";
-import { useRecordingState, Status } from "../hooks/useRecordingState";
+import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 
 const LEAVE_DELAY_MS = 280;
 
@@ -56,6 +56,7 @@ const Waveform = ({
 
 export default function RecordingIndicator() {
   const status = useRecordingState();
+  const busy = isBusy(status);
   const [hovered, setHovered] = useState(false);
   const [activeToast, setActiveToast] = useState<{
     id: number;
@@ -145,7 +146,7 @@ export default function RecordingIndicator() {
   const handleRecordClick = async (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (status !== "Processing") await ToggleRecording();
+    if (!busy) await ToggleRecording();
   };
 
   const handleExpandClick = (e: MouseEvent) => {
@@ -165,7 +166,7 @@ export default function RecordingIndicator() {
   let statusBg =
     status === "Recording"
       ? "var(--recording-bg)"
-      : status === "Processing"
+      : busy
         ? "var(--processing-bg)"
         : isDark
           ? "rgba(28, 28, 31, 0.62)"
@@ -174,7 +175,7 @@ export default function RecordingIndicator() {
   let statusBorder =
     status === "Recording"
       ? "2px solid var(--recording)"
-      : status === "Processing"
+      : busy
         ? "2px solid var(--processing)"
         : isDark
           ? "2px solid rgba(255, 255, 255, 0.08)"
@@ -185,10 +186,10 @@ export default function RecordingIndicator() {
       ? isDark
         ? "0 0 0 1px rgba(248, 113, 113, 0.25), 0 3px 12px rgba(248, 113, 113, 0.18)"
         : "0 0 0 1px rgba(239, 68, 68, 0.18), 0 3px 12px rgba(239, 68, 68, 0.14)"
-      : status === "Processing"
+      : busy
         ? isDark
-          ? "0 0 0 1px rgba(167, 139, 250, 0.2), 0 3px 12px rgba(167, 139, 250, 0.12)"
-          : "0 0 0 1px rgba(139, 92, 246, 0.16), 0 3px 12px rgba(139, 92, 246, 0.10)"
+          ? "0 0 0 1px rgba(251, 191, 36, 0.2), 0 3px 12px rgba(251, 191, 36, 0.12)"
+          : "0 0 0 1px rgba(245, 158, 11, 0.16), 0 3px 12px rgba(245, 158, 11, 0.10)"
         : isDark
           ? "0 3px 12px rgba(0,0,0,0.25)"
           : "0 3px 12px rgba(0,0,0,0.10)";
@@ -413,7 +414,7 @@ export default function RecordingIndicator() {
             title={status === "Idle" ? "Start Recording" : "Stop Recording"}
           >
             <div className="rounded-full size-5 flex items-center justify-center transition-all duration-200">
-              {status === "Processing" ? (
+              {busy ? (
                 <svg
                   className="w-3 h-3 animate-spin"
                   style={{ color: foregroundColor }}
@@ -449,22 +450,22 @@ export default function RecordingIndicator() {
               showStatusLabel ? "opacity-100" : "opacity-0"
             }`}
             aria-hidden={!showStatusLabel}
-            style={{ maxWidth: uiExpanded ? 72 : 0 }}
+            style={{ maxWidth: uiExpanded ? 88 : 0 }}
           >
             {status === "Recording" && (
               <div
-                className="text-[11px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[11px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--recording)" }}
               >
                 Recording
               </div>
             )}
-            {status === "Processing" && (
+            {busy && (
               <div
-                className="text-[11px] font-semibold uppercase tracking-[0.14em] whitespace-nowrap overflow-hidden text-ellipsis"
+                className="text-[11px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis"
                 style={{ color: "var(--processing)" }}
               >
-                Processing
+                {status === "Refining" ? "Cleaning up…" : "Transcribing…"}
               </div>
             )}
           </div>
