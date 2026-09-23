@@ -1,0 +1,89 @@
+package injection
+
+import (
+	"fmt"
+	"os"
+	"reflect"
+	"testing"
+)
+
+// testService works on a private pasteboard so tests never touch the user's clipboard.
+func testService(t *testing.T, preserve bool) *Service {
+	s := &Service{preserveClipboard: preserve, pasteboard: fmt.Sprintf("voxflow.test.%d.%s", os.Getpid(), t.Name())}
+	t.Cleanup(func() { writeItems(s.pasteboard, nil, false) })
+	return s
+}
+
+var userClipboard = []pbItem{
+	{{utiPlainText, []byte("hunter2")}, {utiConcealed, []byte{}}},
+	{{"public.png", []byte{0x89, 'P', 'N', 'G', 0}}, {"com.example.private", []byte("x")}},
+}
+
+func assertPasteboard(t *testing.T, s *Service, want []pbItem) {
+	t.Helper()
+	if got := readItems(s.pasteboard); !reflect.DeepEqual(got, want) {
+		t.Fatalf("pasteboard = %q\nwant %q", got, want)
+	}
+}
+
+func TestInjectWriteRestoresEveryItem(t *testing.T) {
+	tests := []struct {
+		name     string
+		original []pbItem
+	}{
+		{"concealed text and an image", userClipboard},
+		{"empty clipboard", []pbItem{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := testService(t, true)
+			writeItems(s.pasteboard, tt.original, false)
+
+			gen := s.writeTransient("dictated")
+			assertPasteboard(t, s, []pbItem{textItem("dictated", true)})
+
+			s.restore(gen)
+			assertPasteboard(t, s, tt.original)
+		})
+	}
+}
+
+func TestRestoreKeepsWhatTheUserCopiedMeanwhile(t *testing.T) {
+	s := testService(t, true)
+	writeItems(s.pasteboard, userClipboard, false)
+
+	gen := s.writeTransient("dictated")
+	copied := []pbItem{textItem("copied by the user", false)}
+	writeItems(s.pasteboard, copied, false)
+
+	s.restore(gen)
+	assertPasteboard(t, s, copied)
+}
+
+func TestBackToBackDictationsRestoreTheOriginalClipboard(t *testing.T) {
+	s := testService(t, true)
+	writeItems(s.pasteboard, userClipboard, false)
+
+	first := s.writeTransient("one")
+	second := s.writeTransient("two")
+
+	s.restore(first)
+	assertPasteboard(t, s, []pbItem{textItem("two", true)})
+
+	s.restore(second)
+	assertPasteboard(t, s, userClipboard)
+}
+
+func TestWithoutPreserveTheDictationStays(t *testing.T) {
+	s := testService(t, false)
+	writeItems(s.pasteboard, userClipboard, false)
+
+	s.restore(s.writeTransient("dictated"))
+	assertPasteboard(t, s, []pbItem{textItem("dictated", false)})
+}
+
+func TestCopyToClipboardIsAnOrdinaryCopy(t *testing.T) {
+	s := testService(t, true)
+	_ = s.CopyToClipboard("keep me")
+	assertPasteboard(t, s, []pbItem{{{utiPlainText, []byte("keep me")}}})
+}
