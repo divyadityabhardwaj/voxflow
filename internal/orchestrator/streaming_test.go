@@ -5,19 +5,20 @@ import (
 	"time"
 )
 
-func TestMergeStreamingChunks_dedupesOverlap(t *testing.T) {
+func TestMergeStreamingChunks_keepsRepeatedBoundaryWord(t *testing.T) {
 	chunks := []streamChunk{
-		{Start: 0, Text: "hello world"},
-		{Start: time.Second, Text: "world again"},
+		{Start: 8 * time.Second, Text: "that is right."},
+		{Start: 12 * time.Second, Text: ""},
+		{Start: 0, Text: "I think that"},
 	}
 	got := mergeStreamingChunks(chunks)
-	want := "hello world again"
+	want := "I think that that is right."
 	if got != want {
 		t.Fatalf("mergeStreamingChunks() = %q, want %q", got, want)
 	}
 }
 
-func TestCleanWhisperText_stripsNoiseMarkers(t *testing.T) {
+func TestCleanWhisperText(t *testing.T) {
 	testCases := []struct {
 		input string
 		want  string
@@ -29,12 +30,56 @@ func TestCleanWhisperText_stripsNoiseMarkers(t *testing.T) {
 		{"hello [NO_SPEECH] world", "hello world"},
 		{"hello [NO SPEECH] world", "hello world"},
 		{"[NOISE] hello", "hello"},
+		{"", ""},
+
+		{"Thank you.", ""},
+		{" thank you!! ", ""},
+		{"Thanks for watching!", ""},
+		{"Thank you for watching.", ""},
+		{"you", ""},
+		{"Bye-bye.", ""},
+		{"Subtitles by the Amara.org community", ""},
+		{"[BLANK_AUDIO] Thank you.", ""},
+		{"(upbeat music) Thank you.", ""},
+		{"ご視聴ありがとうございました", ""},
+		{"[Music]", ""},
+		{"(water running)", ""},
+		{"*sighs*", ""},
+		{"♪ ♪", ""},
+		{"...", ""},
+
+		{"Thank you for the update.", "Thank you for the update."},
+		{"You should see this.", "You should see this."},
+		{"(laughs) That's great.", "(laughs) That's great."},
+		{"Thank you. See you at noon.", "Thank you. See you at noon."},
 	}
 
 	for _, tc := range testCases {
-		got := cleanWhisperText(tc.input)
-		if got != tc.want {
+		if got := cleanWhisperText(tc.input); got != tc.want {
 			t.Errorf("cleanWhisperText(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestCleanWhisperChunk_dropsVocabularyEcho(t *testing.T) {
+	const vocab = "Kubernetes, VoxFlow, Terraform, gRPC, Claude Code"
+	testCases := []struct {
+		input, vocab, want string
+	}{
+		{"Kubernetes,", vocab, ""},
+		{"VoxFlow", vocab, ""},
+		{"Kubernetes, VoxFlow.", vocab, ""},
+		{"Claude Code", vocab, ""},
+		{"[Music] Kubernetes,", vocab, ""},
+		{"Kubernetes, VoxFlow, Terraform, gRPC, Claude", vocab, "Kubernetes, VoxFlow, Terraform, gRPC, Claude"},
+		{"Deploy it to Kubernetes.", vocab, "Deploy it to Kubernetes."},
+		{"Kubernetes,", "", "Kubernetes,"},
+		{"Thank you.", vocab, ""},
+		{"", vocab, ""},
+	}
+	for _, tc := range testCases {
+		if got := cleanWhisperChunk(tc.input, tc.vocab); got != tc.want {
+			t.Errorf("cleanWhisperChunk(%q, %q) = %q, want %q", tc.input, tc.vocab, got, tc.want)
 		}
 	}
 }
