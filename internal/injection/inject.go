@@ -1,9 +1,15 @@
 package injection
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrNoAccessibility means nothing was pasted or typed: macOS silently drops
+// synthetic keystrokes from a process without Accessibility access. The text
+// was left on the clipboard instead, for the user to paste with ⌘V.
+var ErrNoAccessibility = errors.New("accessibility permission not granted: text copied to the clipboard")
 
 // Paste consumers read the pasteboard when they handle ⌘V, which a busy app
 // (Electron under load, remote desktops syncing the clipboard) can do well
@@ -29,6 +35,11 @@ func NewService(preserveClipboard bool) (*Service, error) {
 }
 
 func (s *Service) Inject(text string) error {
+	if !IsAccessibilityGranted() {
+		_ = s.CopyToClipboard(text)
+		return ErrNoAccessibility
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -86,6 +97,10 @@ func (s *Service) CopyToClipboard(text string) error {
 
 // Type uses keystrokes instead of paste (vim/tmux Cmd+V remaps); same Accessibility as Inject.
 func (s *Service) Type(text string) error {
+	if !IsAccessibilityGranted() {
+		_ = s.CopyToClipboard(text)
+		return ErrNoAccessibility
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return typeText(text)

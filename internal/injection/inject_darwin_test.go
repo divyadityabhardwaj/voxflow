@@ -1,6 +1,7 @@
 package injection
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -86,4 +87,19 @@ func TestCopyToClipboardIsAnOrdinaryCopy(t *testing.T) {
 	s := testService(t, true)
 	_ = s.CopyToClipboard("keep me")
 	assertPasteboard(t, s, []pbItem{{{utiPlainText, []byte("keep me")}}})
+}
+
+func TestInjectWithoutAccessibilityCopies(t *testing.T) {
+	if IsAccessibilityGranted() {
+		t.Skip("this process may post events: Inject would paste into the frontmost app")
+	}
+	s := testService(t, true)
+	writeItems(s.pasteboard, userClipboard, false)
+
+	for name, deliver := range map[string]func(string) error{"Inject": s.Inject, "Type": s.Type} {
+		if err := deliver(name); !errors.Is(err, ErrNoAccessibility) {
+			t.Fatalf("%s error = %v, want ErrNoAccessibility", name, err)
+		}
+		assertPasteboard(t, s, []pbItem{textItem(name, false)})
+	}
 }
