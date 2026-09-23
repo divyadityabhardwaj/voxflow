@@ -9,50 +9,56 @@ import {
 } from "react";
 
 type Theme = "light" | "dark" | "midnight";
+export type ThemePreference = Theme | "system";
 
 interface ThemeContextType {
+  // The theme actually applied; "system" resolves to light or dark.
   theme: Theme;
+  preference: ThemePreference;
   toggleTheme: () => void;
-  setTheme: (theme: Theme) => void;
+  setTheme: (theme: ThemePreference) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_KEY = "voxflow-theme";
-
-function getSystemTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
+const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
+  const [preference, setPreference] = useState<ThemePreference>(() => {
     const stored = localStorage.getItem(THEME_KEY);
     if (stored === "light" || stored === "dark" || stored === "midnight") {
       return stored;
     }
-    return getSystemTheme();
+    return "system";
   });
+  const [systemDark, setSystemDark] = useState(darkQuery.matches);
 
   useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    darkQuery.addEventListener("change", onChange);
+    return () => darkQuery.removeEventListener("change", onChange);
+  }, []);
+
+  const theme: Theme =
+    preference === "system" ? (systemDark ? "dark" : "light") : preference;
+
+  useEffect(() => {
+    localStorage.setItem(THEME_KEY, preference);
+  }, [preference]);
+
+  useEffect(() => {
     document.documentElement.classList.remove("light", "dark", "midnight");
     document.documentElement.classList.add(theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === "light" ? "dark" : "light"));
-  }, []);
-
-  const setTheme = useCallback((newTheme: Theme) => {
-    setThemeState(newTheme);
-  }, []);
+    setPreference(theme === "light" ? "dark" : "light");
+  }, [theme]);
 
   const value = useMemo(
-    () => ({ theme, toggleTheme, setTheme }),
-    [theme, toggleTheme, setTheme],
+    () => ({ theme, preference, toggleTheme, setTheme: setPreference }),
+    [theme, preference, toggleTheme],
   );
 
   return (
