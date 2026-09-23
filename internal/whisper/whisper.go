@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,9 +51,6 @@ var ModelDescriptions = map[string]string{
 	"medium": "Best accuracy, slowest (~1.5 GB)",
 }
 
-const whisperCLIDownloadURL = "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.2/whisper-blas-bin-x64.zip"
-const whisperCLIMacARM = "https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.2/whisper-bin-arm64-apple-darwin.zip"
-
 type ProgressCallback func(downloaded, total int64)
 
 type Service struct {
@@ -89,59 +87,8 @@ func GetModelsDir() (string, error) {
 	return modelsDir, nil
 }
 
-func GetBinDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	binDir := filepath.Join(homeDir, ".voxflow", "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		return "", err
-	}
-	return binDir, nil
-}
-
 func (s *Service) IsWhisperCLIInstalled() bool {
 	return s.findWhisperBinary() != ""
-}
-
-func (s *Service) EnsureWhisperCLI(progress ProgressCallback) error {
-	if s.findWhisperBinary() != "" {
-		return nil
-	}
-
-	return s.downloadWhisperCLI(progress)
-}
-
-func (s *Service) downloadWhisperCLI(progress ProgressCallback) error {
-	binDir, err := GetBinDir()
-	if err != nil {
-		return err
-	}
-
-	// Homebrew symlink only today; production would ship prebuilt binaries.
-	whisperPath := filepath.Join(binDir, "whisper-cli")
-
-	homebrewPaths := []string{
-		"/opt/homebrew/bin/whisper-cli",
-		"/opt/homebrew/Cellar/whisper-cpp/1.8.2/bin/whisper-cli",
-		"/usr/local/bin/whisper-cli",
-	}
-
-	for _, p := range homebrewPaths {
-		if _, err := os.Stat(p); err == nil {
-			if !isSecureBinary(p) {
-				continue
-			}
-			os.Remove(whisperPath) // Remove if exists
-			if err := os.Symlink(p, whisperPath); err != nil {
-				return fmt.Errorf("failed to create symlink: %w", err)
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("whisper-cli not found. Please install via: brew install whisper-cpp")
 }
 
 type ModelInfo struct {
@@ -452,7 +399,7 @@ func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, err
 
 	whisperBin := s.findWhisperBinary()
 	if whisperBin == "" {
-		return "", fmt.Errorf("whisper CLI binary not found. Please install whisper.cpp or provide the binary at ~/.voxflow/bin/whisper-cli")
+		return "", fmt.Errorf("speech engine (whisper-cli) not found. Reinstall VoxFlow, or run: brew install whisper-cpp")
 	}
 	if wavPath == "" {
 		var err error
@@ -507,43 +454,40 @@ func (s *Service) findWhisperBinary() string {
 }
 
 func locateWhisperBinary() string {
-	binDir, _ := GetBinDir()
-	whisperPath := filepath.Join(binDir, "whisper-cli")
-	if _, err := os.Stat(whisperPath); err == nil {
-		if isSecureBinary(whisperPath) {
-			return whisperPath
+	for _, p := range whisperCLICandidates() {
+		if isSecureBinary(p) {
+			return p
 		}
 	}
-
-	if path, err := exec.LookPath("whisper"); err == nil {
-		if isSecureBinary(path) {
-			return path
-		}
-	}
-	if path, err := exec.LookPath("whisper-cli"); err == nil {
-		if isSecureBinary(path) {
-			return path
-		}
-	}
-
-	commonPaths := []string{
-		"/opt/homebrew/bin/whisper-cli",
-		"/opt/homebrew/Cellar/whisper-cpp/1.8.2/bin/whisper-cli",
-		"/usr/local/bin/whisper",
-		"/usr/local/bin/whisper-cli",
-		"/opt/homebrew/bin/whisper",
-		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper"),
-		filepath.Join(os.Getenv("HOME"), ".local/bin/whisper-cli"),
-	}
-	for _, p := range commonPaths {
-		if _, err := os.Stat(p); err == nil {
-			if isSecureBinary(p) {
-				return p
-			}
-		}
-	}
-
 	return ""
+}
+
+// whisperCLICandidates lists where whisper-cli may be, best first: bundled in the app,
+// then user-provided, then PATH, then Homebrew. Only whisper.cpp's own name counts: a
+// bare "whisper" is usually OpenAI's Python CLI, which rejects whisper.cpp's flags.
+func whisperCLICandidates() []string {
+	var paths []string
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		paths = append(paths, filepath.Join(dir, "whisper-cli"), filepath.Join(dir, "..", "Resources", "whisper-cli"))
+	}
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		paths = append(paths, filepath.Join(home, ".voxflow", "bin", "whisper-cli"))
+	}
+	if p, err := exec.LookPath("whisper-cli"); err == nil {
+		paths = append(paths, p)
+	}
+	for _, prefix := range []string{"/opt/homebrew", "/usr/local"} {
+		paths = append(paths, filepath.Join(prefix, "bin", "whisper-cli"))
+		versions, _ := filepath.Glob(filepath.Join(prefix, "Cellar", "whisper-cpp", "*", "bin", "whisper-cli"))
+		slices.Reverse(versions)
+		paths = append(paths, versions...)
+	}
+	if home != "" {
+		paths = append(paths, filepath.Join(home, ".local", "bin", "whisper-cli"))
+	}
+	return paths
 }
 
 func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language string, threads int) (string, error) {
@@ -658,12 +602,6 @@ func (s *Service) Close() error {
 	s.loaded = false
 	s.stopServerLocked()
 	return nil
-}
-
-func (s *Service) IsLoaded() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.loaded
 }
 
 func isSecureBinary(path string) bool {
