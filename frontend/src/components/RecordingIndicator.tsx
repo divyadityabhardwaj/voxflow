@@ -12,10 +12,40 @@ import {
   SetMiniModeExpanded,
 } from "../../wailsjs/go/main/App";
 import { useTheme } from "../contexts/ThemeContext";
+import { useToast, type Toast } from "../contexts/ToastContext";
 import { Events } from "../constants/events";
 import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 
 const LEAVE_DELAY_MS = 280;
+
+const WARNING_ICON =
+  "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z";
+
+const TOAST_ICONS: Record<Toast["type"], string> = {
+  error: WARNING_ICON,
+  warning: WARNING_ICON,
+  success: "M5 13l4 4L19 7",
+  info: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+};
+
+// ponytail: matches backend message text; switch to structured toast codes once Go emits them.
+const PILL_LABELS: [string[], string][] = [
+  [["accessibility", "text injection failed"], "Can't paste — click to fix"],
+  [["no speech", "no audio"], "No sound — check mic"],
+  [["pasted raw transcription", "llm refining failed"], "Pasted without clean-up"],
+  [["transcription failed", "transcription fallback failed"], "Transcription failed"],
+  [
+    ["failed to stop recording", "audio stream", "initialize audio", "already recording"],
+    "Recording failed",
+  ],
+  [["model not ready"], "Speech model not ready"],
+  [["model download", "model load"], "Speech model error"],
+];
+
+const pillLabel = (message: string) => {
+  const msg = message.toLowerCase();
+  return PILL_LABELS.find(([keys]) => keys.some((k) => msg.includes(k)))?.[1] ?? message;
+};
 
 const Waveform = ({
   active,
@@ -58,53 +88,23 @@ export default function RecordingIndicator() {
   const status = useRecordingState();
   const busy = isBusy(status);
   const [hovered, setHovered] = useState(false);
-  const [activeToast, setActiveToast] = useState<{
-    id: number;
-    message: string;
-    type: "error" | "warning" | "success" | "info";
-  } | null>(null);
+  const { toasts, dismissToast, clearToasts } = useToast();
+  const activeToast = toasts.length > 0 ? toasts[toasts.length - 1] : null;
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
 
   const uiExpanded = hovered || activeToast !== null;
   const showStatusLabel = status !== "Idle" && uiExpanded;
 
-  useEffect(() => {
-    const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
-      if (newStatus === "Recording" || newStatus === "Processing") {
-        setActiveToast(null);
-      }
-    });
-
-    const unsubToast = EventsOn(
-      Events.Toast,
-      (data: {
-        message: string;
-        type: "error" | "warning" | "success" | "info";
-      }) => {
-        const id = Date.now();
-        setActiveToast({
-          id,
-          message: data.message,
-          type: data.type || "error",
-        });
-
-        setTimeout(() => {
-          setActiveToast((current) => {
-            if (current && current.id === id) {
-              return null;
-            }
-            return current;
-          });
-        }, 4000);
-      }
-    );
-
-    return () => {
-      unsubState();
-      unsubToast();
-    };
-  }, []);
+  useEffect(
+    () =>
+      EventsOn(Events.StateChanged, (newStatus: string) => {
+        if (newStatus === "Recording" || newStatus === "Processing") {
+          clearToasts();
+        }
+      }),
+    [clearToasts],
+  );
 
 
   const hasToast = activeToast !== null;
@@ -215,7 +215,7 @@ export default function RecordingIndicator() {
       toastGlow = isDark
         ? "0 4px 12px rgba(239, 68, 68, 0.25)"
         : "0 4px 12px rgba(239, 68, 68, 0.15)";
-      toastForegroundColor = isDark ? "#fca5a5" : "#dc2626";
+      toastForegroundColor = isDark ? "#fca5a5" : "#b91c1c";
     } else if (activeToast.type === "warning") {
       toastBg = isDark
         ? "linear-gradient(135deg, rgba(217, 119, 6, 0.28) 0%, rgba(146, 64, 14, 0.18) 100%)"
@@ -224,7 +224,7 @@ export default function RecordingIndicator() {
       toastGlow = isDark
         ? "0 4px 12px rgba(245, 158, 11, 0.25)"
         : "0 4px 12px rgba(245, 158, 11, 0.15)";
-      toastForegroundColor = isDark ? "#fcd34d" : "#d97706";
+      toastForegroundColor = isDark ? "#fcd34d" : "#92400e";
     } else if (activeToast.type === "success") {
       toastBg = isDark
         ? "linear-gradient(135deg, rgba(5, 150, 105, 0.28) 0%, rgba(6, 95, 70, 0.18) 100%)"
@@ -233,7 +233,7 @@ export default function RecordingIndicator() {
       toastGlow = isDark
         ? "0 4px 12px rgba(16, 185, 129, 0.25)"
         : "0 4px 12px rgba(16, 185, 129, 0.15)";
-      toastForegroundColor = isDark ? "#6ee7b7" : "#059669";
+      toastForegroundColor = isDark ? "#6ee7b7" : "#047857";
     } else {
       toastBg = isDark
         ? "linear-gradient(135deg, rgba(37, 99, 235, 0.28) 0%, rgba(30, 58, 138, 0.18) 100%)"
@@ -242,31 +242,9 @@ export default function RecordingIndicator() {
       toastGlow = isDark
         ? "0 4px 12px rgba(59, 130, 246, 0.25)"
         : "0 4px 12px rgba(59, 130, 246, 0.15)";
-      toastForegroundColor = isDark ? "#93c5fd" : "#2563eb";
+      toastForegroundColor = isDark ? "#93c5fd" : "#1d4ed8";
     }
   }
-
-  const getShortErrorMessage = (message: string): string => {
-    const msg = message.toLowerCase();
-    if (msg.includes("no audio was captured")) return "No Audio Captured";
-    if (msg.includes("no speech detected")) return "No Speech Detected";
-    if (msg.includes("accessibility permission") || msg.includes("text injection failed")) return "Accessibility Error";
-    if (msg.includes("failed to stop recording")) {
-      if (msg.includes("no audio")) return "No Audio Input";
-      return "Stop Failed";
-    }
-    if (msg.includes("transcription failed")) return "Transcription Failed";
-    if (msg.includes("llm refining failed")) return "LLM Failed";
-    if (msg.includes("gemini error") || msg.includes("openai error") || msg.includes("groq error") || msg.includes("llm error")) {
-      return "LLM API Error";
-    }
-    if (msg.includes("model download") || msg.includes("model load")) return "Model Error";
-
-    if (message.length > 20) {
-      return message.substring(0, 18) + "...";
-    }
-    return message;
-  };
 
   const hoverBgExpand = isDark ? "hover:bg-white/10" : "hover:bg-black/5";
 
@@ -278,9 +256,8 @@ export default function RecordingIndicator() {
     >
       {activeToast && (
         <div
-          className="w-full h-[26px] flex flex-row items-center justify-between px-1.5 rounded-lg transition-all duration-300 pointer-events-auto cursor-pointer animate-slide-up-fade mb-1"
-          onClick={handleToastClick}
-          title={`${activeToast.message}\n\nClick to open VoxFlow`}
+          role={activeToast.type === "error" ? "alert" : "status"}
+          className="w-full min-h-[26px] py-0.5 flex flex-row items-center justify-between px-1.5 rounded-lg transition-all duration-300 pointer-events-auto animate-slide-up-fade mb-1"
           style={
             {
               background: toastBg,
@@ -291,87 +268,45 @@ export default function RecordingIndicator() {
             } as unknown as CSSProperties
           }
         >
-          <div className="flex-none flex items-center justify-center size-4 rounded-full bg-white/20 animate-pulse-soft">
-            {activeToast.type === "error" && (
+          <button
+            type="button"
+            className="flex-1 min-w-0 flex items-center"
+            onClick={handleToastClick}
+            title={`${activeToast.message}\n\nClick to open VoxFlow`}
+            style={{ color: toastForegroundColor }}
+          >
+            <span className="flex-none flex items-center justify-center size-4 rounded-full bg-white/20 animate-pulse-soft">
               <svg
-                className="w-2.5 h-2.5 text-white"
+                className="w-2.5 h-2.5"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
                 strokeWidth={3}
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  d={TOAST_ICONS[activeToast.type] ?? TOAST_ICONS.error}
                 />
               </svg>
-            )}
-            {activeToast.type === "warning" && (
-              <svg
-                className="w-2.5 h-2.5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-            )}
-            {activeToast.type === "success" && (
-              <svg
-                className="w-2.5 h-2.5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-            {activeToast.type === "info" && (
-              <svg
-                className="w-2.5 h-2.5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={3}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            )}
-          </div>
-
-          <div className="flex-1 px-1 min-w-0 flex items-center justify-center">
-            <span
-              className="text-[11px] font-semibold uppercase tracking-[0.08em] truncate whitespace-nowrap text-center animate-fade-in"
-              style={{ color: toastForegroundColor }}
-            >
-              {getShortErrorMessage(activeToast.message)}
             </span>
-          </div>
+            <span className="flex-1 min-w-0 px-1 text-[11px] font-semibold leading-tight text-center line-clamp-2 animate-fade-in">
+              {pillLabel(activeToast.message)}
+            </span>
+          </button>
 
           <button
+            type="button"
             className="flex-none size-4 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors no-drag"
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setActiveToast(null);
+              dismissToast(activeToast.id);
             }}
             title="Dismiss"
+            aria-label="Dismiss"
           >
             <svg
               className="w-2.5 h-2.5"
@@ -380,6 +315,7 @@ export default function RecordingIndicator() {
               viewBox="0 0 24 24"
               stroke="currentColor"
               strokeWidth={3}
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"

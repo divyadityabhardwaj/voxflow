@@ -145,6 +145,10 @@ function AppContent() {
       },
     );
 
+    const unsubError = EventsOn(Events.Error, (message: string) => {
+      showToastRef.current(String(message), "error");
+    });
+
     const unsub5 = EventsOn(
       Events.ModelStatus,
       (status: { downloaded: boolean; loaded: boolean }) => {
@@ -164,6 +168,7 @@ function AppContent() {
       unsub3();
       unsub4();
       unsub5();
+      unsubError();
     };
   }, []);
 

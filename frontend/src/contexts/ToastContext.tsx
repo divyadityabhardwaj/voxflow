@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from "react";
 
-interface Toast {
+export interface Toast {
   id: number;
   message: string;
   type: "error" | "warning" | "success" | "info";
@@ -8,7 +8,18 @@ interface Toast {
 
 interface ToastContextType {
   showToast: (message: string, type?: Toast["type"]) => void;
+  toasts: Toast[];
+  dismissToast: (id: number) => void;
+  clearToasts: () => void;
 }
+
+// Errors stay until dismissed so they can still be read after opening the window.
+const TOAST_TTL_MS: Record<Toast["type"], number | null> = {
+  error: null,
+  warning: 6000,
+  success: 3000,
+  info: 3000,
+};
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
@@ -37,46 +48,45 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const nextId = useRef(0);
 
-  const showToast = useCallback(
-    (message: string, type: Toast["type"] = "error") => {
-      setToasts((prev) => {
-        if (prev.some((t) => t.message === message)) {
-          return prev;
-        }
-
-        let finalMessage = message;
-        if (isMiniMode && message.includes("No speech detected")) {
-          finalMessage = "No Speech Detected";
-        }
-
-        const id = nextId.current++;
-        const newToasts = [...prev, { id, message: finalMessage, type }];
-
-        setTimeout(() => {
-          setToasts((current) => current.filter((t) => t.id !== id));
-        }, 3000);
-
-        return newToasts;
-      });
-    },
-    [isMiniMode],
-  );
-
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const value = useMemo(() => ({ showToast }), [showToast]);
+  const clearToasts = useCallback(() => setToasts([]), []);
+
+  const showToast = useCallback(
+    (message: string, type: Toast["type"] = "error") => {
+      const id = nextId.current++;
+      setToasts((prev) =>
+        prev.some((t) => t.message === message)
+          ? prev
+          : [...prev, { id, message, type }],
+      );
+      const ttl = TOAST_TTL_MS[type];
+      if (ttl) setTimeout(() => dismissToast(id), ttl);
+    },
+    [dismissToast],
+  );
+
+  const value = useMemo(
+    () => ({ showToast, toasts, dismissToast, clearToasts }),
+    [showToast, toasts, dismissToast, clearToasts],
+  );
 
   return (
     <ToastContext.Provider value={value}>
       {children}
 
       {!isMiniMode && (
-        <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"
+        >
           {toasts.map((toast) => (
             <div
               key={toast.id}
+              role={toast.type === "error" ? "alert" : undefined}
               className={`
                 pointer-events-auto max-w-sm p-4 rounded-xl shadow-soft-md animate-scale-in border
                 ${toast.type === "error" ? "bg-red-500/10 text-text border-red-500/30" : ""}
@@ -151,10 +161,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
 
-                <p className="text-sm font-bold flex-1">{toast.message}</p>
+                <p className="text-[13px] font-medium flex-1">{toast.message}</p>
 
                 <button
+                  type="button"
                   onClick={() => dismissToast(toast.id)}
+                  aria-label="Dismiss"
                   className="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                 >
                   <svg
