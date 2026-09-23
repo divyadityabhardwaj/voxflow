@@ -142,15 +142,11 @@ func (a *App) startup(ctx context.Context) {
 	window.FloatEverywhere()
 	a.windowMgr.WatchFrame()
 
-	openApp := func() {
-		a.HideMiniMode()
-		runtime.WindowShow(ctx) // status item clicks never activate an accessory app
-	}
 	window.InstallStatusItem(window.StatusItemCallbacks{
 		ToggleRecording: func() { a.ToggleRecording() },
 		CancelRecording: a.CancelRecording,
-		OpenApp:         openApp,
-		OpenSettings:    func() { openApp(); a.OpenSettings() },
+		OpenApp:         a.showMainWindow,
+		OpenSettings:    func() { a.showMainWindow(); a.OpenSettings() },
 		Quit:            a.Quit,
 	})
 
@@ -238,6 +234,11 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	a.windowMgr.Shutdown()
 	a.config.Save()
+}
+
+func (a *App) showMainWindow() {
+	a.HideMiniMode()
+	runtime.WindowShow(a.ctx) // status item clicks never activate an accessory app
 }
 
 func (a *App) GetStatus() string {

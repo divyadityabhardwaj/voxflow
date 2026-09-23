@@ -55,21 +55,25 @@ func main() {
 	fileMenu.AddText("Reset Window Position", nil, func(cd *menu.CallbackData) {
 		app.ResetWindowPosition()
 	})
-	fileMenu.AddText("View History", keys.CmdOrCtrl("h"), func(cd *menu.CallbackData) {
+	// ⌘H is Hide on macOS.
+	fileMenu.AddText("View History", keys.CmdOrCtrl("y"), func(cd *menu.CallbackData) {
 		app.OpenHistoryWindow()
 	})
 	fileMenu.AddText("Settings", keys.CmdOrCtrl(","), func(cd *menu.CallbackData) {
 		app.OpenSettings()
 	})
 	fileMenu.AddSeparator()
-	fileMenu.AddText("Quit voxflow", keys.CmdOrCtrl("q"), func(cd *menu.CallbackData) {
+	fileMenu.AddText("Close Window", keys.CmdOrCtrl("w"), func(cd *menu.CallbackData) {
+		app.ShowMiniMode()
+	})
+	fileMenu.AddText("Quit VoxFlow", keys.CmdOrCtrl("q"), func(cd *menu.CallbackData) {
 		app.Quit()
 	})
 
 	appMenu.Append(menu.EditMenu())
 
 	err := wails.Run(&options.App{
-		Title:             "voxflow",
+		Title:             "VoxFlow",
 		Width:             window.MiniModeCollapsedW,
 		Height:            window.MiniModeCollapsedH,
 		MinWidth:          window.MiniModeCollapsedW,
@@ -98,7 +102,7 @@ func main() {
 				UseToolbar:                 false,
 			},
 			About: &mac.AboutInfo{
-				Title:   "voxflow",
+				Title:   "VoxFlow",
 				Message: "AI-Powered Dictation App\n\nVersion " + version,
 			},
 			Appearance:           mac.NSAppearanceNameDarkAqua,
@@ -106,9 +110,24 @@ func main() {
 			WindowIsTranslucent:  false,
 		},
 		Menu: appMenu,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: singleInstanceID(),
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
+				app.showMainWindow()
+			},
+		},
 	})
 
 	if err != nil {
 		println("Error:", err.Error())
 	}
+}
+
+// A second copy would kill this one's whisper-server through the shared PID file.
+// Dev builds get their own lock so they can run next to an installed copy.
+func singleInstanceID() string {
+	if version == "dev" {
+		return "com.wails.voxflow.dev"
+	}
+	return "com.wails.voxflow"
 }
