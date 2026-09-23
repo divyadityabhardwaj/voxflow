@@ -1,6 +1,11 @@
 package main
 
 import (
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 	"voxflow/internal/config"
 	"voxflow/internal/macos"
 )
@@ -17,12 +22,30 @@ type FrontmostAppInfo struct {
 	Name     string `json:"name"`
 }
 
+// Rules store only the bundle ID, so names are looked up and cached here.
+var appNames sync.Map
+
 func (a *App) GetFrontmostApp() (*FrontmostAppInfo, error) {
 	bundleID, name, err := macos.FrontmostApp()
 	if err != nil {
 		return nil, err
 	}
+	appNames.Store(bundleID, name)
 	return &FrontmostAppInfo{BundleID: bundleID, Name: name}, nil
+}
+
+func appDisplayName(bundleID string) string {
+	if name, ok := appNames.Load(bundleID); ok {
+		return name.(string)
+	}
+	// Spotlight finds the installed app without launching it.
+	var name string
+	out, _ := exec.Command("mdfind", "kMDItemCFBundleIdentifier == "+strconv.Quote(bundleID)).Output()
+	if path, _, _ := strings.Cut(string(out), "\n"); path != "" {
+		name = strings.TrimSuffix(filepath.Base(path), ".app")
+	}
+	appNames.Store(bundleID, name)
+	return name
 }
 
 func (a *App) GetAppRules() []AppRuleDTO {
@@ -31,6 +54,7 @@ func (a *App) GetAppRules() []AppRuleDTO {
 	for bundleID, rule := range rules {
 		out = append(out, AppRuleDTO{
 			BundleID:       bundleID,
+			AppName:        appDisplayName(bundleID),
 			RefinementMode: rule.RefinementMode,
 			InjectMethod:   rule.InjectMethod,
 		})
