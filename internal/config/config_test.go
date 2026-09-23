@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,5 +80,60 @@ func TestMissingConfigIsNotAnError(t *testing.T) {
 	}
 	if c.GetWhisperModel() != "base" {
 		t.Error("defaults should be applied on first run")
+	}
+}
+
+func clearKeyEnv(t *testing.T) {
+	for _, k := range []string{"GEMINI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY"} {
+		t.Setenv(k, "")
+	}
+}
+
+func TestEnvAPIKeysAreNotSaved(t *testing.T) {
+	path := writeConfig(t, `{"groq_api_key": "file-groq"}`)
+	clearKeyEnv(t)
+	t.Setenv("GEMINI_API_KEY", "env-gemini")
+	t.Setenv("GROQ_API_KEY", "env-groq")
+
+	c := &Config{}
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if c.GetGeminiAPIKey() != "env-gemini" || c.GetGroqAPIKey() != "env-groq" {
+		t.Error("env keys should override the file")
+	}
+	if err := c.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := string(data)
+	if strings.Contains(saved, "env-gemini") || strings.Contains(saved, "env-groq") {
+		t.Errorf("env keys written to disk:\n%s", saved)
+	}
+	if !strings.Contains(saved, "file-groq") {
+		t.Errorf("the user's own key should survive:\n%s", saved)
+	}
+}
+
+func TestHasAPIKey(t *testing.T) {
+	clearKeyEnv(t)
+	t.Setenv("CEREBRAS_API_KEY", "env-c")
+	c := &Config{GroqAPIKey: "g", LocalURL: "http://localhost:11434"}
+	cases := map[string]bool{
+		"groq":       true,
+		"cerebras":   true,
+		"local":      true,
+		"openrouter": false,
+		"gemini":     false,
+		"":           false,
+	}
+	for provider, want := range cases {
+		if got := c.HasAPIKey(provider); got != want {
+			t.Errorf("HasAPIKey(%q) = %v, want %v", provider, got, want)
+		}
 	}
 }

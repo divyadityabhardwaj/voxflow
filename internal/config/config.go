@@ -187,19 +187,6 @@ func (c *Config) applyDefaults() {
 	if c.AppRules == nil {
 		c.AppRules = make(map[string]AppRule)
 	}
-
-	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
-		c.GeminiAPIKey = apiKey
-	}
-	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" {
-		c.OpenRouterAPIKey = apiKey
-	}
-	if apiKey := os.Getenv("GROQ_API_KEY"); apiKey != "" {
-		c.GroqAPIKey = apiKey
-	}
-	if apiKey := os.Getenv("CEREBRAS_API_KEY"); apiKey != "" {
-		c.CerebrasAPIKey = apiKey
-	}
 }
 
 func (c *Config) Save() error {
@@ -226,6 +213,7 @@ func (c *Config) Save() error {
 	return os.Rename(tmp, configPath)
 }
 
+// *_API_KEY env vars win at read time and are never copied into the struct, so Save can't persist them.
 func (c *Config) GetGeminiAPIKey() string {
 	if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
 		return envKey
@@ -409,6 +397,23 @@ func (c *Config) SetLLMProvider(provider string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.LLMProvider = provider
+}
+
+// Whether the provider can be called at all; "local" needs only a server URL.
+// Unknown providers resolve to Gemini, like the app's refiner switch.
+func (c *Config) HasAPIKey(provider string) bool {
+	switch provider {
+	case "local":
+		return c.GetLocalURL() != ""
+	case "openrouter":
+		return c.GetOpenRouterAPIKey() != ""
+	case "groq":
+		return c.GetGroqAPIKey() != ""
+	case "cerebras":
+		return c.GetCerebrasAPIKey() != ""
+	default:
+		return c.GetGeminiAPIKey() != ""
+	}
 }
 
 func (c *Config) GetOpenRouterModel() string {
