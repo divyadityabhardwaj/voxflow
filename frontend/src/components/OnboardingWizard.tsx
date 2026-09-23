@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
+import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { main } from "../../wailsjs/go/models";
 import {
+  CheckCerebrasModel,
+  CheckGeminiModel,
+  CheckGroqModel,
+  CheckOpenRouterModel,
   CompleteOnboarding,
   GetConfig,
   IsAccessibilityGranted,
@@ -12,6 +18,7 @@ import {
   SetLocalModel,
   SetLocalURL,
   SetOpenRouterAPIKey,
+  SetRefinementMode,
 } from "../../wailsjs/go/main/App";
 import { KEY_URLS, PROVIDERS } from "./settings/LLMProviderSettings";
 import { useModelDownload } from "../hooks/useModelDownload";
@@ -32,6 +39,68 @@ const KEY_SETTERS: Record<string, (key: string) => Promise<void>> = {
   cerebras: SetCerebrasAPIKey,
 };
 
+const KEY_CHECKERS: Record<string, (model: string) => Promise<unknown>> = {
+  gemini: CheckGeminiModel,
+  openrouter: CheckOpenRouterModel,
+  groq: CheckGroqModel,
+  cerebras: CheckCerebrasModel,
+};
+
+const providerConfig = (cfg: main.ConfigResponse, provider: string) =>
+  ({
+    gemini: { model: cfg.gemini_model, keySet: cfg.api_key_set },
+    openrouter: { model: cfg.openrouter_model, keySet: cfg.openrouter_api_key_set },
+    groq: { model: cfg.groq_model, keySet: cfg.groq_api_key_set },
+    cerebras: { model: cfg.cerebras_model, keySet: cfg.cerebras_api_key_set },
+  })[provider];
+
+const GET_KEY_URLS: Record<string, string> = {
+  ...KEY_URLS,
+  gemini: "https://aistudio.google.com/apikey",
+};
+
+const describeKeyError = (err: unknown) => {
+  const msg = String(err);
+  const status = msg.match(/status:? (\d{3})/)?.[1];
+  if (status === "429")
+    return "This key is out of quota or rate-limited right now.";
+  if (status) return `That key didn't work (error ${status}). Check it and try again.`;
+  if (msg.includes("failed to send request"))
+    return "Couldn't reach the service. Check your internet connection.";
+  return `Couldn't check the key: ${msg.slice(0, 160)}`;
+};
+
+// Local stand-in until the shared shortcut formatter lands.
+const MODIFIER_GLYPHS: [string[], string][] = [
+  [["ctrl", "control"], "⌃"],
+  [["alt", "option", "opt"], "⌥"],
+  [["shift"], "⇧"],
+  [["cmd", "command", "super"], "⌘"],
+];
+
+const KEY_NAMES: Record<string, string> = {
+  space: "Space",
+  return: "Return",
+  enter: "Return",
+  escape: "Esc",
+  esc: "Esc",
+  tab: "Tab",
+};
+
+const formatHotkey = (hotkey: string) => {
+  const parts = hotkey.toLowerCase().split("+");
+  const key = parts.pop() ?? "";
+  const mods = MODIFIER_GLYPHS.filter(([names]) =>
+    names.some((n) => parts.includes(n)),
+  )
+    .map(([, glyph]) => glyph)
+    .join("");
+  return mods + (KEY_NAMES[key] ?? key.toUpperCase());
+};
+
+const KBD =
+  "px-1.5 py-0.5 rounded-md bg-surface border border-border text-xs text-text shadow-sm";
+
 const KEY_PLACEHOLDERS: Record<string, string> = {
   gemini: "AIza...",
   openrouter: "sk-or-...",
@@ -47,6 +116,9 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [localURL, setLocalURL] = useState(DEFAULT_LOCAL_URL);
   const [localModel, setLocalModel] = useState("");
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
+  const [config, setConfig] = useState<main.ConfigResponse | null>(null);
+  const [checkingKey, setCheckingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const download = useModelDownload(() => setModelReady(true));
 
   const stepIndex = STEPS.indexOf(step);
@@ -57,6 +129,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
     });
 
     GetConfig().then((cfg) => {
+      setConfig(cfg);
       setProvider(cfg.llm_provider || "gemini");
       setLocalURL(cfg.local_url || DEFAULT_LOCAL_URL);
       setLocalModel(cfg.local_model || "");
@@ -90,16 +163,45 @@ export default function OnboardingWizard({ onComplete }: Props) {
     }
   };
 
+  // Leaving "refine" on without a working provider warns on every dictation.
+  const skipRefinement = async () => {
+    await SetRefinementMode("raw");
+    setStep("done");
+  };
+
   const handleSaveProvider = async () => {
+    setKeyError(null);
     await SetLLMProvider(provider);
     if (provider === "local") {
       await SetLocalURL(localURL.trim() || DEFAULT_LOCAL_URL);
       await SetLocalModel(localModel.trim());
-    } else if (apiKey.trim()) {
-      await KEY_SETTERS[provider](apiKey.trim());
+      if (localModel.trim()) setStep("done");
+      else await skipRefinement();
+      return;
     }
-    setStep("done");
+
+    const key = apiKey.trim();
+    if (!key) {
+      if (config && providerConfig(config, provider)?.keySet) setStep("done");
+      else await skipRefinement();
+      return;
+    }
+
+    setCheckingKey(true);
+    try {
+      await KEY_SETTERS[provider](key);
+      const cfg = await GetConfig();
+      await KEY_CHECKERS[provider](providerConfig(cfg, provider)?.model ?? "");
+      setStep("done");
+    } catch (err) {
+      setKeyError(describeKeyError(err));
+    } finally {
+      setCheckingKey(false);
+    }
   };
+
+  const handsFreeHotkey = config?.hands_free_hotkey || config?.hotkey || "";
+  const pttHotkey = config?.push_to_talk_hotkey || "";
 
   return (
     <div className="h-full app-shell flex items-center justify-center p-8">
@@ -263,6 +365,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
               onChange={(e) => {
                 setProvider(e.target.value);
                 setApiKey("");
+                setKeyError(null);
               }}
             >
               {PROVIDERS.map((p) => (
@@ -305,36 +408,51 @@ export default function OnboardingWizard({ onComplete }: Props) {
                 <input
                   type="password"
                   className="input w-full"
+                  aria-label="API key"
                   placeholder={KEY_PLACEHOLDERS[provider]}
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setKeyError(null);
+                  }}
                 />
                 <p className="hint mb-4">
-                  <a
-                    href={KEY_URLS[provider]}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
                     className="text-primary hover:underline"
+                    onClick={() => BrowserOpenURL(GET_KEY_URLS[provider])}
                   >
                     Get a key
-                  </a>
+                  </button>
                 </p>
               </>
+            )}
+            {keyError && (
+              <p
+                role="alert"
+                className="text-xs text-[var(--danger)] font-medium mb-4 break-words"
+              >
+                {keyError}
+              </p>
             )}
             <div className="flex flex-col gap-3">
               <button
                 type="button"
                 className="btn-primary w-full"
                 onClick={handleSaveProvider}
+                disabled={checkingKey}
               >
-                Save & continue
+                {checkingKey ? "Checking key…" : "Save & continue"}
               </button>
               <button
                 type="button"
                 className="btn-secondary w-full"
-                onClick={() => setStep("done")}
+                onClick={skipRefinement}
+                disabled={checkingKey}
               >
-                Skip
+                {keyError
+                  ? "Continue without clean-up"
+                  : "Not now — paste exactly what I say"}
               </button>
             </div>
           </>
@@ -343,11 +461,30 @@ export default function OnboardingWizard({ onComplete }: Props) {
         {step === "done" && (
           <>
             <h2 className="text-lg font-semibold text-text mb-3">
-              You are all set
+              You're ready
             </h2>
+            {handsFreeHotkey || pttHotkey ? (
+              <ul className="text-sm text-secondary mb-4 space-y-2">
+                {handsFreeHotkey && (
+                  <li>
+                    Press <kbd className={KBD}>{formatHotkey(handsFreeHotkey)}</kbd>{" "}
+                    to start dictating in any app, and again to finish.
+                  </li>
+                )}
+                {pttHotkey && (
+                  <li>
+                    Or hold <kbd className={KBD}>{formatHotkey(pttHotkey)}</kbd>{" "}
+                    while you talk and let go to paste.
+                  </li>
+                )}
+              </ul>
+            ) : (
+              <p className="text-sm text-secondary mb-4">
+                Use your configured hotkeys to dictate from anywhere.
+              </p>
+            )}
             <p className="text-sm text-secondary mb-4">
-              Use your configured hotkeys to dictate from anywhere. Open the full
-              app from the mini pill to change settings anytime.
+              Open the full app from the mini pill to change settings anytime.
             </p>
             <button type="button" className="btn-primary w-full" onClick={finish}>
               Start using VoxFlow
