@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -147,6 +148,20 @@ func (s *Service) IsModelDownloaded(modelSize string) (bool, error) {
 	return info.Size() > 10*1024*1024, nil
 }
 
+var (
+	downloadClient = func() *http.Client {
+		t := http.DefaultTransport.(*http.Transport).Clone()
+		t.ResponseHeaderTimeout = 30 * time.Second
+		return &http.Client{Transport: t}
+	}()
+	// A connection that stays open but stops sending never errors on its own.
+	downloadIdleTimeout = 30 * time.Second
+	errDownloadStalled  = errors.New("download stalled")
+)
+
+// DownloadModelWithContext resumes a partial file left by a failed or cancelled
+// attempt in this run (CleanupPartialDownloads clears them at launch); the SHA-256
+// check covers the stitched file.
 func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string, progress ProgressCallback) error {
 	m, ok := findCatalogModel(modelSize)
 	if !ok {
@@ -160,73 +175,87 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 
 	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
 
-	if info, err := os.Stat(modelPath); err == nil {
-		if info.Size() > m.size*9/10 {
-			return nil // Already downloaded
-		}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", modelBaseURL+"ggml-"+modelSize+".bin", nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		if ctx.Err() == context.Canceled {
-			return fmt.Errorf("download cancelled")
-		}
-		return fmt.Errorf("failed to download model: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
+	if info, err := os.Stat(modelPath); err == nil && info.Size() > m.size*9/10 {
+		return nil // Already downloaded
 	}
 
 	tempPath := modelPath + ".tmp"
-	file, err := os.Create(tempPath)
+	var offset int64
+	if info, err := os.Stat(tempPath); err == nil && info.Size() < m.size {
+		offset = info.Size()
+	}
+	if err := checkFreeSpace(modelsDir, m.size-offset); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelBaseURL+"ggml-"+modelSize+".bin", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
+
+	resp, err := downloadClient.Do(req)
+	if err != nil {
+		return downloadError(ctx, fmt.Errorf("failed to download model: %w", err))
+	}
+	defer resp.Body.Close()
+
+	flags := os.O_WRONLY | os.O_CREATE
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		offset = 0
+		flags |= os.O_TRUNC
+	case resp.StatusCode == http.StatusPartialContent && strings.HasPrefix(resp.Header.Get("Content-Range"), fmt.Sprintf("bytes %d-", offset)):
+		flags |= os.O_APPEND
+	default:
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to download model: HTTP %d", resp.StatusCode)
+	}
+
+	file, err := os.OpenFile(tempPath, flags, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 
-	totalSize := resp.ContentLength
-	if totalSize <= 0 {
-		totalSize = m.size
+	totalSize := m.size
+	if resp.ContentLength > 0 {
+		totalSize = offset + resp.ContentLength
 	}
-	var downloaded int64
+	downloaded := offset
 
+	idle := time.AfterFunc(downloadIdleTimeout, func() { cancel(errDownloadStalled) })
+	defer idle.Stop()
+	var lastProgress time.Time
 	reader := &cancellableProgressReader{
 		ctx:    ctx,
 		reader: resp.Body,
 		onProgress: func(n int64) {
+			idle.Reset(downloadIdleTimeout)
 			downloaded += n
-			if progress != nil {
+			// Each call becomes a webview event; ~10/s is plenty for a progress bar.
+			if progress != nil && (downloaded >= totalSize || time.Since(lastProgress) >= 100*time.Millisecond) {
+				lastProgress = time.Now()
 				progress(downloaded, totalSize)
 			}
 		},
 	}
 
-	bytesWritten, err := io.Copy(file, reader)
-	file.Close()
-
+	_, err = io.Copy(file, reader)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
 	if err != nil {
-		os.Remove(tempPath)
-		if ctx.Err() == context.Canceled {
-			return fmt.Errorf("download cancelled")
-		}
-		return fmt.Errorf("failed to save model: %w", err)
+		// Keep the partial file so a retry resumes where this attempt stopped.
+		return downloadError(ctx, fmt.Errorf("failed to save model: %w", err))
 	}
 
-	if ctx.Err() == context.Canceled {
+	if downloaded != m.size {
 		os.Remove(tempPath)
-		return fmt.Errorf("download cancelled")
-	}
-
-	if bytesWritten != m.size {
-		os.Remove(tempPath)
-		return fmt.Errorf("download incomplete: got %d bytes, expected %d", bytesWritten, m.size)
+		return fmt.Errorf("download incomplete: got %d bytes, expected %d", downloaded, m.size)
 	}
 
 	logger.Infof("[Whisper] Verifying SHA-256 integrity of downloaded model %s...", modelSize)
@@ -241,8 +270,37 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("failed to finalize model file: %w", err)
 	}
 
-	logger.Infof("[Whisper] Model %s downloaded successfully (%d bytes)", modelSize, bytesWritten)
+	logger.Infof("[Whisper] Model %s downloaded successfully (%d bytes)", modelSize, downloaded)
 	return nil
+}
+
+func downloadError(ctx context.Context, err error) error {
+	switch cause := context.Cause(ctx); {
+	case errors.Is(cause, errDownloadStalled):
+		return fmt.Errorf("download stalled: no data for %s. Check your connection and try again", downloadIdleTimeout)
+	case cause != nil:
+		return fmt.Errorf("download cancelled")
+	}
+	return err
+}
+
+func checkFreeSpace(dir string, need int64) error {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err != nil {
+		return nil // can't tell; let the download try
+	}
+	free := int64(st.Bavail) * int64(st.Bsize)
+	if need += need / 10; free < need {
+		return fmt.Errorf("not enough disk space: this model needs %s free, only %s is available", formatSize(need), formatSize(free))
+	}
+	return nil
+}
+
+func formatSize(b int64) string {
+	if b >= 1<<30 {
+		return fmt.Sprintf("%.1f GB", float64(b)/(1<<30))
+	}
+	return fmt.Sprintf("%d MB", b>>20)
 }
 
 func verifyFileSHA256(filePath string, expectedHash string) error {
