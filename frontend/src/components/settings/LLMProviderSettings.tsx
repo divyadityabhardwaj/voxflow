@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import SettingsSection from "../ui/SettingsSection";
+import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
 
 interface Config {
   llm_provider: string;
@@ -43,15 +44,15 @@ interface LLMProviderSettingsProps {
 }
 
 export const PROVIDERS = [
-  { id: "gemini", label: "Gemini", sub: "Google AI (Cloud)" },
-  { id: "openrouter", label: "OpenRouter", sub: "Multi-model API (Cloud)" },
-  { id: "groq", label: "Groq", sub: "Fast inference (Cloud)" },
-  { id: "cerebras", label: "Cerebras", sub: "Wafer-scale inference (Cloud)" },
-  { id: "local", label: "Local", sub: "Ollama, LM Studio (Local, stays on device)" },
+  { id: "gemini", label: "Gemini", sub: "Google, free key, recommended" },
+  { id: "openrouter", label: "OpenRouter", sub: "Many models with one key" },
+  { id: "groq", label: "Groq", sub: "Fast cloud models" },
+  { id: "cerebras", label: "Cerebras", sub: "Fast cloud models" },
+  { id: "local", label: "Local", sub: "Ollama or LM Studio, text stays on this Mac" },
 ] as const;
 
 export const KEY_URLS: Record<string, string> = {
-  gemini: "https://makersuite.google.com/app/apikey",
+  gemini: "https://aistudio.google.com/apikey",
   openrouter: "https://openrouter.ai/settings",
   groq: "https://console.groq.com/keys",
   cerebras: "https://cloud.cerebras.ai",
@@ -91,14 +92,13 @@ function ApiKeyBlock({
       <h4 className="text-sm font-medium text-text mb-1">{title}</h4>
       <p className="text-sm text-secondary mb-3">
         {hint}{" "}
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          onClick={() => BrowserOpenURL(href)}
           className="text-primary hover:underline"
         >
           {linkLabel}
-        </a>
+        </button>
       </p>
       <div className="flex gap-2">
         <div className="relative flex-1 min-w-0">
@@ -180,12 +180,12 @@ export default function LLMProviderSettings({
 
   return (
     <SettingsSection
-      title="LLM provider"
-      description="Choose which service refines your transcriptions."
+      title="AI clean-up"
+      description="Which service tidies your text. Only the text is sent, never your audio."
     >
       <div>
         <label className="label" htmlFor="llm-provider">
-          Provider
+          Service
         </label>
         <select
           id="llm-provider"

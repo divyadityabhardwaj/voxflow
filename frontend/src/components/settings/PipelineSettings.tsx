@@ -14,21 +14,21 @@ interface PipelineSettingsProps {
   handleMuteSystemAudioChange: (value: boolean) => Promise<void>;
 }
 
-const MODES = [
+export const MODES = [
   {
     id: "refine",
-    name: "Refine",
-    desc: "Whisper → LLM polish (Cloud/Local) → paste",
+    name: "Clean up and paste",
+    desc: "Removes filler words and fixes punctuation using your AI clean-up service.",
   },
   {
     id: "raw",
-    name: "Raw",
-    desc: "Whisper → paste as-is (100% on-device)",
+    name: "Paste exactly what I said",
+    desc: "Nothing leaves your Mac.",
   },
   {
     id: "copy-only",
-    name: "Copy only",
-    desc: "Whisper → clipboard (100% on-device)",
+    name: "Copy only — I'll paste myself",
+    desc: "Puts the text on the clipboard. Nothing leaves your Mac.",
   },
 ] as const;
 
@@ -46,13 +46,13 @@ export default function PipelineSettings({
 
   return (
     <SettingsSection
-      title="Pipeline & audio"
-      description="Control how recordings are processed and whether system audio is muted while recording."
+      title="Dictation"
+      description="What happens to your words, and whether other sound is muted while you talk."
     >
       <div className="space-y-6">
         <div>
           <span className="label" id="pipeline-mode-label">
-            Pipeline mode
+            After you speak
           </span>
           <div
             role="radiogroup"
@@ -91,11 +91,11 @@ export default function PipelineSettings({
         <div className="flex items-start justify-between gap-4 pt-5 border-t border-border">
           <div className="min-w-0">
             <p id="mute-label" className="text-sm font-medium text-text">
-              Mute system audio while recording
+              Mute sound while I talk
             </p>
             <p id="mute-desc" className="text-sm text-secondary mt-1 leading-relaxed">
-              Temporarily mute speakers to reduce feedback, then restore volume
-              when done.
+              Silences your speakers while recording so music and calls don't
+              end up in your text, then restores the volume.
             </p>
             {saving === "muteSystemAudio" && (
               <p className="hint animate-pulse-soft">Saving…</p>

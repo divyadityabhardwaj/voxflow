@@ -68,7 +68,11 @@ function ModelStatusBadge({
     );
   }
   if (s?.working === false) {
-    return <span className="text-xs text-[var(--danger)]">Failed</span>;
+    return (
+      <span className="text-xs text-[var(--danger)]">
+        Couldn't reach this model. Check your key or pick another.
+      </span>
+    );
   }
   return null;
 }
@@ -209,8 +213,8 @@ export default function ModelSelectionSettings({
 
   return (
     <SettingsSection
-      title="Refinement model"
-      description="Pick the model used to polish transcriptions."
+      title="AI clean-up model"
+      description="The model that tidies your text."
     >
       <div className="space-y-5">
         {showGemini && (

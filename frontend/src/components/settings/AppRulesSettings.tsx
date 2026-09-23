@@ -6,6 +6,13 @@ import {
   SetAppRule,
 } from "../../../wailsjs/go/main/App";
 import SettingsSection from "../ui/SettingsSection";
+import { MODES } from "./PipelineSettings";
+
+const INJECT_METHODS = [
+  { id: "paste", name: "Pasting (⌘V)" },
+  { id: "clipboard", name: "Copying to the clipboard only" },
+  { id: "type", name: "Typing it out (for apps that block paste)" },
+];
 
 interface AppRuleRow {
   bundle_id: string;
@@ -72,12 +79,12 @@ export default function AppRulesSettings() {
   return (
     <SettingsSection
       title="Per-app rules"
-      description="Override refinement or injection for specific apps. Focus the target app, then add a rule."
+      description="Change what happens after you speak in specific apps. Switch to the app, then add a rule."
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="label" htmlFor="rule-refinement">
-            Refinement
+            After you speak
           </label>
           <select
             id="rule-refinement"
@@ -85,15 +92,17 @@ export default function AppRulesSettings() {
             value={refinementMode}
             onChange={(e) => setRefinementMode(e.target.value)}
           >
-            <option value="">Use global default</option>
-            <option value="refine">Refine</option>
-            <option value="raw">Raw</option>
-            <option value="copy-only">Copy only</option>
+            <option value="">Use my default</option>
+            {MODES.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
           </select>
         </div>
         <div>
           <label className="label" htmlFor="rule-inject">
-            Injection
+            Insert text by
           </label>
           <select
             id="rule-inject"
@@ -101,9 +110,11 @@ export default function AppRulesSettings() {
             value={injectMethod}
             onChange={(e) => setInjectMethod(e.target.value)}
           >
-            <option value="paste">Paste (⌘V)</option>
-            <option value="clipboard">Clipboard only</option>
-            <option value="type">Type keystrokes (for apps that remap ⌘V)</option>
+            {INJECT_METHODS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -137,8 +148,12 @@ export default function AppRulesSettings() {
                   {rule.app_name || rule.bundle_id}
                 </p>
                 <p className="text-xs text-tertiary mt-0.5">
-                  {rule.refinement_mode || "default"} ·{" "}
-                  {rule.inject_method || "paste"}
+                  {MODES.find((m) => m.id === rule.refinement_mode)?.name ??
+                    "Default"}{" "}
+                  ·{" "}
+                  {INJECT_METHODS.find(
+                    (m) => m.id === (rule.inject_method || "paste"),
+                  )?.name ?? rule.inject_method}
                 </p>
               </div>
               <button

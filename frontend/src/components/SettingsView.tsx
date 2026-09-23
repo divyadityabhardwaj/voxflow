@@ -859,8 +859,9 @@ export default function SettingsView() {
         <div className="max-w-xl mx-auto space-y-4 pb-8">
         {!whisperReady && (
           <div className="alert alert-warning">
-            Whisper CLI not found. Install with{" "}
-            <code>brew install whisper-cpp</code>
+            VoxFlow's speech engine (whisper.cpp) isn't installed, so it can't
+            turn your voice into text yet. To install it, open Terminal, run{" "}
+            <code>brew install whisper-cpp</code>, then come back here.
           </div>
         )}
 
@@ -934,13 +935,13 @@ export default function SettingsView() {
 
         <SettingsSection
           title="Vocabulary"
-          description="Names, product terms and identifiers you say often. Whisper and the refinement model will prefer these spellings."
+          description="Words VoxFlow should always spell your way: names, brands, jargon."
         >
           <textarea
             aria-label="Vocabulary"
             className="input font-mono text-sm"
             rows={3}
-            placeholder="VoxFlow, Wails, Kubernetes, camelCase, Divyaditya"
+            placeholder="Priya, Figma, OKR, Kubernetes"
             value={vocabulary}
             onChange={(e) => setVocabulary(e.target.value)}
           />
@@ -970,7 +971,7 @@ export default function SettingsView() {
 
         <SettingsSection
           title="Speech recognition"
-          description="Download and manage Whisper models. Larger models are more accurate but slower."
+          description="Download and manage speech models. Bigger models are more accurate but slower and take more space."
         >
           <div className="mb-4">
             <label className="label" htmlFor="whisper-language">
@@ -1055,7 +1056,7 @@ export default function SettingsView() {
                     {model.downloaded ? (
                       <>
                         <span className="text-xs text-[var(--success)] hidden sm:inline">
-                          Ready
+                          Downloaded
                         </span>
                         {config.whisper_model !== model.name && (
                           <button
