@@ -147,16 +147,11 @@ func (a *App) startup(ctx context.Context) {
 		runtime.WindowShow(ctx) // status item clicks never activate an accessory app
 	}
 	window.InstallStatusItem(window.StatusItemCallbacks{
-		ToggleRecording: func() {
-			// Same as the hotkey path: the frontmost app is the paste target.
-			if a.pipeline.State() == hotkey.StateIdle {
-				go a.pipeline.CaptureRecordingTarget()
-			}
-			a.ToggleRecording()
-		},
-		OpenApp:      openApp,
-		OpenSettings: func() { openApp(); a.OpenSettings() },
-		Quit:         a.Quit,
+		ToggleRecording: func() { a.ToggleRecording() },
+		CancelRecording: a.CancelRecording,
+		OpenApp:         openApp,
+		OpenSettings:    func() { openApp(); a.OpenSettings() },
+		Quit:            a.Quit,
 	})
 
 	if !a.config.GetOnboardingCompleted() {

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"voxflow/internal/config"
 	"voxflow/internal/events"
+	"voxflow/internal/hotkey"
 	"voxflow/internal/llm"
 )
 
@@ -184,6 +185,22 @@ func TestDeliver(t *testing.T) {
 	}
 }
 
+func TestStartRecordingWithoutModelReturnsToIdle(t *testing.T) {
+	rec := &recorder{}
+	p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)
+	p.modelReady = func() bool { return false }
+
+	if err := p.StartRecording(); err == nil {
+		t.Fatal("expected an error")
+	}
+	if p.State() != hotkey.StateIdle {
+		t.Fatalf("state = %s, want Idle", p.State())
+	}
+	if !strings.Contains(strings.Join(rec.events, ","), events.StateChanged) {
+		t.Fatal("the frontend was never told the state is Idle")
+	}
+}
+
 func TestAssembleTranscript(t *testing.T) {
 	const sec = 16000
 	ok := func(from, to int, text string) span {
@@ -267,5 +284,21 @@ func TestAssembleTranscript(t *testing.T) {
 				t.Errorf("err = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestStreamSessionIgnoresLateChunks(t *testing.T) {
+	s := &streamSession{jobs: make(chan streamJob, 1)}
+	s.send(streamJob{Samples: []int16{1}, IsFinal: true})
+	s.send(streamJob{Samples: []int16{2}, IsFinal: true}) // full: replaces the oldest
+	s.close(false)
+	s.send(streamJob{Samples: []int16{3}, IsFinal: true}) // after close: must not panic
+
+	var got []int16
+	for job := range s.jobs {
+		got = append(got, job.Samples[0])
+	}
+	if fmt.Sprint(got) != "[2]" {
+		t.Fatalf("queued %v, want [2]", got)
 	}
 }

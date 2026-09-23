@@ -18,6 +18,8 @@ func voxStatusItemAction(tag C.int) {
 		cb = statusCallbacks.OpenSettings
 	case 4:
 		cb = statusCallbacks.Quit
+	case 5:
+		cb = statusCallbacks.CancelRecording
 	}
 	if cb != nil {
 		// Off the Cocoa main thread, like a bound method called from the webview.

@@ -31,6 +31,9 @@ type WindowController interface {
 	UserExplicitlyMaximized() bool
 }
 
+// frontmostApp finds the app a new recording will paste into.
+var frontmostApp = macos.FrontmostApp
+
 // Anything shorter (0.1 s) is not worth a Whisper call.
 const minTranscribeSamples = 1600
 
@@ -56,16 +59,15 @@ type Pipeline struct {
 	typeText func(text string) error
 	copyText func(text string) error
 
-	stateMu sync.Mutex
-	state   hotkey.State
-
-	streamTextMu sync.Mutex
-	streamSpans  []span
-	streamJobs   chan streamJob
-	streamWG     sync.WaitGroup
-	lastEmitTime time.Time
+	// lifecycleMu serialises start, stop and cancel, so a stop or second start
+	// that races a slow microphone open waits for it instead of interleaving.
+	lifecycleMu sync.Mutex
+	stateMu     sync.Mutex
+	state       hotkey.State
+	stream      *streamSession // guarded by lifecycleMu
 
 	targetMu          sync.Mutex
+	targetGen         int
 	recordingBundleID string
 	recordingAppName  string
 
@@ -125,24 +127,23 @@ func (p *Pipeline) State() hotkey.State {
 	return p.state
 }
 
+// setState publishes a state to the hotkey manager, the menu bar and the frontend.
 func (p *Pipeline) setState(state hotkey.State) {
 	p.stateMu.Lock()
 	p.state = state
 	p.stateMu.Unlock()
+	if p.hotkeyManager != nil {
+		p.hotkeyManager.SetState(state)
+	}
 	if p.onState != nil {
 		p.onState(state)
 	}
+	p.emit(events.StateChanged, state.String())
 }
 
 func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
-	p.setState(state)
-	p.emit(events.StateChanged, state.String())
-
 	switch state {
 	case hotkey.StateRecording:
-		if p.windows != nil && !p.windows.UserExplicitlyMaximized() {
-			p.windows.ShowMini()
-		}
 		_ = p.StartRecording()
 	case hotkey.StateProcessing:
 		p.StopRecording()
@@ -153,41 +154,48 @@ func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 	}
 }
 
+// StartRecording is the single entry point for every way of starting a
+// dictation. It does nothing unless the pipeline is idle.
 func (p *Pipeline) StartRecording() error {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if p.State() != hotkey.StateIdle {
+		return nil
+	}
+
 	if p.modelReady != nil && !p.modelReady() {
-		// The hotkey path has already flipped state to Recording; undo it or the
-		// pill and menu bar stay red and the next press tries to stop nothing.
+		// The hotkey manager has already moved to Recording; put it back.
 		p.resetToIdle()
 		err := fmt.Errorf("model not ready")
 		p.emit(events.Error, err.Error())
 		return err
 	}
 
-	p.setState(hotkey.StateRecording)
-	if p.hotkeyManager != nil {
-		p.hotkeyManager.SetState(hotkey.StateRecording)
+	go p.CaptureRecordingTarget()
+	if p.windows != nil && !p.windows.UserExplicitlyMaximized() {
+		p.windows.ShowMini()
 	}
 
 	if err := p.audioRecorder.Start(); err != nil {
-		p.setState(hotkey.StateIdle)
-		if p.hotkeyManager != nil {
-			p.hotkeyManager.SetState(hotkey.StateIdle)
+		if !p.audioRecorder.IsRecording() {
+			p.resetToIdle()
+			p.emit(events.Error, err.Error())
+			return err
 		}
-		p.emit(events.Error, err.Error())
-		return err
+		logger.Warnf("[Pipeline] Recorder was still running, continuing: %v", err)
 	}
 
-	p.startStreamingTranscription()
+	p.stream = p.startStreamingTranscription()
 
 	if p.refiner != nil {
 		go p.refiner().Prewarm(p.llmModel())
 	}
-
 	if p.config.GetMuteSystemAudio() {
 		p.setMuted(true)
 	}
 
-	p.emit(events.StateChanged, "Recording")
+	// Only now, with the microphone open, tell the user to start talking.
+	p.setState(hotkey.StateRecording)
 	p.emit(events.RecordingStarted, nil)
 	logger.Infof("Recording started...")
 
@@ -195,32 +203,63 @@ func (p *Pipeline) StartRecording() error {
 }
 
 func (p *Pipeline) CaptureRecordingTarget() {
-	// Clear first: osascript takes a while, and a short dictation that stops before
+	// Clear first: the lookup takes a while, and a short dictation that stops before
 	// it returns must not inherit the previous recording's app rules.
 	p.targetMu.Lock()
+	p.targetGen++
+	gen := p.targetGen
 	p.recordingBundleID, p.recordingAppName = "", ""
 	p.targetMu.Unlock()
-	bundleID, name, err := macos.FrontmostApp()
+
+	bundleID, name, err := frontmostApp()
 	if err != nil {
 		logger.Debugf("[Pipeline] Could not detect frontmost app: %v", err)
 	} else {
 		logger.Infof("[Pipeline] Recording target app: %s (%s)", name, bundleID)
 	}
+
 	p.targetMu.Lock()
-	p.recordingBundleID, p.recordingAppName = bundleID, name
+	if gen == p.targetGen { // a newer recording has started its own lookup
+		p.recordingBundleID, p.recordingAppName = bundleID, name
+	}
 	p.targetMu.Unlock()
 }
 
 func (p *Pipeline) StopRecording() {
-	p.setState(hotkey.StateProcessing)
-	if p.hotkeyManager != nil {
-		p.hotkeyManager.SetState(hotkey.StateProcessing)
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if p.State() != hotkey.StateRecording {
+		return
 	}
-	p.emit(events.StateChanged, "Processing")
+	p.setState(hotkey.StateProcessing)
 	p.emit(events.RecordingStopped, nil)
 	logger.Infof("Recording stopped, processing...")
 
-	go p.processRecording()
+	stream := p.stream
+	p.stream = nil
+	go p.processRecording(stream)
+}
+
+// CancelRecording discards the current recording: nothing is transcribed, pasted or saved.
+func (p *Pipeline) CancelRecording() {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if p.State() != hotkey.StateRecording {
+		return
+	}
+
+	stream := p.stream
+	p.stream = nil
+	wavPath, err := p.audioRecorder.Stop()
+	p.audioRecorder.ClearChunkCallback()
+	stream.close(true)
+	if err == nil {
+		os.Remove(wavPath)
+	}
+
+	p.resetToIdle()
+	p.emitToast("Cancelled", "info")
+	logger.Infof("Recording cancelled")
 }
 
 type streamJob struct {
@@ -229,38 +268,95 @@ type streamJob struct {
 	IsFinal   bool
 }
 
-func (p *Pipeline) streamingWorker() {
-	defer p.streamWG.Done()
+func recycle(job streamJob) {
+	if !job.IsFinal {
+		audio.RecycleChunk(job.Samples)
+	}
+}
 
-	for job := range p.streamJobs {
+// streamSession transcribes one recording's chunks while it is still being recorded.
+type streamSession struct {
+	jobs chan streamJob
+	wg   sync.WaitGroup
+
+	mu        sync.Mutex
+	closed    bool
+	cancelled bool
+	spans     []span
+	lastEmit  time.Time
+}
+
+// send never blocks the audio thread, and drops chunks that arrive after close.
+func (s *streamSession) send(job streamJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		recycle(job)
+		return
+	}
+	select {
+	case s.jobs <- job:
+		return
+	default:
+	}
+	// Full: drop the oldest chunk. Its range is transcribed again at stop.
+	select {
+	case old := <-s.jobs:
+		recycle(old)
+	default:
+	}
+	select {
+	case s.jobs <- job:
+	default:
+		recycle(job)
+	}
+}
+
+func (s *streamSession) close(cancel bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		close(s.jobs)
+	}
+	s.cancelled = s.cancelled || cancel
+}
+
+func (p *Pipeline) streamingWorker(s *streamSession) {
+	defer s.wg.Done()
+
+	for job := range s.jobs {
 		start := int(job.StartTime * audio.SampleRate / time.Second)
 		sp := span{start: start, end: start + len(job.Samples)}
-		if len(job.Samples) < minTranscribeSamples {
-			if !job.IsFinal {
-				audio.RecycleChunk(job.Samples)
-			}
+
+		s.mu.Lock()
+		cancelled := s.cancelled
+		s.mu.Unlock()
+		if cancelled || len(job.Samples) < minTranscribeSamples {
+			recycle(job)
 			continue
 		}
 
 		text, err := p.whisperService.TranscribeSamples(job.Samples)
-		if !job.IsFinal {
-			audio.RecycleChunk(job.Samples)
-		}
+		recycle(job)
 		if err != nil {
 			logger.Errorf("[Pipeline] Streaming chunk transcription error: %v", err)
 		}
 		sp.text, sp.ok = cleanWhisperText(text), err == nil
 
-		p.streamTextMu.Lock()
-		p.streamSpans = append(p.streamSpans, sp)
-		currentText := joinSpans(p.streamSpans)
-
-		// Cap partial transcript events at ~10/s to avoid UI lag.
-		shouldEmit := job.IsFinal || time.Since(p.lastEmitTime) >= 100*time.Millisecond
-		if shouldEmit {
-			p.lastEmitTime = time.Now()
+		s.mu.Lock()
+		if s.cancelled {
+			s.mu.Unlock()
+			continue
 		}
-		p.streamTextMu.Unlock()
+		s.spans = append(s.spans, sp)
+		currentText := joinSpans(s.spans)
+		// Cap partial transcript events at ~10/s to avoid UI lag.
+		shouldEmit := job.IsFinal || time.Since(s.lastEmit) >= 100*time.Millisecond
+		if shouldEmit {
+			s.lastEmit = time.Now()
+		}
+		s.mu.Unlock()
 
 		if shouldEmit {
 			p.emit(events.PartialTranscript, map[string]interface{}{
@@ -271,45 +367,15 @@ func (p *Pipeline) streamingWorker() {
 	}
 }
 
-func (p *Pipeline) startStreamingTranscription() {
-	p.streamTextMu.Lock()
-	p.streamSpans = nil
-	p.streamTextMu.Unlock()
-
-	p.streamJobs = make(chan streamJob, 64)
-	p.streamWG.Add(1)
-	go p.streamingWorker()
+func (p *Pipeline) startStreamingTranscription() *streamSession {
+	s := &streamSession{jobs: make(chan streamJob, 64)}
+	s.wg.Add(1)
+	go p.streamingWorker(s)
 
 	p.audioRecorder.SetChunkCallback(func(samples []int16, startTime time.Duration, isFinal bool) {
-		select {
-		case p.streamJobs <- streamJob{
-			Samples:   samples,
-			StartTime: startTime,
-			IsFinal:   isFinal,
-		}:
-		default:
-			// Drop oldest chunk if full — must not block PortAudio.
-			select {
-			case oldJob := <-p.streamJobs:
-				if !oldJob.IsFinal {
-					audio.RecycleChunk(oldJob.Samples)
-				}
-			default:
-			}
-
-			select {
-			case p.streamJobs <- streamJob{
-				Samples:   samples,
-				StartTime: startTime,
-				IsFinal:   isFinal,
-			}:
-			default:
-				if !isFinal {
-					audio.RecycleChunk(samples)
-				}
-			}
-		}
+		s.send(streamJob{Samples: samples, StartTime: startTime, IsFinal: isFinal})
 	})
+	return s
 }
 
 // span is a stretch of the recording in samples, with its transcript when ok.
@@ -368,36 +434,31 @@ func joinSpans(spans []span) string {
 	return strings.Join(parts, " ")
 }
 
-func (p *Pipeline) processRecording() {
+func (p *Pipeline) processRecording(stream *streamSession) {
 	processingStartTime := time.Now()
-
-	var stopAndWavDuration time.Duration
-	wavBytes := int64(0)
-
-	audioDuration := p.audioRecorder.GetDuration()
 
 	stopAndWavStart := time.Now()
 	wavPath, err := p.audioRecorder.Stop()
-	stopAndWavDuration = time.Since(stopAndWavStart)
+	stopAndWavDuration := time.Since(stopAndWavStart)
 	// Capture is over, so give the user their sound back before transcription and refinement.
 	p.setMuted(false)
 
-	if p.streamJobs != nil {
-		close(p.streamJobs)
-		p.streamJobs = nil
-		p.streamWG.Wait()
-	}
+	p.audioRecorder.ClearChunkCallback()
+	stream.close(false)
+	stream.wg.Wait()
 
 	if err != nil {
 		p.emitToast("Failed to stop recording: "+err.Error(), "error")
 		p.resetToIdle()
 		return
 	}
-	defer p.audioRecorder.ClearChunkCallback()
+	var wavBytes int64
 	if info, statErr := os.Stat(wavPath); statErr == nil {
 		wavBytes = info.Size()
 	}
 	defer os.Remove(wavPath)
+
+	audioDuration := p.audioRecorder.GetDuration()
 
 	if !p.audioRecorder.HasAudioActivity() {
 		p.emitToast("No speech detected. Please try speaking louder or check your microphone.", "warning")
@@ -407,9 +468,9 @@ func (p *Pipeline) processRecording() {
 
 	whisperStart := time.Now()
 	samples := p.audioRecorder.GetBuffer()
-	p.streamTextMu.Lock()
-	spans := slices.Clone(p.streamSpans)
-	p.streamTextMu.Unlock()
+	stream.mu.Lock()
+	spans := slices.Clone(stream.spans)
+	stream.mu.Unlock()
 	logger.Infof("[Pipeline] Streaming transcription: %d chunks", len(spans))
 
 	rawText, err := assembleTranscript(spans, len(samples), func(from, to int) (string, error) {
@@ -502,10 +563,6 @@ func (p *Pipeline) processRecording() {
 	logger.Infof("%s", output)
 
 	p.setState(hotkey.StateIdle)
-	if p.hotkeyManager != nil {
-		p.hotkeyManager.SetState(hotkey.StateIdle)
-	}
-	p.emit(events.StateChanged, "Idle")
 	p.emit(events.ProcessingComplete, map[string]interface{}{
 		"polished":         d.text,
 		"raw":              rawText,
@@ -654,11 +711,6 @@ func (p *Pipeline) emitToast(message, toastType string) {
 
 func (p *Pipeline) resetToIdle() {
 	p.setState(hotkey.StateIdle)
-	if p.hotkeyManager != nil {
-		p.hotkeyManager.SetState(hotkey.StateIdle)
-	}
-	p.emit(events.StateChanged, "Idle")
-
 	p.setMuted(false)
 }
 
@@ -668,13 +720,10 @@ func (p *Pipeline) ToggleRecording() string {
 		if err := p.StartRecording(); err != nil {
 			return "Error: " + err.Error()
 		}
-		return "Recording"
 	case hotkey.StateRecording:
 		p.StopRecording()
-		return "Processing"
-	default:
-		return p.State().String()
 	}
+	return p.State().String()
 }
 
 func (p *Pipeline) RecordingTarget() (bundleID, appName string) {

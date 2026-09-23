@@ -25,6 +25,7 @@ extern void voxStatusItemAction(int tag);
 static NSStatusItem *statusItem;
 static VoxStatusTarget *statusTarget;
 static NSMenuItem *recordItem;
+static NSMenuItem *cancelItem;
 
 static NSMenuItem *addStatusMenuItem(NSMenu *menu, NSString *title, int tag) {
     NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(menuAction:) keyEquivalent:@""];
@@ -48,6 +49,7 @@ static void applyStatusItemState(int state) {
     }
     [recordItem setTitle:title];
     [recordItem setEnabled:state != 2];
+    [cancelItem setHidden:state != 1];
 
     NSStatusBarButton *button = [statusItem button];
     if (@available(macOS 11.0, *)) {
@@ -74,6 +76,7 @@ void installStatusItem(void) {
         // Otherwise NSMenu re-enables every item with a valid target on open.
         [menu setAutoenablesItems:NO];
         recordItem = addStatusMenuItem(menu, @"Start Recording", 1);
+        cancelItem = addStatusMenuItem(menu, @"Cancel Recording", 5);
         addStatusMenuItem(menu, @"Open VoxFlow", 2);
         addStatusMenuItem(menu, @"Settings…", 3);
         [menu addItem:[NSMenuItem separatorItem]];
