@@ -13,6 +13,12 @@ const (
 	baseAPIURL = "https://openrouter.ai/api/v1"
 )
 
+// OpenRouter's app attribution.
+var attributionHeaders = map[string]string{
+	"HTTP-Referer": "https://github.com/divyadityabhardwaj/voxflow",
+	"X-Title":      "VoxFlow",
+}
+
 var FallbackFreeModels = []string{
 	"google/gemma-4-31b-it:free",
 	"google/gemma-4-26b-a4b-it:free",
@@ -30,10 +36,7 @@ type Client struct {
 func NewClient(apiKey string) *Client {
 	c := &Client{
 		apiKey: apiKey,
-		openai: llm.NewOpenAIClient(baseAPIURL, apiKey, map[string]string{
-			"HTTP-Referer": "https://voxflow.app",
-			"X-Title":      "Voxflow",
-		}),
+		openai: llm.NewOpenAIClient(baseAPIURL, apiKey, attributionHeaders),
 	}
 	c.openai.DisableReasoning = true
 	return c
@@ -65,8 +68,9 @@ func (c *Client) GetFreeModels() ([]string, error) {
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	req.Header.Set("HTTP-Referer", "https://voxflow.app")
-	req.Header.Set("X-Title", "Voxflow")
+	for k, v := range attributionHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.openai.HTTPClient.Do(req)
 	if err != nil {
