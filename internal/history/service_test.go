@@ -1,6 +1,7 @@
 package history
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -172,5 +173,56 @@ func TestPagingDoesNotRepeatRowsWithEqualTimestamps(t *testing.T) {
 	}
 	if len(seen) != 5 {
 		t.Fatalf("expected 5 distinct rows across pages, got %d", len(seen))
+	}
+}
+
+func TestFilesArePrivateAndDeleteAllScrubsText(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "h.db")
+	s, err := NewServiceWithPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	const secret = "zebra-secret-7731"
+	for i := 0; i < 20; i++ {
+		if err := s.SaveAsync("App", secret, secret, "p", "m", 0, 0, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := []string{path, path + "-wal", path + "-shm"}
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := info.Mode().Perm(); mode != 0600 {
+			t.Errorf("%s mode = %o, want 600", filepath.Base(f), mode)
+		}
+	}
+
+	var secureDelete int
+	if err := s.db.QueryRow("PRAGMA secure_delete").Scan(&secureDelete); err != nil || secureDelete != 1 {
+		t.Errorf("secure_delete = %d (%v), want 1", secureDelete, err)
+	}
+
+	if err := s.DeleteAll(); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(data, []byte(secret)) {
+			t.Errorf("%s still contains deleted text", filepath.Base(f))
+		}
 	}
 }

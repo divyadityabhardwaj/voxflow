@@ -43,7 +43,7 @@ func NewService() (*Service, error) {
 }
 
 func NewServiceWithPath(dbPath string) (*Service, error) {
-	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=secure_delete(ON)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %s: %w", dbPath, err)
@@ -54,6 +54,13 @@ func NewServiceWithPath(dbPath string) (*Service, error) {
 	if err := s.initDB(); err != nil {
 		db.Close()
 		return nil, err
+	}
+
+	// SQLite creates the db 0644 and gives later -wal/-shm files the db's mode.
+	for _, f := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		if err := os.Chmod(f, 0600); err != nil && !os.IsNotExist(err) {
+			logger.Warnf("[History] Could not restrict %s: %v", filepath.Base(f), err)
+		}
 	}
 
 	return s, nil
@@ -67,6 +74,10 @@ func getDBPath() (string, error) {
 	configDir := filepath.Join(homeDir, ".voxflow")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return "", err
+	}
+	// MkdirAll leaves an existing directory alone, and older installs created it 0755.
+	if err := os.Chmod(configDir, 0700); err != nil {
+		logger.Warnf("[History] Could not restrict %s: %v", configDir, err)
 	}
 	return filepath.Join(configDir, "history.db"), nil
 }
@@ -361,9 +372,15 @@ func (s *Service) Delete(id int64) error {
 	return err
 }
 
+// DeleteAll also rewrites the file and empties the WAL, so deleted text is not
+// left in free pages or old WAL frames.
 func (s *Service) DeleteAll() error {
-	_, err := s.db.Exec("DELETE FROM transcripts")
-	return err
+	for _, q := range []string{"DELETE FROM transcripts", "VACUUM", "PRAGMA wal_checkpoint(TRUNCATE)"} {
+		if _, err := s.db.Exec(q); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) Close() error {
