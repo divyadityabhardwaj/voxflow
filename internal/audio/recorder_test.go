@@ -20,6 +20,26 @@ func TestQuietestCutFindsThePause(t *testing.T) {
 	}
 }
 
+func TestAllSilent(t *testing.T) {
+	cases := []struct {
+		name string
+		buf  []int16
+		want bool
+	}{
+		{"empty", nil, false},
+		{"digital silence", make([]int16, SampleRate), true},
+		{"one non-zero sample", append(make([]int16, SampleRate), 1), false},
+		{"quiet noise floor", []int16{0, -1, 2, 0, -3}, false},
+	}
+	for _, tc := range cases {
+		r := NewRecorder()
+		r.buffer = tc.buf
+		if got := r.AllSilent(); got != tc.want {
+			t.Errorf("%s: AllSilent() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestCanTerminateOnlyWithoutLiveReadLoop(t *testing.T) {
 	r := NewRecorder()
 	if !r.canTerminateLocked() {

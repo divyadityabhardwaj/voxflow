@@ -369,6 +369,20 @@ func (r *Recorder) GetDuration() time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
 
+// AllSilent reports whether the last recording holds samples and every one is
+// exactly zero: what macOS delivers when microphone access is denied or the input
+// is muted. A real microphone in a quiet room still has a non-zero noise floor.
+func (r *Recorder) AllSilent() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, s := range r.buffer {
+		if s != 0 {
+			return false
+		}
+	}
+	return len(r.buffer) > 0
+}
+
 func (r *Recorder) HasAudioActivity() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
