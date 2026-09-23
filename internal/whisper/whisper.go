@@ -22,33 +22,32 @@ import (
 	"voxflow/internal/logger"
 )
 
-var modelURLs = map[string]string{
-	"tiny":   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
-	"base":   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
-	"small":  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-	"medium": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+// Pinned to a repo commit so the files served always match the SHA-256s below.
+var modelBaseURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/"
+
+type catalogModel struct {
+	name, description, sha256 string
+	size                      int64
 }
 
-var modelSizes = map[string]int64{
-	"tiny":   75 * 1024 * 1024,
-	"base":   142 * 1024 * 1024,
-	"small":  466 * 1024 * 1024,
-	"medium": 1500 * 1024 * 1024,
+// SHA-256 and byte sizes are the lfs oid/size from the Hugging Face tree API at that commit.
+var modelCatalog = []catalogModel{
+	{"tiny", "Fastest, least accurate", "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21", 77691713},
+	{"tiny.en", "Fastest, English only", "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f", 77704715},
+	{"base", "Balanced speed and accuracy (recommended)", "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe", 147951465},
+	{"base.en", "Balanced, more accurate for English only", "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002", 147964211},
+	{"small", "More accurate, slower", "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b", 487601967},
+	{"small.en", "More accurate for English only, slower", "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d", 487614201},
+	{"medium", "Very accurate, slow, largest download", "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208", 1533763059},
+	{"large-v3-turbo-q5_0", "Most accurate, slow; best on Apple Silicon", "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", 574041195},
 }
 
-// Pinned SHA-256 for download integrity
-var modelSHA256s = map[string]string{
-	"tiny":   "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
-	"base":   "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
-	"small":  "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
-	"medium": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
-}
-
-var ModelDescriptions = map[string]string{
-	"tiny":   "Fastest, least accurate (~75 MB)",
-	"base":   "Good balance of speed and accuracy (~142 MB)",
-	"small":  "Better accuracy, slower (~466 MB)",
-	"medium": "Best accuracy, slowest (~1.5 GB)",
+func findCatalogModel(name string) (catalogModel, bool) {
+	i := slices.IndexFunc(modelCatalog, func(m catalogModel) bool { return m.name == name })
+	if i < 0 {
+		return catalogModel{}, false
+	}
+	return modelCatalog[i], true
 }
 
 type ProgressCallback func(downloaded, total int64)
@@ -106,17 +105,17 @@ func (s *Service) GetAllModels() ([]ModelInfo, error) {
 	}
 
 	models := []ModelInfo{}
-	for _, name := range []string{"tiny", "base", "small", "medium"} {
-		modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", name))
+	for _, m := range modelCatalog {
+		modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", m.name))
 		downloaded := false
 		if info, err := os.Stat(modelPath); err == nil && info.Size() > 10*1024*1024 {
 			downloaded = true
 		}
 
 		models = append(models, ModelInfo{
-			Name:        name,
-			Description: ModelDescriptions[name],
-			Size:        modelSizes[name],
+			Name:        m.name,
+			Description: m.description,
+			Size:        m.size,
 			Downloaded:  downloaded,
 			FilePath:    modelPath,
 		})
@@ -149,7 +148,7 @@ func (s *Service) IsModelDownloaded(modelSize string) (bool, error) {
 }
 
 func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string, progress ProgressCallback) error {
-	url, ok := modelURLs[modelSize]
+	m, ok := findCatalogModel(modelSize)
 	if !ok {
 		return fmt.Errorf("unknown model size: %s", modelSize)
 	}
@@ -162,13 +161,12 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 	modelPath := filepath.Join(modelsDir, fmt.Sprintf("ggml-%s.bin", modelSize))
 
 	if info, err := os.Stat(modelPath); err == nil {
-		expectedSize := modelSizes[modelSize]
-		if info.Size() > int64(float64(expectedSize)*0.9) {
+		if info.Size() > m.size*9/10 {
 			return nil // Already downloaded
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", modelBaseURL+"ggml-"+modelSize+".bin", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -195,7 +193,7 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 
 	totalSize := resp.ContentLength
 	if totalSize <= 0 {
-		totalSize = modelSizes[modelSize]
+		totalSize = m.size
 	}
 	var downloaded int64
 
@@ -226,21 +224,17 @@ func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string
 		return fmt.Errorf("download cancelled")
 	}
 
-	expectedSize := modelSizes[modelSize]
-	minSize := int64(float64(expectedSize) * 0.95)
-	if bytesWritten < minSize {
+	if bytesWritten != m.size {
 		os.Remove(tempPath)
-		return fmt.Errorf("download incomplete: got %d bytes, expected at least %d bytes", bytesWritten, minSize)
+		return fmt.Errorf("download incomplete: got %d bytes, expected %d", bytesWritten, m.size)
 	}
 
-	if expectedHash, exists := modelSHA256s[modelSize]; exists {
-		logger.Infof("[Whisper] Verifying SHA-256 integrity of downloaded model %s...", modelSize)
-		if err := verifyFileSHA256(tempPath, expectedHash); err != nil {
-			os.Remove(tempPath)
-			return fmt.Errorf("integrity check failed for model %s: %w", modelSize, err)
-		}
-		logger.Infof("[Whisper] Integrity check passed for model %s", modelSize)
+	logger.Infof("[Whisper] Verifying SHA-256 integrity of downloaded model %s...", modelSize)
+	if err := verifyFileSHA256(tempPath, m.sha256); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("integrity check failed for model %s: %w", modelSize, err)
 	}
+	logger.Infof("[Whisper] Integrity check passed for model %s", modelSize)
 
 	if err := os.Rename(tempPath, modelPath); err != nil {
 		os.Remove(tempPath)

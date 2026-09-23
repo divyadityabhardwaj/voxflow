@@ -68,6 +68,28 @@ func TestInferenceTimeoutScalesWithAudio(t *testing.T) {
 	}
 }
 
+func TestModelCatalogIsWellFormed(t *testing.T) {
+	seen := map[string]bool{}
+	for _, m := range modelCatalog {
+		if seen[m.name] {
+			t.Errorf("%s listed twice", m.name)
+		}
+		seen[m.name] = true
+		if len(m.sha256) != 64 || strings.Trim(m.sha256, "0123456789abcdef") != "" {
+			t.Errorf("%s: bad SHA-256 %q", m.name, m.sha256)
+		}
+		if m.size <= 10<<20 { // IsModelDownloaded treats files this small as corrupt
+			t.Errorf("%s: size %d too small", m.name, m.size)
+		}
+		if m.description == "" {
+			t.Errorf("%s: no description", m.name)
+		}
+	}
+	if !seen["base"] {
+		t.Error("default model base missing")
+	}
+}
+
 func TestFindWhisperServerNextToBundledCLI(t *testing.T) {
 	dir := t.TempDir()
 	cli, srv := filepath.Join(dir, "whisper-cli"), filepath.Join(dir, "whisper-server")
