@@ -3,11 +3,9 @@ package gemini
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -28,27 +26,13 @@ type Client struct {
 	modelsMu   sync.Mutex
 }
 
-func newTunedTransport() *http.Transport {
-	return &http.Transport{
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
-		ForceAttemptHTTP2:   true,
-		MaxIdleConnsPerHost: 4,
-		MaxIdleConns:        8,
-		IdleConnTimeout:     120 * time.Second,
-		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-	}
-}
-
 func NewClient(apiKey string, modelName string) *Client {
 	return &Client{
 		apiKey:    apiKey,
 		modelName: modelName,
 		httpClient: &http.Client{
 			Timeout:   15 * time.Second,
-			Transport: newTunedTransport(),
+			Transport: llm.NewTransport(),
 		},
 	}
 }

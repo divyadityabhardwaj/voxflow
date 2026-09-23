@@ -75,8 +75,9 @@ func (c *OpenAIClient) reasoning() *reasoningOpts {
 	return nil
 }
 
-func newTunedTransport() *http.Transport {
+func NewTransport() *http.Transport {
 	return &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
 		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
 		ForceAttemptHTTP2:   true,
 		MaxIdleConnsPerHost: 4,
@@ -96,7 +97,7 @@ func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *Op
 		ExtraHeaders: extraHeaders,
 		HTTPClient: &http.Client{
 			Timeout:   15 * time.Second,
-			Transport: newTunedTransport(),
+			Transport: NewTransport(),
 		},
 	}
 }
