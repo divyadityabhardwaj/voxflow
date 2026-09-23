@@ -151,6 +151,29 @@ func TestServerTranscribes(t *testing.T) {
 	}
 }
 
+func TestServerStartupErrorIncludesItsOutput(t *testing.T) {
+	bin := findWhisperServer("")
+	if bin == "" {
+		t.Skip("whisper-server not installed")
+	}
+	isolatedHome(t)
+	if _, err := GetModelsDir(); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := spawnWhisperServer(bin, filepath.Join(t.TempDir(), "missing.bin"), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = srv.waitReady()
+	if err == nil {
+		srv.stop()
+		t.Fatal("server with a missing model became ready")
+	}
+	if !strings.Contains(err.Error(), "missing.bin") {
+		t.Fatalf("startup error lacks the server's output: %v", err)
+	}
+}
+
 func TestCLITranscribes(t *testing.T) {
 	samples, wavPath := speechClip(t)
 	hello := helloChecker(t)

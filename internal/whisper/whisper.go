@@ -67,7 +67,7 @@ type Service struct {
 	server         *whisperServer              // resident whisper-server; nil means whisper-cli per call
 	starting       map[*whisperServer]struct{} // spawned but not yet healthy; Close kills these too
 	startsPending  int                         // LoadModel starts in flight, so WarmUp can wait for them
-	serverRestarts int                         // crash restarts since LoadModel, capped at one
+	serverRestarts []time.Time                 // crash restarts within restartWindow
 	noServer       bool                        // force the whisper-cli path (tests)
 }
 
@@ -335,7 +335,7 @@ func (s *Service) LoadModel(modelSize string) error {
 	s.modelSize = modelSize
 	s.modelPath = modelPath
 	s.loaded = true
-	s.serverRestarts = 0
+	s.serverRestarts = nil
 	s.stopServerLocked()
 	s.startsPending++
 	s.mu.Unlock()

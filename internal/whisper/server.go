@@ -2,6 +2,7 @@ package whisper
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +12,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,12 +24,48 @@ import (
 
 // whisperServer is a whisper-server process holding one model resident, so each
 type whisperServer struct {
-	cmd  *exec.Cmd
-	url  string
-	done chan struct{} // closed once the process has exited and been reaped
+	cmd    *exec.Cmd
+	url    string
+	done   chan struct{} // closed once the process has exited and been reaped
+	output *tailBuffer   // last few KB of its stdout/stderr
 }
 
-var serverClient = &http.Client{Timeout: 5 * time.Minute}
+// Inference deadlines come from inferenceTimeout; /health must answer quickly.
+var (
+	serverClient = &http.Client{}
+	healthClient = &http.Client{Timeout: 2 * time.Second}
+)
+
+// inferenceTimeout is generous for any model on the CPU; a request past it means a
+// wedged server that would stall every later chunk too.
+func inferenceTimeout(wavLen int) time.Duration {
+	audio := time.Duration(max(wavLen-44, 0)) * time.Second / (16000 * 2)
+	return 10*time.Second + 3*audio
+}
+
+const outputTailSize = 4 << 10
+
+// tailBuffer keeps the last outputTailSize bytes written to it.
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if extra := len(t.buf) - outputTailSize; extra > 0 {
+		t.buf = append(t.buf[:0], t.buf[extra:]...)
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return strings.TrimSpace(string(t.buf))
+}
 
 func findWhisperServer(cliPath string) string {
 	var candidates []string
@@ -58,10 +97,12 @@ func spawnWhisperServer(bin, modelPath string, threads int) (*whisperServer, err
 		args = append(args, "-t", strconv.Itoa(threads))
 	}
 	cmd := exec.Command(bin, args...)
+	output := &tailBuffer{}
+	cmd.Stdout, cmd.Stderr = output, output
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	srv := &whisperServer{cmd: cmd, url: fmt.Sprintf("http://127.0.0.1:%d", port), done: make(chan struct{})}
+	srv := &whisperServer{cmd: cmd, url: fmt.Sprintf("http://127.0.0.1:%d", port), done: make(chan struct{}), output: output}
 	go func() {
 		cmd.Wait()
 		close(srv.done)
@@ -79,7 +120,7 @@ func (w *whisperServer) waitReady() error {
 		}
 		select {
 		case <-w.done:
-			return fmt.Errorf("exited during startup: %v", w.cmd.ProcessState)
+			return fmt.Errorf("exited during startup: %v\n%s", w.cmd.ProcessState, w.output)
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
@@ -135,7 +176,7 @@ func freePort() (int, error) {
 }
 
 func (w *whisperServer) healthy() bool {
-	resp, err := serverClient.Get(w.url + "/health")
+	resp, err := healthClient.Get(w.url + "/health")
 	if err != nil {
 		return false
 	}
@@ -170,13 +211,25 @@ func (w *whisperServer) transcribe(wav []byte, language, prompt string) (string,
 	}
 	mw.Close()
 
-	resp, err := serverClient.Post(w.url+"/inference", mw.FormDataContentType(), &body)
+	timeout := inferenceTimeout(len(wav))
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.url+"/inference", &body)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	var data []byte
+	resp, err := serverClient.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		data, err = io.ReadAll(resp.Body)
+	}
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			logger.Warnf("[Whisper] whisper-server gave no answer within %s; killing it so it restarts", timeout)
+			w.cmd.Process.Kill()
+		}
 		return "", err
 	}
 	var out struct {
@@ -249,7 +302,9 @@ func (s *Service) stopServerLocked() {
 	}
 }
 
-// watchServer clears the server when its process dies unexpectedly and restarts it once.
+// watchServer clears the server when its process dies unexpectedly and restarts it,
+// unless it already crashed maxRestarts times within restartWindow: then whisper-cli
+// serves every call until the next LoadModel.
 func (s *Service) watchServer(srv *whisperServer) {
 	<-srv.done
 	s.mu.Lock()
@@ -258,13 +313,29 @@ func (s *Service) watchServer(srv *whisperServer) {
 		return
 	}
 	s.server = nil
-	restart := s.loaded && s.serverRestarts == 0
-	if restart {
-		s.serverRestarts++
+	loaded, restart := s.loaded, false
+	if loaded {
+		s.serverRestarts, restart = allowRestart(s.serverRestarts, time.Now())
 	}
 	s.mu.Unlock()
-	logger.Warnf("[Whisper] whisper-server exited unexpectedly: pid %d, %v", srv.cmd.Process.Pid, srv.cmd.ProcessState)
+	logger.Warnf("[Whisper] whisper-server exited unexpectedly: pid %d, %v\n%s", srv.cmd.Process.Pid, srv.cmd.ProcessState, srv.output)
 	if restart {
 		s.startServer()
+	} else if loaded {
+		logger.Warnf("[Whisper] whisper-server crashed %d times in %s; using whisper-cli per call", maxRestarts, restartWindow)
 	}
+}
+
+const (
+	maxRestarts   = 3
+	restartWindow = 5 * time.Minute
+)
+
+// allowRestart drops restarts older than restartWindow and, if another fits, records one at now.
+func allowRestart(restarts []time.Time, now time.Time) ([]time.Time, bool) {
+	recent := slices.DeleteFunc(restarts, func(t time.Time) bool { return now.Sub(t) >= restartWindow })
+	if len(recent) >= maxRestarts {
+		return recent, false
+	}
+	return append(recent, now), true
 }
