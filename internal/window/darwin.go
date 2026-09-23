@@ -68,8 +68,37 @@ void constrainWindowToScreen() {
         }
     });
 }
+
+extern void voxWindowFrameChanged(void);
+
+void observeWindowFrame() {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        Class wailsWindow = NSClassFromString(@"WailsWindow");
+        for (NSWindow *window in [NSApp windows]) {
+            // Skip the status item's window.
+            if (![window isKindOfClass:wailsWindow]) {
+                continue;
+            }
+            for (NSNotificationName name in @[NSWindowDidMoveNotification, NSWindowDidResizeNotification]) {
+                [center addObserverForName:name object:window queue:nil usingBlock:^(NSNotification *note) {
+                    voxWindowFrameChanged();
+                }];
+            }
+        }
+    });
+}
 */
 import "C"
+
+import "sync/atomic"
+
+var observedManager atomic.Pointer[Manager]
+
+func observeWindowFrame(m *Manager) {
+	observedManager.Store(m)
+	C.observeWindowFrame()
+}
 
 // All spaces + above fullscreen apps.
 func FloatEverywhere() {

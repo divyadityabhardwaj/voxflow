@@ -133,6 +133,7 @@ func (a *App) startup(ctx context.Context) {
 	a.pipeline.SetContext(ctx)
 
 	window.FloatEverywhere()
+	a.windowMgr.WatchFrame()
 
 	openApp := func() {
 		a.HideMiniMode()

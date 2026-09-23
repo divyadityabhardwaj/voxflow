@@ -24,3 +24,12 @@ func voxStatusItemAction(tag C.int) {
 		go cb()
 	}
 }
+
+// Called on the main thread by the observer installed in darwin.go.
+//
+//export voxWindowFrameChanged
+func voxWindowFrameChanged() {
+	if m := observedManager.Load(); m != nil {
+		go m.frameChanged()
+	}
+}

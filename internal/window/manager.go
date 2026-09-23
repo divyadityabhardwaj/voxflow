@@ -15,10 +15,10 @@ type Manager struct {
 	ctx    context.Context
 	config *config.Config
 
+	mu                      sync.Mutex
 	isMiniMode              bool
 	userExplicitlyMaximized bool
-
-	positionWatchCancel context.CancelFunc
+	frameSaveTimer          *time.Timer
 
 	miniResizeMu     sync.Mutex
 	miniResizeCancel context.CancelFunc
@@ -41,11 +41,50 @@ func (m *Manager) SetContext(ctx context.Context) {
 }
 
 func (m *Manager) IsMiniMode() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.isMiniMode
 }
 
 func (m *Manager) UserExplicitlyMaximized() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.userExplicitlyMaximized
+}
+
+// WatchFrame saves the window position after the user moves or resizes it.
+func (m *Manager) WatchFrame() {
+	observeWindowFrame(m)
+}
+
+func (m *Manager) frameChanged() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.frameSaveTimer != nil {
+		m.frameSaveTimer.Stop()
+	}
+	m.frameSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.saveFrameLocked()
+		m.config.Save()
+	})
+}
+
+// saveFrameLocked records the current frame for the current mode. The mini
+// position is stored as its collapsed baseline, since the pill grows upward.
+func (m *Manager) saveFrameLocked() {
+	x, y := runtime.WindowGetPosition(m.ctx)
+	w, h := runtime.WindowGetSize(m.ctx)
+	if m.isMiniMode {
+		if h > 0 {
+			y += h - MiniModeCollapsedH
+		}
+		m.config.SetMiniModePosition(x, y)
+		return
+	}
+	m.config.SetMaximizedWindowPosition(x, y)
+	m.config.SetMaximizedWindowSize(w, h)
 }
 
 func (m *Manager) StartupMiniMode() {
@@ -61,13 +100,15 @@ func (m *Manager) StartupMiniMode() {
 		runtime.WindowCenter(m.ctx)
 	}
 	ConstrainWindow()
-	m.startPositionWatch()
 }
 
 func (m *Manager) ShowMini() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.isMiniMode {
 		return
 	}
+	m.saveFrameLocked()
 	m.isMiniMode = true
 	m.userExplicitlyMaximized = false
 
@@ -87,22 +128,19 @@ func (m *Manager) ShowMini() {
 
 	runtime.WindowSetAlwaysOnTop(m.ctx, true)
 	runtime.EventsEmit(m.ctx, events.MiniMode, true)
-	m.startPositionWatch()
 
 	logger.Infof("[Window] Switched to mini mode")
 }
 
 func (m *Manager) HideMini() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if !m.isMiniMode {
 		return
 	}
 
-	if m.positionWatchCancel != nil {
-		m.positionWatchCancel()
-		m.positionWatchCancel = nil
-	}
-
-	m.saveCurrentMiniPosition()
+	m.saveFrameLocked()
+	m.config.Save()
 
 	m.isMiniMode = false
 	m.userExplicitlyMaximized = true
@@ -129,13 +167,12 @@ func (m *Manager) HideMini() {
 
 	runtime.WindowSetAlwaysOnTop(m.ctx, false)
 	runtime.EventsEmit(m.ctx, events.MiniMode, false)
-	m.startMaximizedPositionWatch()
 
 	logger.Infof("[Window] Restored normal mode")
 }
 
 func (m *Manager) SetMiniExpanded(expanded bool, height int) {
-	if !m.isMiniMode {
+	if !m.IsMiniMode() {
 		return
 	}
 
@@ -200,38 +237,18 @@ func (m *Manager) SetMiniExpanded(expanded bool, height int) {
 	}(startW, targetW, startH, targetH, startX, startY, ctx)
 }
 
-func (m *Manager) startPositionWatch() {
-	m.startWindowWatch(true)
-}
-
-func (m *Manager) startMaximizedPositionWatch() {
-	m.startWindowWatch(false)
-}
-
-func (m *Manager) saveCurrentMiniPosition() {
-	if m.isMiniMode {
-		x, y := runtime.WindowGetPosition(m.ctx)
-		_, h := runtime.WindowGetSize(m.ctx)
-		baselineY := y
-		if h > 0 {
-			baselineY = y + (h - MiniModeCollapsedH)
-		}
-		m.config.SetMiniModePosition(x, baselineY)
-		m.config.Save()
-		logger.Infof("[Window] Saved baseline mini mode position: %d, %d", x, baselineY)
-	}
-}
-
 func (m *Manager) Shutdown() {
-	if m.positionWatchCancel != nil {
-		m.positionWatchCancel()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.frameSaveTimer != nil {
+		m.frameSaveTimer.Stop()
 	}
-	if m.isMiniMode {
-		m.saveCurrentMiniPosition()
-	}
+	m.saveFrameLocked()
 }
 
 func (m *Manager) ResetPosition() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.config.SetMiniModePosition(0, 0)
 	m.config.SetMaximizedWindowPosition(0, 0)
 	m.config.SetMaximizedWindowSize(900, 600)
@@ -247,72 +264,5 @@ func (m *Manager) ResetPosition() {
 	ResetBehavior()
 	runtime.WindowSetAlwaysOnTop(m.ctx, false)
 	runtime.EventsEmit(m.ctx, events.MiniMode, false)
-	m.startMaximizedPositionWatch()
 	logger.Infof("[Window] Reset window position to center")
-}
-
-func (m *Manager) startWindowWatch(isMini bool) {
-	if m.positionWatchCancel != nil {
-		m.positionWatchCancel()
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	m.positionWatchCancel = cancel
-
-	var lastSavedX, lastSavedY int
-	var lastSavedW, lastSavedH int
-	if isMini {
-		lastSavedX, lastSavedY = m.config.GetMiniModePosition()
-	} else {
-		lastSavedX, lastSavedY = m.config.GetMaximizedWindowPosition()
-		lastSavedW, lastSavedH = m.config.GetMaximizedWindowSize()
-	}
-
-	dirty := false
-	var lastPersist time.Time
-
-	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				if dirty {
-					m.config.Save()
-				}
-				return
-			case <-ticker.C:
-				rx, ry := runtime.WindowGetPosition(m.ctx)
-				rw, rh := runtime.WindowGetSize(m.ctx)
-
-				if isMini {
-					baselineY := ry
-					if rh > 0 {
-						baselineY = ry + (rh - MiniModeCollapsedH)
-					}
-
-					if rx != lastSavedX || baselineY != lastSavedY {
-						lastSavedX, lastSavedY = rx, baselineY
-						m.config.SetMiniModePosition(rx, baselineY)
-						dirty = true
-					}
-				} else {
-					if rx != lastSavedX || ry != lastSavedY || rw != lastSavedW || rh != lastSavedH {
-						lastSavedX, lastSavedY = rx, ry
-						lastSavedW, lastSavedH = rw, rh
-						m.config.SetMaximizedWindowPosition(rx, ry)
-						m.config.SetMaximizedWindowSize(rw, rh)
-						dirty = true
-					}
-				}
-
-				if dirty && time.Since(lastPersist) > 5*time.Second {
-					m.config.Save()
-					lastPersist = time.Now()
-					dirty = false
-				}
-			}
-		}
-	}()
 }
