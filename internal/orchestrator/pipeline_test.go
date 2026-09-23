@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"voxflow/internal/config"
@@ -178,6 +179,92 @@ func TestDeliver(t *testing.T) {
 				if n := len([]rune(msg)); n > maxToastDetail+100 {
 					t.Errorf("toast is %d runes long", n)
 				}
+			}
+		})
+	}
+}
+
+func TestAssembleTranscript(t *testing.T) {
+	const sec = 16000
+	ok := func(from, to int, text string) span {
+		return span{start: from * sec, end: to * sec, text: text, ok: true}
+	}
+	failed := func(from, to int) span { return span{start: from * sec, end: to * sec} }
+
+	tests := []struct {
+		name      string
+		spans     []span
+		total     int
+		failAt    int // gap start (in seconds) whose transcription fails; -1 for none
+		wantText  string
+		wantCalls []string
+		wantErr   bool
+	}{
+		{
+			name:  "no streamed chunks transcribes everything once",
+			total: 5 * sec, failAt: -1,
+			wantText: "T0-5", wantCalls: []string{"0-5"},
+		},
+		{
+			name:  "full coverage needs no extra call",
+			spans: []span{ok(0, 8, "A"), ok(8, 16, "B")}, total: 16 * sec, failAt: -1,
+			wantText: "A B",
+		},
+		{
+			name:  "failed middle chunk is filled in place",
+			spans: []span{ok(0, 8, "A"), failed(8, 16), ok(16, 20, "C")}, total: 20 * sec, failAt: -1,
+			wantText: "A T8-16 C", wantCalls: []string{"8-16"},
+		},
+		{
+			name:  "missing tail is transcribed",
+			spans: []span{ok(0, 8, "A")}, total: 20 * sec, failAt: -1,
+			wantText: "A T8-20", wantCalls: []string{"8-20"},
+		},
+		{
+			name:  "chunks arriving out of order are merged by time",
+			spans: []span{ok(8, 16, "B"), ok(0, 8, "A")}, total: 16 * sec, failAt: -1,
+			wantText: "A B",
+		},
+		{
+			name:  "silent chunk still counts as covered",
+			spans: []span{ok(0, 8, ""), ok(8, 10, "B")}, total: 10 * sec, failAt: -1,
+			wantText: "B",
+		},
+		{
+			name:  "failed tail keeps the streamed text",
+			spans: []span{ok(0, 8, "A")}, total: 20 * sec, failAt: 8,
+			wantText: "A", wantCalls: []string{"8-20"}, wantErr: true,
+		},
+		{
+			name:  "gap too short to transcribe is skipped",
+			spans: []span{ok(0, 8, "A")}, total: 8*sec + minTranscribeSamples - 1, failAt: -1,
+			wantText: "A",
+		},
+		{
+			name:  "final chunk running past the buffer is fine",
+			spans: []span{ok(0, 8, "A"), ok(8, 9, "B")}, total: 8*sec + 100, failAt: -1,
+			wantText: "A B",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls []string
+			got, err := assembleTranscript(tt.spans, tt.total, func(from, to int) (string, error) {
+				calls = append(calls, fmt.Sprintf("%d-%d", from/sec, to/sec))
+				if from == tt.failAt*sec {
+					return "", errors.New("whisper down")
+				}
+				return fmt.Sprintf(" T%d-%d ", from/sec, to/sec), nil
+			})
+			if got != tt.wantText {
+				t.Errorf("text = %q, want %q", got, tt.wantText)
+			}
+			if fmt.Sprint(calls) != fmt.Sprint(tt.wantCalls) {
+				t.Errorf("transcribed %v, want %v", calls, tt.wantCalls)
+			}
+			if (err != nil) != tt.wantErr {
+				t.Errorf("err = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

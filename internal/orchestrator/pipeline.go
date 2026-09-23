@@ -1,9 +1,12 @@
 package orchestrator
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +28,9 @@ type WindowController interface {
 	ShowMini()
 	UserExplicitlyMaximized() bool
 }
+
+// Anything shorter (0.1 s) is not worth a Whisper call.
+const minTranscribeSamples = 1600
 
 type Pipeline struct {
 	ctx context.Context
@@ -52,8 +58,7 @@ type Pipeline struct {
 	state   hotkey.State
 
 	streamTextMu sync.Mutex
-	streamText   string
-	streamChunks []streamChunk
+	streamSpans  []span
 	streamJobs   chan streamJob
 	streamWG     sync.WaitGroup
 	lastEmitTime time.Time
@@ -242,34 +247,27 @@ func (p *Pipeline) streamingWorker() {
 	defer p.streamWG.Done()
 
 	for job := range p.streamJobs {
-		samples := job.Samples
-		if len(samples) < 1600 {
+		start := int(job.StartTime * audio.SampleRate / time.Second)
+		sp := span{start: start, end: start + len(job.Samples)}
+		if len(job.Samples) < minTranscribeSamples {
 			if !job.IsFinal {
-				audio.RecycleChunk(samples)
+				audio.RecycleChunk(job.Samples)
 			}
 			continue
 		}
 
-		chunkDuration := time.Duration(float64(len(samples)) / 16000.0 * float64(time.Second))
-		text, err := p.whisperService.TranscribeSamples(samples)
+		text, err := p.whisperService.TranscribeSamples(job.Samples)
 		if !job.IsFinal {
-			audio.RecycleChunk(samples)
+			audio.RecycleChunk(job.Samples)
 		}
-
 		if err != nil {
 			logger.Errorf("[Pipeline] Streaming chunk transcription error: %v", err)
-			continue
 		}
-		if text == "" {
-			continue
-		}
-
-		text = cleanWhisperText(text)
+		sp.text, sp.ok = cleanWhisperText(text), err == nil
 
 		p.streamTextMu.Lock()
-		p.streamChunks = append(p.streamChunks, streamChunk{Start: job.StartTime, Duration: chunkDuration, Text: text})
-		p.streamText = mergeStreamingChunks(p.streamChunks)
-		currentText := p.streamText
+		p.streamSpans = append(p.streamSpans, sp)
+		currentText := joinSpans(p.streamSpans)
 
 		// Cap partial transcript events at ~10/s to avoid UI lag.
 		shouldEmit := job.IsFinal || time.Since(p.lastEmitTime) >= 100*time.Millisecond
@@ -289,8 +287,7 @@ func (p *Pipeline) streamingWorker() {
 
 func (p *Pipeline) startStreamingTranscription() {
 	p.streamTextMu.Lock()
-	p.streamText = ""
-	p.streamChunks = make([]streamChunk, 0)
+	p.streamSpans = nil
 	p.streamTextMu.Unlock()
 
 	p.streamJobs = make(chan streamJob, 64)
@@ -329,13 +326,68 @@ func (p *Pipeline) startStreamingTranscription() {
 	})
 }
 
+// span is a stretch of the recording in samples, with its transcript when ok.
+type span struct {
+	start, end int
+	text       string
+	ok         bool
+}
+
+// assembleTranscript transcribes, once each, the stretches of [0,total) that no
+// ok span covers, then joins all text in time order. A gap that fails is left
+// out and reported, so text that was already transcribed is never thrown away.
+func assembleTranscript(spans []span, total int, transcribe func(from, to int) (string, error)) (string, error) {
+	var covered []span
+	for _, s := range spans {
+		if s.ok {
+			covered = append(covered, s)
+		}
+	}
+	slices.SortStableFunc(covered, func(a, b span) int { return cmp.Compare(a.start, b.start) })
+
+	var all []span
+	var errs []error
+	fill := func(from, to int) {
+		if to-from < minTranscribeSamples {
+			return
+		}
+		text, err := transcribe(from, to)
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		all = append(all, span{start: from, end: to, text: cleanWhisperText(text), ok: true})
+	}
+
+	pos := 0
+	for _, s := range covered {
+		fill(pos, min(s.start, total))
+		all = append(all, s)
+		pos = max(pos, s.end)
+	}
+	fill(pos, total)
+
+	return joinSpans(all), errors.Join(errs...)
+}
+
+func joinSpans(spans []span) string {
+	sorted := slices.Clone(spans)
+	slices.SortStableFunc(sorted, func(a, b span) int { return cmp.Compare(a.start, b.start) })
+	var parts []string
+	for _, s := range sorted {
+		if s.ok && s.text != "" {
+			parts = append(parts, s.text)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 func (p *Pipeline) processRecording() {
 	defer p.restoreVolume()
 
 	processingStartTime := time.Now()
 
 	var stopAndWavDuration time.Duration
-	var cleanTextDuration time.Duration
 	wavBytes := int64(0)
 
 	audioDuration := p.audioRecorder.GetDuration()
@@ -350,14 +402,6 @@ func (p *Pipeline) processRecording() {
 		p.streamWG.Wait()
 	}
 
-	p.streamTextMu.Lock()
-	streamText := p.streamText
-	streamChunkCount := len(p.streamChunks)
-	p.streamTextMu.Unlock()
-
-	if streamChunkCount > 0 {
-		logger.Infof("[Pipeline] Streaming transcription: %d chunks, %d chars", streamChunkCount, len(streamText))
-	}
 	if err != nil {
 		p.emitToast("Failed to stop recording: "+err.Error(), "error")
 		p.resetToIdle()
@@ -375,100 +419,37 @@ func (p *Pipeline) processRecording() {
 		return
 	}
 
-	var rawText string
-	var whisperDuration time.Duration
-
-	var streamCoversSec float64
-	p.streamTextMu.Lock()
-	for _, chunk := range p.streamChunks {
-		streamCoversSec += chunk.Duration.Seconds()
-	}
-	streamText = p.streamText
-	streamChunkCount = len(p.streamChunks)
-	p.streamTextMu.Unlock()
-
-	audioSec := audioDuration.Seconds()
-	hasFullCoverage := streamChunkCount > 0 &&
-		streamText != "" &&
-		streamCoversSec >= audioSec*0.85
-
 	whisperStart := time.Now()
-	if hasFullCoverage {
-		logger.Infof("[Pipeline] Using streaming transcript (%d chunks, %.1fs of %.1fs)",
-			streamChunkCount, streamCoversSec, audioSec)
-		rawText = streamText
-	} else {
-		fullSamples := p.audioRecorder.GetBuffer()
-		startIndex := int(streamCoversSec * 16000)
-		if startIndex < 0 {
-			startIndex = 0
-		}
-		if startIndex > len(fullSamples) {
-			startIndex = len(fullSamples)
-		}
-		tailSamples := fullSamples[startIndex:]
+	samples := p.audioRecorder.GetBuffer()
+	p.streamTextMu.Lock()
+	spans := slices.Clone(p.streamSpans)
+	p.streamTextMu.Unlock()
+	logger.Infof("[Pipeline] Streaming transcription: %d chunks", len(spans))
 
-		var tailText string
-		if len(tailSamples) >= 1600 {
-			logger.Infof("[Pipeline] Transcribing uncovered tail from %.1fs to %.1fs (%.1fs segment)",
-				streamCoversSec, audioSec, float64(len(tailSamples))/16000.0)
-			maxRetries := 3
-			for attempt := 1; attempt <= maxRetries; attempt++ {
-				tailText, err = p.whisperService.TranscribeSamples(tailSamples)
-				if err != nil {
-					p.emitToast("Tail transcription failed: "+err.Error(), "error")
-					p.resetToIdle()
-					return
-				}
-				if tailText != "" || attempt == maxRetries {
-					break
-				}
-				logger.Infof("[Pipeline] No speech detected in tail, retrying (%d/%d)...", attempt, maxRetries)
-				time.Sleep(200 * time.Millisecond)
-			}
-		}
-
-		if streamText != "" {
-			rawText = strings.TrimSpace(streamText + " " + cleanWhisperText(tailText))
-		} else {
-			rawText = cleanWhisperText(tailText)
-		}
-
-		if rawText == "" && len(fullSamples) > 0 {
-			logger.Infof("[Pipeline] Tail transcription empty, falling back to transcribing full WAV file")
-			maxRetries := 3
-			for attempt := 1; attempt <= maxRetries; attempt++ {
-				rawText, err = p.whisperService.Transcribe(wavPath)
-				if err != nil {
-					p.emitToast("Full transcription fallback failed: "+err.Error(), "error")
-					p.resetToIdle()
-					return
-				}
-				if rawText != "" {
-					break
-				}
-				if attempt < maxRetries {
-					logger.Infof("[Pipeline] No speech detected in full fallback, retrying (%d/%d)...", attempt, maxRetries)
-					time.Sleep(200 * time.Millisecond)
-				}
-			}
-		}
-	}
+	rawText, err := assembleTranscript(spans, len(samples), func(from, to int) (string, error) {
+		logger.Infof("[Pipeline] Transcribing %.1fs-%.1fs not covered by streaming",
+			float64(from)/audio.SampleRate, float64(to)/audio.SampleRate)
+		return p.whisperService.TranscribeSamples(samples[from:to])
+	})
 	cleanStart := time.Now()
 	rawText = cleanWhisperText(rawText)
-	cleanTextDuration = time.Since(cleanStart)
-	whisperDuration = time.Since(whisperStart)
+	cleanTextDuration := time.Since(cleanStart)
+	whisperDuration := time.Since(whisperStart)
+
+	if err != nil {
+		logger.Errorf("[Pipeline] Transcription failed: %v", err)
+		if rawText == "" {
+			p.emitToast("Transcription failed: "+truncate(err.Error(), maxToastDetail), "error")
+			p.resetToIdle()
+			return
+		}
+		p.emitToast("Part of the recording couldn't be transcribed", "warning")
+	}
 
 	logger.Debugf("[Pipeline] Whisper raw output: %d chars", len(rawText))
 
 	if rawText == "" {
 		p.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
-		p.resetToIdle()
-		return
-	}
-
-	if rawText == "[BLANK_AUDIO]" || rawText == "(blank audio)" || rawText == "[NO SPEECH]" {
-		p.emitToast("No speech detected. Please try speaking into your microphone.", "warning")
 		p.resetToIdle()
 		return
 	}
