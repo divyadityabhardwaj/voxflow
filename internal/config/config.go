@@ -2,10 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+	"voxflow/internal/logger"
 )
 
 // Default refinement models. Cloud catalogs churn, so ensureValidModel in the app
@@ -50,6 +52,7 @@ type Config struct {
 	OnboardingCompleted bool               `json:"onboarding_completed"`
 	mu                  sync.RWMutex
 	saveMu              sync.Mutex // serialises Save: concurrent writers would share one .tmp
+	loadWarning         string
 }
 
 // AppRule holds per-application overrides for refinement and injection behavior.
@@ -88,13 +91,10 @@ func GetConfigPath() (string, error) {
 
 func GetInstance() *Config {
 	once.Do(func() {
-		instance = &Config{
-			HandsFreeHotkey:  "cmd+shift+space",
-			PushToTalkHotkey: "cmd+shift+p",
-			WhisperModel:     "base",
-			WhisperLanguage:  "en",
+		instance = &Config{}
+		if err := instance.Load(); err != nil {
+			logger.Errorf("[Config] %v", err)
 		}
-		instance.Load()
 	})
 	return instance
 }
@@ -102,25 +102,47 @@ func GetInstance() *Config {
 func (c *Config) Load() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	err := c.readFile()
+	c.applyDefaults()
+	return err
+}
 
+// An existing file that can't be read is moved aside so the next Save can't
+// replace the user's keys and rules with defaults.
+func (c *Config) readFile() error {
 	configPath, err := GetConfigPath()
 	if err != nil {
 		return err
 	}
 
 	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // No config file yet, use defaults
-		}
-		return err
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err == nil {
+		err = json.Unmarshal(data, c)
+	}
+	if err == nil {
+		return nil
 	}
 
-	err = json.Unmarshal(data, c)
-	if err != nil {
-		return err
+	backup := fmt.Sprintf("%s.corrupt-%d", configPath, time.Now().Unix())
+	if rerr := os.Rename(configPath, backup); rerr != nil {
+		return fmt.Errorf("unreadable config (%v) could not be moved aside: %w", err, rerr)
 	}
+	_ = os.Chmod(backup, 0600)
+	c.loadWarning = fmt.Sprintf("Your settings file couldn't be read, so some settings were reset. The original was kept as %s.", backup)
+	return fmt.Errorf("unreadable config moved to %s: %w", backup, err)
+}
 
+// LoadWarning is non-empty when config.json existed but couldn't be read.
+func (c *Config) LoadWarning() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.loadWarning
+}
+
+func (c *Config) applyDefaults() {
 	// Migration: If legacy Hotkey exists but HandsFreeHotkey is empty, use legacy
 	if c.Hotkey != "" && c.HandsFreeHotkey == "" {
 		c.HandsFreeHotkey = c.Hotkey
@@ -178,8 +200,6 @@ func (c *Config) Load() error {
 	if apiKey := os.Getenv("CEREBRAS_API_KEY"); apiKey != "" {
 		c.CerebrasAPIKey = apiKey
 	}
-
-	return nil
 }
 
 func (c *Config) Save() error {
