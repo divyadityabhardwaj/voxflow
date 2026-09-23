@@ -64,22 +64,30 @@ const Waveform = ({
         key={i}
         className="w-0.5 rounded-full transition-all duration-300"
         style={{
-          background: active ? "#ffffff" : isDark ? "#e5e7eb" : "#111827",
+          background: active
+            ? isDark
+              ? "#ffffff"
+              : "#dc2626"
+            : isDark
+              ? "#e5e7eb"
+              : "#111827",
           opacity: active ? 1 : 0.45,
-          height: active ? undefined : compact ? "1.5px" : "3px",
+          height: active
+            ? compact
+              ? "7px"
+              : "14px"
+            : compact
+              ? "1.5px"
+              : "3px",
           animation: active
-            ? `${compact ? "waveCompact" : "wave"} ${
-                compact ? "0.75s" : "1s"
-              } ease-in-out infinite`
+            ? `pillWave ${compact ? "0.75s" : "1s"} ease-in-out infinite`
             : "none",
           animationDelay: `${i * 0.08}s`,
-          minHeight: compact ? "1.5px" : "3px",
         }}
       />
     ))}
     <style>{`
-      @keyframes wave { 0%, 100% { height: 3px; } 50% { height: 14px; } }
-      @keyframes waveCompact { 0%, 100% { height: 1.5px; } 50% { height: 7px; } }
+      @keyframes pillWave { 0%, 100% { transform: scaleY(0.21); } 50% { transform: scaleY(1); } }
     `}</style>
   </div>
 );
@@ -161,7 +169,7 @@ export default function RecordingIndicator() {
     HideMiniMode(); // Exit mini mode so user can read full toast/details
   };
 
-  const isDark = theme === "dark";
+  const isDark = theme !== "light";
 
   let statusBg =
     status === "Recording"
@@ -194,12 +202,9 @@ export default function RecordingIndicator() {
           ? "0 3px 12px rgba(0,0,0,0.25)"
           : "0 3px 12px rgba(0,0,0,0.10)";
 
-  let foregroundColor =
-    status === "Recording"
-      ? "#ffffff"
-      : isDark
-        ? "rgba(255, 255, 255, 0.85)"
-        : "rgba(17, 24, 39, 0.75)";
+  const foregroundColor = isDark
+    ? "rgba(255, 255, 255, 0.85)"
+    : "rgba(17, 24, 39, 0.75)";
 
   let toastBg = "";
   let toastBorder = "";
@@ -245,6 +250,14 @@ export default function RecordingIndicator() {
       toastForegroundColor = isDark ? "#93c5fd" : "#1d4ed8";
     }
   }
+
+  const recordLabel = busy
+    ? status === "Refining"
+      ? "Cleaning up…"
+      : "Transcribing…"
+    : status === "Recording"
+      ? "Stop dictation"
+      : "Start dictation";
 
   const hoverBgExpand = isDark ? "hover:bg-white/10" : "hover:bg-black/5";
 
@@ -343,11 +356,14 @@ export default function RecordingIndicator() {
         }
       >
         <div className="flex items-center gap-0.5 min-w-0">
-          <div
-            className="flex-none size-5 flex items-center justify-center cursor-pointer no-drag"
+          <button
+            type="button"
+            className="flex-none size-5 flex items-center justify-center cursor-pointer no-drag disabled:cursor-default"
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={handleRecordClick}
-            title={status === "Idle" ? "Start Recording" : "Stop Recording"}
+            disabled={busy}
+            title={recordLabel}
+            aria-label={recordLabel}
           >
             <div className="rounded-full size-5 flex items-center justify-center transition-all duration-200">
               {busy ? (
@@ -379,7 +395,7 @@ export default function RecordingIndicator() {
                 />
               )}
             </div>
-          </div>
+          </button>
 
           <div
             className={`transition-all duration-200 ease-out overflow-hidden ${
@@ -391,7 +407,7 @@ export default function RecordingIndicator() {
             {status === "Recording" && (
               <div
                 className="text-[11px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis"
-                style={{ color: "var(--recording)" }}
+                style={{ color: isDark ? "var(--recording)" : "#b91c1c" }}
               >
                 Recording
               </div>
@@ -399,7 +415,7 @@ export default function RecordingIndicator() {
             {busy && (
               <div
                 className="text-[11px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis"
-                style={{ color: "var(--processing)" }}
+                style={{ color: isDark ? "var(--processing)" : "#b45309" }}
               >
                 {status === "Refining" ? "Cleaning up…" : "Transcribing…"}
               </div>
@@ -433,11 +449,13 @@ export default function RecordingIndicator() {
             uiExpanded ? "opacity-100 w-4" : "opacity-0 w-0"
           }`}
         >
-          <div
+          <button
+            type="button"
             className={`size-4 flex items-center justify-center cursor-pointer no-drag rounded-full ${hoverBgExpand} transition-colors`}
             style={{ WebkitAppRegion: "no-drag" } as unknown as CSSProperties}
             onClick={handleExpandClick}
-            title="Expand"
+            title="Open VoxFlow"
+            aria-label="Open VoxFlow"
           >
             <svg
               className="w-2 h-2 opacity-70"
@@ -453,7 +471,7 @@ export default function RecordingIndicator() {
                 d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
               />
             </svg>
-          </div>
+          </button>
         </div>
       </div>
     </div>
