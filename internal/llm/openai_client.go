@@ -80,6 +80,8 @@ type OpenAIClient struct {
 	HTTPClient   *http.Client
 	// DisableReasoning sends {"reasoning":{"enabled":false}}; only OpenRouter accepts it.
 	DisableReasoning bool
+	// RefineTimeout replaces RefineBudget, for servers that may have to load the model first.
+	RefineTimeout time.Duration
 }
 
 func (c *OpenAIClient) reasoning() *reasoningOpts {
@@ -274,13 +276,17 @@ func (c *OpenAIClient) applyHeaders(req *http.Request) {
 	}
 }
 
+func refineMessages(rawText string) []chatMessage {
+	return []chatMessage{
+		{Role: "system", Content: BuildSystemPrompt()},
+		{Role: "user", Content: "Transcription to refine:\n<transcription>\n" + rawText + "\n</transcription>"},
+	}
+}
+
 func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, error) {
 	req := chatRequest{
-		Model: model,
-		Messages: []chatMessage{
-			{Role: "system", Content: BuildSystemPrompt()},
-			{Role: "user", Content: "Transcription to refine:\n<transcription>\n" + rawText + "\n</transcription>"},
-		},
+		Model:       model,
+		Messages:    refineMessages(rawText),
 		Temperature: 0.3,
 		MaxTokens:   RefineMaxTokens(rawText),
 		Reasoning:   c.reasoning(),
@@ -291,7 +297,11 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), RefineBudget(rawText))
+	budget := RefineBudget(rawText)
+	if c.RefineTimeout > 0 {
+		budget = c.RefineTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
@@ -467,4 +477,30 @@ func (c *OpenAIClient) Prewarm(model string) {
 			resp.Body.Close()
 		}
 	}()
+}
+
+// Asks for one token behind the refine system prompt, so a local server loads the
+// model and caches the prompt prefix while the user is still speaking.
+func (c *OpenAIClient) WarmUp(ctx context.Context, model string) error {
+	reqBody, err := json.Marshal(chatRequest{
+		Model:     model,
+		Messages:  refineMessages(""),
+		MaxTokens: 1,
+		Reasoning: c.reasoning(),
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/chat/completions", bytes.NewReader(reqBody))
+	if err != nil {
+		return err
+	}
+	c.applyHeaders(req)
+	// Not c.HTTPClient: a cold model load can outlast its timeout.
+	resp, err := (&http.Client{Transport: c.HTTPClient.Transport}).Do(req)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.Body.Close()
 }
