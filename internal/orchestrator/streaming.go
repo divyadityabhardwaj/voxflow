@@ -47,8 +47,9 @@ type streamChunk struct {
 	Text     string
 }
 
-// ponytail: exact whole-text match only, so a genuine "Thanks." or "You." dictation
-// is dropped too; a per-chunk VAD gate would remove the need for the list.
+// ponytail: exact whole-text match only, but a chunk that really is just "Thank you."
+// (a one-word dictation, or a sign-off after a pause) is dropped too; a per-chunk VAD
+// gate would remove the need for the list.
 func cleanWhisperText(text string) string {
 	text = whisperNoiseMarkerRe.ReplaceAllString(text, " ")
 	text = strings.Join(strings.Fields(text), " ")
