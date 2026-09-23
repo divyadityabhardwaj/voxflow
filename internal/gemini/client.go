@@ -49,8 +49,8 @@ func (c *Client) SetModel(modelName string) {
 }
 
 // API key in header, not query string (proxy/access logs).
-func (c *Client) do(method, url string, body []byte) ([]byte, int, error) {
-	return llm.DoWithRetry(c.httpClient, func() (*http.Request, error) {
+func (c *Client) request(method, url string, body []byte) func() (*http.Request, error) {
+	return func() (*http.Request, error) {
 		var r io.Reader
 		if body != nil {
 			r = bytes.NewReader(body)
@@ -62,7 +62,7 @@ func (c *Client) do(method, url string, body []byte) ([]byte, int, error) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("x-goog-api-key", c.apiKey)
 		return req, nil
-	})
+	}
 }
 
 type Request struct {
@@ -88,7 +88,6 @@ type GenerationConfig struct {
 type Response struct {
 	Candidates    []Candidate    `json:"candidates"`
 	UsageMetadata *UsageMetadata `json:"usageMetadata,omitempty"`
-	Error         *APIError      `json:"error,omitempty"`
 }
 
 type UsageMetadata struct {
@@ -99,12 +98,6 @@ type UsageMetadata struct {
 
 type Candidate struct {
 	Content *Content `json:"content"`
-}
-
-type APIError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Status  string `json:"status"`
 }
 
 // model non-empty overrides the client default for this call. ok_to_go => use rawText.
@@ -142,19 +135,21 @@ func (c *Client) RefineText(rawText, model string) (string, int, bool, error) {
 		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), llm.RefineBudget(rawText))
+	defer cancel()
+
 	url := fmt.Sprintf("%s/models/%s:generateContent", baseAPIURL, activeModel)
-	respBody, _, err := c.do("POST", url, reqBody)
+	respBody, status, err := llm.DoWithRetryContext(ctx, c.httpClient, 1, c.request("POST", url, reqBody))
 	if err != nil {
 		return "", 0, false, err
+	}
+	if status != http.StatusOK {
+		return "", 0, false, llm.StatusError(status, respBody)
 	}
 
 	var geminiResp Response
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
 		return "", 0, false, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if geminiResp.Error != nil {
-		return "", 0, false, fmt.Errorf("API error: %s (code: %d)", geminiResp.Error.Message, geminiResp.Error.Code)
 	}
 
 	if len(geminiResp.Candidates) == 0 || geminiResp.Candidates[0].Content == nil {
@@ -220,18 +215,17 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 	}
 
 	url := fmt.Sprintf("%s/models/%s:generateContent", baseAPIURL, activeModel)
-	respBody, _, err := c.do("POST", url, reqBody)
+	respBody, status, err := llm.DoWithRetry(c.httpClient, c.request("POST", url, reqBody))
 	if err != nil {
 		return "", err
+	}
+	if status != http.StatusOK {
+		return "", llm.StatusError(status, respBody)
 	}
 
 	var geminiResp Response
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
 		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if geminiResp.Error != nil {
-		return "", fmt.Errorf("API error: %s", geminiResp.Error.Message)
 	}
 
 	if len(geminiResp.Candidates) == 0 || geminiResp.Candidates[0].Content == nil {
@@ -246,8 +240,7 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 }
 
 type ModelListResponse struct {
-	Models []Model   `json:"models"`
-	Error  *APIError `json:"error,omitempty"`
+	Models []Model `json:"models"`
 }
 
 type Model struct {
@@ -271,18 +264,17 @@ func (c *Client) ListModels() ([]string, error) {
 	}
 	c.modelsMu.Unlock()
 
-	respBody, _, err := c.do("GET", baseAPIURL+"/models", nil)
+	respBody, status, err := llm.DoWithRetry(c.httpClient, c.request("GET", baseAPIURL+"/models", nil))
 	if err != nil {
 		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, llm.StatusError(status, respBody)
 	}
 
 	var listResp ModelListResponse
 	if err := json.Unmarshal(respBody, &listResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if listResp.Error != nil {
-		return nil, fmt.Errorf("API error: %s (code: %d)", listResp.Error.Message, listResp.Error.Code)
 	}
 
 	var models []string
@@ -352,7 +344,7 @@ func (c *Client) CheckModel(modelName string) (int64, float64, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return 0, 0, fmt.Errorf("API error: %s (status: %d)", string(respBody), resp.StatusCode)
+		return 0, 0, llm.StatusError(resp.StatusCode, respBody)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)

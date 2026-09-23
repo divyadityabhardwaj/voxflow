@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,7 +20,19 @@ const (
 	retryMaxAttempts = 3
 	retryBaseDelay   = 250 * time.Millisecond
 	retryMaxDelay    = 5 * time.Second
+	// A longer wait means a quota window, not a blip: give up and paste raw text.
+	maxRetryAfter = 5 * time.Second
+	maxErrorLen   = 200
 )
+
+var ErrRateLimited = errors.New("rate limit reached")
+
+// Bounds a dictation-path refine: enough for a slow model on a long dictation,
+// short enough that a hung provider falls back to raw text within seconds.
+func RefineBudget(rawText string) time.Duration {
+	perWord := time.Duration(len(strings.Fields(rawText))) * 40 * time.Millisecond
+	return min(4*time.Second+perWord, 15*time.Second)
+}
 
 func isRetryableStatus(code int) bool {
 	return code == http.StatusTooManyRequests ||
@@ -103,23 +117,25 @@ func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *Op
 }
 
 func DoWithRetry(hc *http.Client, newReq func() (*http.Request, error)) ([]byte, int, error) {
+	return DoWithRetryContext(context.Background(), hc, retryMaxAttempts, newReq)
+}
+
+// Retries dropped connections, 502/503 and short 429s up to retries times, never
+// sleeping past ctx's deadline. Non-2xx bodies come back with a nil error; turn
+// them into an error with StatusError.
+func DoWithRetryContext(ctx context.Context, hc *http.Client, retries int, newReq func() (*http.Request, error)) ([]byte, int, error) {
 	delay := retryBaseDelay
-	var lastStatus int
-	for attempt := 0; attempt <= retryMaxAttempts; attempt++ {
+	for attempt := 0; ; attempt++ {
 		req, err := newReq()
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to create request: %w", err)
 		}
 
-		resp, err := hc.Do(req)
+		resp, err := hc.Do(req.WithContext(ctx))
 		if err != nil {
-			// A timeout already cost the full client deadline; retrying would keep
-			// the pipeline in "Refining" for a minute on a dead network.
-			var ne net.Error
-			if attempt == retryMaxAttempts || (errors.As(err, &ne) && ne.Timeout()) {
+			if attempt == retries || isFinalTransportError(err) || !sleepWithin(ctx, delay) {
 				return nil, 0, fmt.Errorf("failed to send request: %w", err)
 			}
-			time.Sleep(delay)
 			delay = min(delay*2, retryMaxDelay)
 			continue
 		}
@@ -130,19 +146,104 @@ func DoWithRetry(hc *http.Client, newReq func() (*http.Request, error)) ([]byte,
 			return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		lastStatus = resp.StatusCode
-		if !isRetryableStatus(resp.StatusCode) || attempt == retryMaxAttempts {
-			return body, lastStatus, nil
+		wait := delay
+		if resp.StatusCode == http.StatusTooManyRequests {
+			ra := retryAfter(resp.Header)
+			if ra > maxRetryAfter || quotaExhausted(body) {
+				return body, resp.StatusCode, nil
+			}
+			wait = max(wait, ra)
 		}
-
-		time.Sleep(delay)
+		if !isRetryableStatus(resp.StatusCode) || attempt == retries || !sleepWithin(ctx, wait) {
+			return body, resp.StatusCode, nil
+		}
 		delay = min(delay*2, retryMaxDelay)
 	}
-	return nil, lastStatus, nil
 }
 
-func (c *OpenAIClient) doPost(reqBody []byte, url string) ([]byte, int, error) {
-	return DoWithRetry(c.HTTPClient, func() (*http.Request, error) {
+// Offline (DNS/dial failure) or already timed out: another attempt fails the same way, only later.
+func isFinalTransportError(err error) bool {
+	var ne net.Error
+	var op *net.OpError
+	return (errors.As(err, &ne) && ne.Timeout()) || (errors.As(err, &op) && op.Op == "dial")
+}
+
+// Sleeps d unless that would leave the retry under a second before ctx's deadline.
+func sleepWithin(ctx context.Context, d time.Duration) bool {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < d+time.Second {
+		return false
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func retryAfter(h http.Header) time.Duration {
+	v := h.Get("Retry-After")
+	if secs, err := strconv.ParseFloat(v, 64); err == nil {
+		return time.Duration(secs * float64(time.Second))
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		return time.Until(t)
+	}
+	return 0
+}
+
+func quotaExhausted(body []byte) bool {
+	b := strings.ToLower(string(body))
+	for _, s := range []string{"quota", "per day", "per-day", "daily"} {
+		if strings.Contains(b, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// Short error for a non-2xx reply. Bodies can echo the user's text, so only the
+// provider's own message (or the start of the body) is kept.
+func StatusError(status int, body []byte) error {
+	if status == http.StatusTooManyRequests {
+		return ErrRateLimited
+	}
+	msg := providerMessage(body)
+	if msg == "" {
+		msg = strings.TrimSpace(string(body))
+	}
+	if len(msg) > maxErrorLen {
+		msg = strings.ToValidUTF8(msg[:maxErrorLen], "") + "…"
+	}
+	if msg == "" {
+		return fmt.Errorf("API error (status %d)", status)
+	}
+	return fmt.Errorf("API error (status %d): %s", status, msg)
+}
+
+// {"error":{"message":"..."}} (OpenAI-style and Gemini) or {"error":"..."} (Ollama).
+func providerMessage(body []byte) string {
+	var env struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if json.Unmarshal(body, &env) != nil || len(env.Error) == 0 {
+		return ""
+	}
+	var obj struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(env.Error, &obj) == nil && obj.Message != "" {
+		return obj.Message
+	}
+	var str string
+	_ = json.Unmarshal(env.Error, &str)
+	return str
+}
+
+func (c *OpenAIClient) doPost(ctx context.Context, retries int, reqBody []byte, url string) ([]byte, int, error) {
+	return DoWithRetryContext(ctx, c.HTTPClient, retries, func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", url, bytes.NewReader(reqBody))
 		if err != nil {
 			return nil, err
@@ -190,19 +291,22 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 		return "", 0, false, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), RefineBudget(rawText))
+	defer cancel()
+
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
-	respBody, statusCode, err := c.doPost(reqBody, url)
+	respBody, statusCode, err := c.doPost(ctx, 1, reqBody, url)
 	if err != nil {
 		return "", 0, false, err
 	}
 
 	if statusCode != http.StatusOK {
-		return "", 0, false, fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
+		return "", 0, false, StatusError(statusCode, respBody)
 	}
 
 	var apiResp chatResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return "", 0, false, fmt.Errorf("failed to parse response: %w, response: %s", err, string(respBody))
+		return "", 0, false, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if len(apiResp.Choices) == 0 {
@@ -243,18 +347,18 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 	}
 
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
-	respBody, statusCode, err := c.doPost(reqBody, url)
+	respBody, statusCode, err := c.doPost(context.Background(), retryMaxAttempts, reqBody, url)
 	if err != nil {
 		return "", err
 	}
 
 	if statusCode != http.StatusOK {
-		return "", fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
+		return "", StatusError(statusCode, respBody)
 	}
 
 	var apiResp chatResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w, response: %s", err, string(respBody))
+		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if len(apiResp.Choices) == 0 {
@@ -328,7 +432,7 @@ func (c *OpenAIClient) GetModels(filter func(id string) bool) ([]string, error) 
 	}
 
 	if statusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error (status %d): %s", statusCode, string(respBody))
+		return nil, StatusError(statusCode, respBody)
 	}
 
 	var modResp modelsResponse
