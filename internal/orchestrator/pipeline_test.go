@@ -352,3 +352,24 @@ func TestStartRecordingWithMicrophoneDeniedReturnsToIdle(t *testing.T) {
 		t.Fatalf("toasts = %v, want one pointing at the microphone settings", rec.toasts)
 	}
 }
+
+func TestStartRecordingAsksForMicrophoneWithoutWaiting(t *testing.T) {
+	rec := &recorder{}
+	p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)
+	p.micStatus = func() string { return "notDetermined" }
+	asked := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
+	p.requestMic = func() bool { close(asked); <-release; return true } // the user never answers
+
+	if err := p.StartRecording(); err == nil {
+		t.Fatal("expected an error")
+	}
+	<-asked
+	if p.State() != hotkey.StateIdle {
+		t.Fatalf("state = %s, want Idle", p.State())
+	}
+	if len(rec.toasts) != 1 || !strings.Contains(rec.toasts[0]["message"].(string), "Allow microphone access") {
+		t.Fatalf("toasts = %v", rec.toasts)
+	}
+}

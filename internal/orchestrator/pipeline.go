@@ -60,6 +60,7 @@ type Pipeline struct {
 	copyText    func(text string) error
 	focusTarget func(target macos.AppInfo) string // nil skips the focus check
 	micStatus   func() string                     // nil skips the permission check
+	requestMic  func() bool
 
 	// lifecycleMu serialises start, stop and cancel, so a stop or second start
 	// that races a slow microphone open waits for it instead of interleaving.
@@ -118,7 +119,7 @@ func New(cfg Config) *Pipeline {
 		cfg.Audio.SetLevelCallback(func(level float64) { p.emit(events.AudioLevel, level) })
 	}
 	p.focusTarget = focusTarget
-	p.micStatus = macos.MicrophoneStatus
+	p.micStatus, p.requestMic = macos.MicrophoneStatus, macos.RequestMicrophoneAccess
 	return p
 }
 
@@ -178,7 +179,7 @@ func (p *Pipeline) StartRecording() error {
 
 	if err := p.checkMicrophone(); err != nil {
 		p.resetToIdle()
-		p.emitSettingsToast(err.Error(), "error", "microphone")
+		p.microphoneFeedback(err)()
 		return err
 	}
 
@@ -233,8 +234,7 @@ func (p *Pipeline) captureTarget() {
 	p.targetMu.Unlock()
 }
 
-// checkMicrophone asks for microphone access the first time, and fails when
-// it has been refused.
+// checkMicrophone fails unless microphone access has been granted.
 func (p *Pipeline) checkMicrophone() error {
 	if p.micStatus == nil {
 		return nil
@@ -243,16 +243,30 @@ func (p *Pipeline) checkMicrophone() error {
 	case "denied", "restricted":
 		return errMicrophoneDenied
 	case "notDetermined":
-		granted := make(chan bool, 1)
-		go func() { granted <- macos.RequestMicrophoneAccess() }() // never on the main thread
-		if !<-granted {
-			return errMicrophoneDenied
-		}
+		return errMicrophoneUndecided
 	}
 	return nil
 }
 
-var errMicrophoneDenied = errors.New("Microphone access is off — turn on VoxFlow in System Settings › Privacy & Security › Microphone")
+var (
+	errMicrophoneDenied    = errors.New("Microphone access is off — turn on VoxFlow in System Settings › Privacy & Security › Microphone")
+	errMicrophoneUndecided = errors.New("microphone access not asked for yet")
+)
+
+// microphoneFeedback tells the user about a checkMicrophone failure. The first
+// time it shows the macOS prompt in the background: it waits for the user, and
+// the hotkey loop that starts recordings must not.
+func (p *Pipeline) microphoneFeedback(err error) func() {
+	if err != errMicrophoneUndecided {
+		return func() { p.emitSettingsToast(err.Error(), "error", "microphone") }
+	}
+	return func() {
+		if p.requestMic != nil {
+			go p.requestMic()
+		}
+		p.emitToast("Allow microphone access, then try again", "info")
+	}
+}
 
 func (p *Pipeline) StopRecording() {
 	p.lifecycleMu.Lock()
