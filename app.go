@@ -13,6 +13,7 @@ import (
 	"voxflow/internal/injection"
 	"voxflow/internal/llm"
 	"voxflow/internal/logger"
+	"voxflow/internal/macos"
 	"voxflow/internal/orchestrator"
 	"voxflow/internal/whisper"
 	"voxflow/internal/window"
@@ -108,6 +109,7 @@ func (a *App) activeLLMModel() string {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	macos.StartAppTracking()
 	a.windowMgr.SetContext(ctx)
 	a.pipeline.SetContext(ctx)
 	a.pipeline.RestoreAudio()
@@ -144,6 +146,10 @@ func (a *App) startup(ctx context.Context) {
 				injection.PromptAccessibility()
 			}
 		}
+	}
+
+	if w := a.config.LoadWarning(); w != "" {
+		a.warn(w)
 	}
 
 	if err := whisper.CleanupPartialDownloads(); err != nil {

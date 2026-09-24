@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 	"voxflow/internal/events"
 	"voxflow/internal/history"
+	"voxflow/internal/macos"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -130,6 +132,14 @@ func (a *App) CopyToClipboard(text string) error {
 func (a *App) InjectText(text string) error {
 	if a.injectionService == nil {
 		return fmt.Errorf("injection service not available")
+	}
+	// The Paste button makes VoxFlow frontmost; paste into the app the user came from.
+	if front, err := macos.FrontmostAppInfo(); err == nil && macos.IsSelf(front) {
+		last, ok := macos.LastExternalApp()
+		if !ok || !macos.ActivateApp(last.PID, 500*time.Millisecond) {
+			_ = a.injectionService.CopyToClipboard(text)
+			return errors.New("couldn't switch to the previous app — text copied, press ⌘V")
+		}
 	}
 	return a.injectionService.Inject(text)
 }

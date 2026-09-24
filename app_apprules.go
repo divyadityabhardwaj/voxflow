@@ -26,12 +26,12 @@ type FrontmostAppInfo struct {
 var appNames sync.Map
 
 func (a *App) GetFrontmostApp() (*FrontmostAppInfo, error) {
-	bundleID, name, err := macos.FrontmostApp()
+	app, err := macos.TargetApp()
 	if err != nil {
 		return nil, err
 	}
-	appNames.Store(bundleID, name)
-	return &FrontmostAppInfo{BundleID: bundleID, Name: name}, nil
+	appNames.Store(app.BundleID, app.Name)
+	return &FrontmostAppInfo{BundleID: app.BundleID, Name: app.Name}, nil
 }
 
 func appDisplayName(bundleID string) string {
