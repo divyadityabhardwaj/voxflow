@@ -7,6 +7,7 @@ import {
   normalizeShortcut,
   validateShortcut,
 } from "../lib/shortcut";
+import { SuspendHotkeys } from "../../wailsjs/go/main/App";
 import { useDialog } from "../lib/useDialog";
 
 interface HotkeyRecorderModalProps {
@@ -40,6 +41,13 @@ export default function HotkeyRecorderModal({
     }
   }, [isOpen, initialValue]);
 
+  // Otherwise pressing the current shortcut triggers recording instead of being captured.
+  useEffect(() => {
+    if (!isOpen) return;
+    SuspendHotkeys(true).catch(() => {});
+    return () => void SuspendHotkeys(false).catch(() => {});
+  }, [isOpen]);
+
   const problem = combo ? validateShortcut(combo, otherHotkey) : null;
   const canSave = !!combo && !problem && !saving;
 
@@ -52,9 +60,12 @@ export default function HotkeyRecorderModal({
     setSaving(true);
     setError(null);
     try {
+      // Resume first so registering the new shortcut can fail visibly.
+      await SuspendHotkeys(false);
       await onSave(combo);
       onClose();
     } catch (err) {
+      SuspendHotkeys(true).catch(() => {});
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
