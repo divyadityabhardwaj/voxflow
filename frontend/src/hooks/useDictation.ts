@@ -67,6 +67,7 @@ export function useRecordingSeconds(status: Status) {
   useEffect(() => {
     if (status !== "Recording") {
       setSeconds(0);
+      setStartedAt(null);
       return;
     }
     // Mounted mid-recording (e.g. the pill after collapsing): count from now.
