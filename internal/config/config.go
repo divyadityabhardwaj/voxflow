@@ -55,6 +55,7 @@ type Config struct {
 	loadWarning         string
 
 	PushToTalkKey string `json:"push_to_talk_key"` // "right_option", "right_command", "fn" or "chord" (PushToTalkHotkey)
+	InputDevice   string `json:"input_device"`     // microphone name; "" is the system default
 }
 
 // AppRule holds per-application overrides for refinement and injection behavior.

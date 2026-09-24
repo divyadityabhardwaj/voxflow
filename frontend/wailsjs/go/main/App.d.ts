@@ -3,6 +3,7 @@
 import {main} from '../models';
 import {whisper} from '../models';
 import {history} from '../models';
+import {audio} from '../models';
 
 export function CancelDownload():Promise<void>;
 
@@ -51,6 +52,8 @@ export function GetGroqModels():Promise<Array<string>>;
 export function GetHistory(arg1:number):Promise<Array<history.Transcript>>;
 
 export function GetHistoryPage(arg1:string,arg2:number,arg3:number):Promise<main.HistoryPage>;
+
+export function GetInputDevices():Promise<Array<audio.InputDevice>>;
 
 export function GetOnboardingCompleted():Promise<boolean>;
 
@@ -111,6 +114,8 @@ export function SetGroqAPIKey(arg1:string):Promise<void>;
 export function SetGroqModel(arg1:string):Promise<void>;
 
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
+
+export function SetInputDevice(arg1:string):Promise<void>;
 
 export function SetLLMProvider(arg1:string):Promise<void>;
 

@@ -98,6 +98,10 @@ export function GetHistoryPage(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetHistoryPage'](arg1, arg2, arg3);
 }
 
+export function GetInputDevices() {
+  return window['go']['main']['App']['GetInputDevices']();
+}
+
 export function GetOnboardingCompleted() {
   return window['go']['main']['App']['GetOnboardingCompleted']();
 }
@@ -216,6 +220,10 @@ export function SetGroqModel(arg1) {
 
 export function SetHandsFreeHotkey(arg1) {
   return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
+}
+
+export function SetInputDevice(arg1) {
+  return window['go']['main']['App']['SetInputDevice'](arg1);
 }
 
 export function SetLLMProvider(arg1) {

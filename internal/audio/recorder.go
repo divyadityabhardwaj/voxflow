@@ -47,6 +47,8 @@ type Recorder struct {
 	sampleRate     float64
 	initialized    bool         // guarded by mu
 	leakedStream   bool         // Stop gave up on a readLoop; guarded by mu
+	deviceName     string       // guarded by mu
+	missingDevice  string       // guarded by mu
 	atomicCallback atomic.Value // readLoop hot path without mu
 }
 
@@ -150,13 +152,15 @@ func (r *Recorder) Start() error {
 	inputBuffer := new([]int16)
 	*inputBuffer = make([]int16, FramesPerBuffer)
 
-	stream, err := portaudio.OpenDefaultStream(
-		Channels,
-		0,
-		r.sampleRate,
-		FramesPerBuffer,
-		inputBuffer,
-	)
+	device, err := r.inputDeviceLocked()
+	if err != nil {
+		return fmt.Errorf("failed to open audio stream: %w", err)
+	}
+	params := portaudio.HighLatencyParameters(device, nil)
+	params.Input.Channels = Channels
+	params.SampleRate = r.sampleRate
+	params.FramesPerBuffer = FramesPerBuffer
+	stream, err := portaudio.OpenStream(params, inputBuffer)
 	if err != nil {
 		return fmt.Errorf("failed to open audio stream: %w", err)
 	}

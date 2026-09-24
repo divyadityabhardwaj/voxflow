@@ -1,3 +1,22 @@
+export namespace audio {
+	
+	export class InputDevice {
+	    name: string;
+	    default: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new InputDevice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.default = source["default"];
+	    }
+	}
+
+}
+
 export namespace history {
 	
 	export class Transcript {

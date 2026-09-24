@@ -54,6 +54,7 @@ func NewApp() *App {
 		app.llmClients[p.ID] = llm.NewClient(p, cfg.GetAPIKey(p.ID))
 	}
 	app.llmClients["local"].SetServerURL(cfg.GetLocalURL())
+	app.audioRecorder.SetInputDevice(cfg.GetInputDevice())
 	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
 	app.whisperService.SetThreads(cfg.GetWhisperThreads())
 	app.whisperService.SetPrompt(cfg.GetVocabulary())

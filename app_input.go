@@ -1,5 +1,18 @@
 package main
 
+import "voxflow/internal/audio"
+
+func (a *App) GetInputDevices() ([]audio.InputDevice, error) {
+	return a.audioRecorder.ListInputDevices()
+}
+
+// SetInputDevice picks the microphone by name; "" follows the system default.
+func (a *App) SetInputDevice(name string) error {
+	a.audioRecorder.SetInputDevice(name)
+	a.config.SetInputDevice(name)
+	return a.config.Save()
+}
+
 type PushToTalkKeyInfo struct {
 	Key    string `json:"key"`    // "right_option", "right_command", "fn" or "chord"
 	Active bool   `json:"active"` // false: no Accessibility yet, so the push-to-talk combination is used

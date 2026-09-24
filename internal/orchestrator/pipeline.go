@@ -195,6 +195,9 @@ func (p *Pipeline) StartRecording() error {
 		}
 		logger.Warnf("[Pipeline] Recorder was still running, continuing: %v", err)
 	}
+	if name := p.audioRecorder.MissingDevice(); name != "" {
+		p.emitToast(name+" isn't connected — using the default microphone", "warning")
+	}
 
 	p.stream = p.startStreamingTranscription()
 
