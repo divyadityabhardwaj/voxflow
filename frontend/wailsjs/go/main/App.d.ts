@@ -18,6 +18,8 @@ export function CheckLocalModel(arg1:string):Promise<main.CheckResult>;
 
 export function CheckOpenRouterModel(arg1:string):Promise<main.CheckResult>;
 
+export function CheckProviderModel(arg1:string,arg2:string):Promise<main.CheckResult>;
+
 export function ClearAllHistory():Promise<void>;
 
 export function CompleteOnboarding():Promise<void>;
@@ -53,6 +55,10 @@ export function GetHistoryPage(arg1:string,arg2:number,arg3:number):Promise<main
 export function GetOnboardingCompleted():Promise<boolean>;
 
 export function GetOpenRouterModels():Promise<Array<string>>;
+
+export function GetProviderModels(arg1:string):Promise<Array<string>>;
+
+export function GetProviders():Promise<Array<main.ProviderInfo>>;
 
 export function GetStatus():Promise<string>;
 
@@ -117,6 +123,12 @@ export function SetMuteSystemAudio(arg1:boolean):Promise<void>;
 export function SetOpenRouterAPIKey(arg1:string):Promise<void>;
 
 export function SetOpenRouterModel(arg1:string):Promise<void>;
+
+export function SetProvider(arg1:string):Promise<void>;
+
+export function SetProviderAPIKey(arg1:string,arg2:string):Promise<void>;
+
+export function SetProviderModel(arg1:string,arg2:string):Promise<void>;
 
 export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 

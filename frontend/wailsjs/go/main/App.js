@@ -30,6 +30,10 @@ export function CheckOpenRouterModel(arg1) {
   return window['go']['main']['App']['CheckOpenRouterModel'](arg1);
 }
 
+export function CheckProviderModel(arg1, arg2) {
+  return window['go']['main']['App']['CheckProviderModel'](arg1, arg2);
+}
+
 export function ClearAllHistory() {
   return window['go']['main']['App']['ClearAllHistory']();
 }
@@ -100,6 +104,14 @@ export function GetOnboardingCompleted() {
 
 export function GetOpenRouterModels() {
   return window['go']['main']['App']['GetOpenRouterModels']();
+}
+
+export function GetProviderModels(arg1) {
+  return window['go']['main']['App']['GetProviderModels'](arg1);
+}
+
+export function GetProviders() {
+  return window['go']['main']['App']['GetProviders']();
 }
 
 export function GetStatus() {
@@ -228,6 +240,18 @@ export function SetOpenRouterAPIKey(arg1) {
 
 export function SetOpenRouterModel(arg1) {
   return window['go']['main']['App']['SetOpenRouterModel'](arg1);
+}
+
+export function SetProvider(arg1) {
+  return window['go']['main']['App']['SetProvider'](arg1);
+}
+
+export function SetProviderAPIKey(arg1, arg2) {
+  return window['go']['main']['App']['SetProviderAPIKey'](arg1, arg2);
+}
+
+export function SetProviderModel(arg1, arg2) {
+  return window['go']['main']['App']['SetProviderModel'](arg1, arg2);
 }
 
 export function SetPushToTalkHotkey(arg1) {

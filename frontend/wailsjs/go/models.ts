@@ -186,6 +186,30 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ProviderInfo {
+	    id: string;
+	    name: string;
+	    needs_key: boolean;
+	    key_set: boolean;
+	    model: string;
+	    default_model: string;
+	    local: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProviderInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.needs_key = source["needs_key"];
+	        this.key_set = source["key_set"];
+	        this.model = source["model"];
+	        this.default_model = source["default_model"];
+	        this.local = source["local"];
+	    }
+	}
 
 }
 
