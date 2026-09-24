@@ -37,3 +37,12 @@ func voxWindowFrameChanged() {
 		go m.frameChanged()
 	}
 }
+
+// Called on the main thread when the red traffic light is clicked.
+//
+//export voxWindowCloseClicked
+func voxWindowCloseClicked() {
+	if m := observedManager.Load(); m != nil {
+		go m.ShowMini()
+	}
+}

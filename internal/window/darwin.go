@@ -24,7 +24,8 @@ void resetWindowBehavior() {
     dispatch_async(dispatch_get_main_queue(), ^{
         NSApplication *app = [NSApplication sharedApplication];
         for (NSWindow *window in [app windows]) {
-            [window setCollectionBehavior:0];
+            // The green button zooms rather than entering a full-screen Space the pill can't leave.
+            [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenNone];
             [window setLevel:NSNormalWindowLevel];
             [window setHasShadow:YES];
         }
@@ -70,6 +71,48 @@ void constrainWindowToScreen() {
 }
 
 extern void voxWindowFrameChanged(void);
+extern void voxWindowCloseClicked(void);
+
+@interface VoxCloseTarget : NSObject
+@end
+
+@implementation VoxCloseTarget
+- (void)collapse:(id)sender {
+    voxWindowCloseClicked();
+}
+@end
+
+static VoxCloseTarget *closeTarget;
+
+// The pill and the full window are the same NSWindow. Full mode gets traffic
+// lights, native resizing and a Dock icon; the pill gets none of them.
+void setWindowChrome(bool full) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!closeTarget) {
+            closeTarget = [VoxCloseTarget new];
+        }
+        Class wailsWindow = NSClassFromString(@"WailsWindow");
+        for (NSWindow *window in [NSApp windows]) {
+            if (![window isKindOfClass:wailsWindow]) {
+                continue;
+            }
+            NSWindowStyleMask mask = [window styleMask];
+            [window setStyleMask:full ? (mask | NSWindowStyleMaskResizable) : (mask & ~NSWindowStyleMaskResizable)];
+            // After setStyleMask, which can rebuild the title bar buttons.
+            for (NSNumber *kind in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) {
+                [[window standardWindowButton:(NSWindowButton)[kind integerValue]] setHidden:!full];
+            }
+            // Red collapses to the pill; quitting would kill the hotkeys.
+            NSButton *close = [window standardWindowButton:NSWindowCloseButton];
+            [close setTarget:closeTarget];
+            [close setAction:@selector(collapse:)];
+        }
+        [NSApp setActivationPolicy:full ? NSApplicationActivationPolicyRegular : NSApplicationActivationPolicyAccessory];
+        if (full) {
+            [NSApp activateIgnoringOtherApps:YES];
+        }
+    });
+}
 
 void observeWindowFrame() {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -92,6 +135,10 @@ void observeWindowFrame() {
 import "C"
 
 import "sync/atomic"
+
+func setChrome(full bool) {
+	C.setWindowChrome(C.bool(full))
+}
 
 var observedManager atomic.Pointer[Manager]
 

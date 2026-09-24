@@ -93,6 +93,7 @@ func (m *Manager) StartupMiniMode() {
 	runtime.WindowSetMinSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
 	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
 	runtime.WindowSetSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
+	setChrome(false)
 
 	if x != 0 || y != 0 {
 		runtime.WindowSetPosition(m.ctx, x, y)
@@ -113,6 +114,7 @@ func (m *Manager) ShowMini() {
 	m.userExplicitlyMaximized = false
 
 	FloatEverywhere()
+	setChrome(false)
 
 	runtime.WindowSetMinSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
 	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
@@ -147,6 +149,7 @@ func (m *Manager) HideMini() {
 	m.userExplicitlyMaximized = true
 
 	ResetBehavior()
+	setChrome(true)
 
 	savedX, savedY := m.config.GetMaximizedWindowPosition()
 	savedW, savedH := m.config.GetMaximizedWindowSize()
@@ -264,6 +267,7 @@ func (m *Manager) ResetPosition() {
 	m.isMiniMode = false
 	m.userExplicitlyMaximized = true
 	ResetBehavior()
+	setChrome(true)
 	runtime.WindowSetAlwaysOnTop(m.ctx, false)
 	runtime.EventsEmit(m.ctx, events.MiniMode, false)
 	logger.Infof("[Window] Reset window position to center")

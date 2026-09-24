@@ -73,13 +73,13 @@ func main() {
 	appMenu.Append(menu.EditMenu())
 
 	err := wails.Run(&options.App{
-		Title:             "VoxFlow",
-		Width:             window.MiniModeCollapsedW,
-		Height:            window.MiniModeCollapsedH,
-		MinWidth:          window.MiniModeCollapsedW,
-		MinHeight:         window.MiniModeCollapsedH,
-		DisableResize:     true, // Disable native resizing to prevent outline artifacts on transparent windows
-		Frameless:         true,
+		Title:     "VoxFlow",
+		Width:     window.MiniModeCollapsedW,
+		Height:    window.MiniModeCollapsedH,
+		MinWidth:  window.MiniModeCollapsedW,
+		MinHeight: window.MiniModeCollapsedH,
+		// Native resizing is switched on for the full window only (window.setChrome).
+		DisableResize:     true,
 		AlwaysOnTop:       true,
 		StartHidden:       false,
 		HideWindowOnClose: true,
@@ -97,15 +97,14 @@ func main() {
 			TitleBar: &mac.TitleBar{
 				TitlebarAppearsTransparent: true,
 				HideTitle:                  true,
-				HideTitleBar:               true,
+				HideTitleBar:               false,
 				FullSizeContent:            true,
 				UseToolbar:                 false,
 			},
 			About: &mac.AboutInfo{
 				Title:   "VoxFlow",
-				Message: "AI-Powered Dictation App\n\nVersion " + version,
+				Message: "Voice dictation for every app\n\nVersion " + version,
 			},
-			Appearance:           mac.NSAppearanceNameDarkAqua,
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  false,
 		},
