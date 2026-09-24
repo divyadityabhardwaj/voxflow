@@ -363,6 +363,10 @@ func (r *Recorder) writeWavHeader(file *os.File, numSamples int) error {
 	return err
 }
 
+func (r *Recorder) IsRecording() bool {
+	return r.recording.Load()
+}
+
 func (r *Recorder) GetDuration() time.Duration {
 	r.mu.Lock()
 	defer r.mu.Unlock()
