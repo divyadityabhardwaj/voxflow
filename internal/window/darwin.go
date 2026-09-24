@@ -99,9 +99,11 @@ void setWindowChrome(bool full) {
             NSWindowStyleMask mask = [window styleMask];
             [window setStyleMask:full ? (mask | NSWindowStyleMaskResizable) : (mask & ~NSWindowStyleMaskResizable)];
             // After setStyleMask, which can rebuild the title bar buttons.
-            for (NSNumber *kind in @[@(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)]) {
+            for (NSNumber *kind in @[@(NSWindowCloseButton), @(NSWindowZoomButton)]) {
                 [[window standardWindowButton:(NSWindowButton)[kind integerValue]] setHidden:!full];
             }
+            // A minimised window gets no pill, so recording would have no feedback.
+            [[window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
             // Red collapses to the pill; quitting would kill the hotkeys.
             NSButton *close = [window standardWindowButton:NSWindowCloseButton];
             [close setTarget:closeTarget];
