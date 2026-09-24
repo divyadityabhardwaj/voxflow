@@ -73,6 +73,7 @@ func NewApp() *App {
 	}
 
 	app.hotkeyManager = hotkey.NewManager(app.onHotkeyPressed)
+	app.hotkeyManager.OnCancel = app.onHotkeyCancel
 
 	app.rebuildPipeline()
 	return app
@@ -166,9 +167,12 @@ func (a *App) startup(ctx context.Context) {
 	pttHotkey := a.config.GetPushToTalkHotkey()
 
 	logger.Infof("Starting hotkey manager: HF=%s, PTT=%s", hfHotkey, pttHotkey)
-	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey); err != nil {
+	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey, a.config.GetPushToTalkKey()); err != nil {
 		logger.Errorf("Failed to register hotkeys: %v", err)
 		a.warn("Couldn't register a shortcut (" + strings.ReplaceAll(err.Error(), "\n", "; ") + "). Choose another in Settings.")
+	}
+	if a.config.GetOnboardingCompleted() && !a.hotkeyManager.HoldKeyActive() {
+		a.warn("Hold-to-talk needs Accessibility permission for VoxFlow — using " + pttHotkey + " until it's granted.")
 	}
 }
 

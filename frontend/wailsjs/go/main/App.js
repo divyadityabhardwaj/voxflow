@@ -114,6 +114,10 @@ export function GetProviders() {
   return window['go']['main']['App']['GetProviders']();
 }
 
+export function GetPushToTalkKey() {
+  return window['go']['main']['App']['GetPushToTalkKey']();
+}
+
 export function GetStatus() {
   return window['go']['main']['App']['GetStatus']();
 }
@@ -256,6 +260,10 @@ export function SetProviderModel(arg1, arg2) {
 
 export function SetPushToTalkHotkey(arg1) {
   return window['go']['main']['App']['SetPushToTalkHotkey'](arg1);
+}
+
+export function SetPushToTalkKey(arg1) {
+  return window['go']['main']['App']['SetPushToTalkKey'](arg1);
 }
 
 export function SetRefinementMode(arg1) {

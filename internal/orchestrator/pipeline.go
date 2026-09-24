@@ -266,6 +266,16 @@ func (p *Pipeline) StopRecording() {
 
 // CancelRecording discards the current recording: nothing is transcribed, pasted or saved.
 func (p *Pipeline) CancelRecording() {
+	p.cancelRecording(false)
+}
+
+// DiscardRecording cancels without a toast: the hold key turned out to be part
+// of a shortcut, so the user never meant to dictate.
+func (p *Pipeline) DiscardRecording() {
+	p.cancelRecording(true)
+}
+
+func (p *Pipeline) cancelRecording(silent bool) {
 	p.lifecycleMu.Lock()
 	defer p.lifecycleMu.Unlock()
 	if p.State() != hotkey.StateRecording {
@@ -282,7 +292,9 @@ func (p *Pipeline) CancelRecording() {
 	}
 
 	p.resetToIdle()
-	p.emitToast("Cancelled", "info")
+	if !silent {
+		p.emitToast("Cancelled", "info")
+	}
 	logger.Infof("Recording cancelled")
 }
 

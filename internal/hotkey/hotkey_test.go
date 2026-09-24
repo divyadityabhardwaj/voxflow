@@ -11,6 +11,7 @@ func startedManager(t *testing.T) (*Manager, chan State) {
 	t.Helper()
 	states := make(chan State, 8)
 	m := NewManager(func(s State) { states <- s })
+	m.tapEvents = make(chan tapEvent, 8) // the shared one would reach other tests' loops
 	m.running = true
 	go m.loop()
 	return m, states

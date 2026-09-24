@@ -32,6 +32,8 @@ func (a *App) GetOnboardingCompleted() bool {
 
 func (a *App) CompleteOnboarding() error {
 	a.config.SetOnboardingCompleted(true)
+	// Accessibility was granted during onboarding; the hold key's event tap needs it.
+	_ = a.hotkeyManager.SetHoldKey(a.config.GetPushToTalkKey())
 	return a.config.Save()
 }
 

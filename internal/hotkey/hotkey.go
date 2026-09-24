@@ -50,6 +50,8 @@ const (
 	handsFreeUp
 	pushToTalkDown
 	pushToTalkUp
+	escapeDown
+	escapeSync // state changed: (un)register the Carbon Esc fallback
 )
 
 type request struct {
@@ -58,6 +60,9 @@ type request struct {
 }
 
 type Manager struct {
+	// OnCancel discards the recording in progress; silent skips the "Cancelled" toast.
+	OnCancel func(silent bool)
+
 	state         State
 	callback      Callback
 	mu            sync.RWMutex
@@ -70,11 +75,15 @@ type Manager struct {
 	handsFreeStr string
 	pttStr       string
 	suspended    bool
+	holdKey      string
+	hold         holdTracker
+	escapeHK     *hotkey.Hotkey // only while recording, when there is no event tap
 
 	requests chan request
 	// One channel for every key event, so a down queued behind a slow callback
 	// is still handled before its up.
 	keyEvents chan keyEvent
+	tapEvents chan tapEvent
 }
 
 func NewManager(callback Callback) *Manager {
@@ -83,6 +92,7 @@ func NewManager(callback Callback) *Manager {
 		callback:  callback,
 		requests:  make(chan request),
 		keyEvents: make(chan keyEvent, 64),
+		tapEvents: tapEvents,
 	}
 }
 
@@ -178,9 +188,33 @@ func (m *Manager) do(fn func() error) error {
 	}
 }
 
+// SetHoldKey picks the hold-to-talk key: a modifier (HoldRightOption,
+// HoldRightCommand, HoldFn) or HoldChord for the push-to-talk combination.
+func (m *Manager) SetHoldKey(key string) error {
+	if _, err := holdKeycode(key); err != nil {
+		return err
+	}
+	return m.do(func() error {
+		m.holdKey = key
+		return m.rebind()
+	})
+}
+
+// HoldKeyActive reports whether the chosen hold-to-talk key works. A modifier
+// needs the event tap, which needs Accessibility; without it the push-to-talk
+// combination is used instead.
+func (m *Manager) HoldKeyActive() bool {
+	var active bool
+	_ = m.do(func() error {
+		active = m.holdKey == HoldChord || isTapRunning()
+		return nil
+	})
+	return active
+}
+
 // Start registers hotkeys. No mainthread.Init — Wails owns Cocoa; a second loop caused ~100% idle CPU. Idempotent via m.running.
 // The listener runs even when a registration fails; the error names which one.
-func (m *Manager) Start(handsFreeStr, pttStr string) error {
+func (m *Manager) Start(handsFreeStr, pttStr, holdKey string) error {
 	m.mu.Lock()
 	if m.running {
 		m.mu.Unlock()
@@ -189,7 +223,10 @@ func (m *Manager) Start(handsFreeStr, pttStr string) error {
 	m.running = true
 	m.mu.Unlock()
 
-	m.handsFreeStr, m.pttStr = handsFreeStr, pttStr
+	if _, err := holdKeycode(holdKey); err != nil {
+		holdKey = HoldChord
+	}
+	m.handsFreeStr, m.pttStr, m.holdKey = handsFreeStr, pttStr, holdKey
 	err := m.rebind()
 	go m.loop()
 	return err
@@ -208,7 +245,14 @@ func (m *Manager) loop() {
 				m.handlePushToTalkDown()
 			case pushToTalkUp:
 				m.handlePushToTalkUp()
+			case escapeDown:
+				m.hold.spoil()
+				m.cancel(false, false)
+			case escapeSync:
+				m.syncEscapeHotkey()
 			}
+		case ev := <-m.tapEvents:
+			m.handleTapEvent(ev)
 		}
 	}
 }
@@ -222,8 +266,19 @@ func (m *Manager) rebind() error {
 		}
 	}
 	m.handsFreeHK, m.pushToTalkHK = nil, nil
+	setHoldKeycode(-1)
 	if m.suspended {
 		return nil
+	}
+
+	pttStr := m.pttStr
+	if code, _ := holdKeycode(m.holdKey); code >= 0 {
+		if startTap() {
+			setHoldKeycode(code)
+			pttStr = ""
+		} else {
+			logger.Warnf("[Hotkey] No event tap (Accessibility not granted?); using %s for push-to-talk", m.pttStr)
+		}
 	}
 
 	var errs []error
@@ -233,9 +288,9 @@ func (m *Manager) rebind() error {
 			errs = append(errs, fmt.Errorf("hands-free hotkey %s: %w", m.handsFreeStr, err))
 		}
 	}
-	if m.pttStr != "" {
-		if m.pushToTalkHK, err = m.bind(m.pttStr, pushToTalkDown, pushToTalkUp); err != nil {
-			errs = append(errs, fmt.Errorf("push-to-talk hotkey %s: %w", m.pttStr, err))
+	if pttStr != "" {
+		if m.pushToTalkHK, err = m.bind(pttStr, pushToTalkDown, pushToTalkUp); err != nil {
+			errs = append(errs, fmt.Errorf("push-to-talk hotkey %s: %w", pttStr, err))
 		}
 	}
 	return errors.Join(errs...)
@@ -374,6 +429,60 @@ func (m *Manager) handlePushToTalkUp() {
 	}
 }
 
+func (m *Manager) handleTapEvent(ev tapEvent) {
+	var action holdAction
+	switch ev {
+	case tapHoldDown:
+		action = m.hold.down(time.Now())
+	case tapHoldUp:
+		action = m.hold.up(time.Now())
+	case tapOtherKey:
+		action = m.hold.other()
+	case tapEscape:
+		m.hold.spoil()
+		m.cancel(false, false)
+	}
+	switch action {
+	case holdStart:
+		m.handlePushToTalkDown()
+	case holdStop:
+		m.handlePushToTalkUp()
+	case holdCancel:
+		m.cancel(true, true)
+	}
+}
+
+// cancel discards the recording in progress. pushToTalkOnly leaves a hands-free
+// recording alone: the hold key was merely used as a modifier during it.
+func (m *Manager) cancel(silent, pushToTalkOnly bool) {
+	m.mu.RLock()
+	ok := m.running && m.state == StateRecording && (!pushToTalkOnly || m.activeTrigger == TriggerPushToTalk)
+	onCancel := m.OnCancel
+	m.mu.RUnlock()
+	if ok && onCancel != nil {
+		onCancel(silent)
+	}
+}
+
+// syncEscapeHotkey claims Esc through Carbon only while recording, when the
+// event tap isn't there to do it; Esc must reach other apps otherwise.
+func (m *Manager) syncEscapeHotkey() {
+	want := m.GetState() == StateRecording && !isTapRunning()
+	switch {
+	case want && m.escapeHK == nil:
+		hk := hotkey.New(nil, hotkey.KeyEscape)
+		if err := hk.Register(); err != nil {
+			logger.Warnf("[Hotkey] Could not register Esc: %v", err)
+			return
+		}
+		m.escapeHK = hk
+		go m.forward(hk.Keydown(), escapeDown)
+	case !want && m.escapeHK != nil:
+		m.escapeHK.Unregister()
+		m.escapeHK = nil
+	}
+}
+
 func (m *Manager) Stop() {
 	m.mu.Lock()
 	m.running = false
@@ -392,5 +501,10 @@ func (m *Manager) SetState(state State) {
 	m.state = state
 	if state == StateIdle {
 		m.activeTrigger = TriggerNone
+	}
+	setSwallowEscape(state == StateRecording)
+	select {
+	case m.keyEvents <- escapeSync:
+	default: // the loop isn't running
 	}
 }

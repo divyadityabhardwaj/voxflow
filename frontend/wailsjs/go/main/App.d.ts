@@ -60,6 +60,8 @@ export function GetProviderModels(arg1:string):Promise<Array<string>>;
 
 export function GetProviders():Promise<Array<main.ProviderInfo>>;
 
+export function GetPushToTalkKey():Promise<main.PushToTalkKeyInfo>;
+
 export function GetStatus():Promise<string>;
 
 export function HideMiniMode():Promise<void>;
@@ -131,6 +133,8 @@ export function SetProviderAPIKey(arg1:string,arg2:string):Promise<void>;
 export function SetProviderModel(arg1:string,arg2:string):Promise<void>;
 
 export function SetPushToTalkHotkey(arg1:string):Promise<void>;
+
+export function SetPushToTalkKey(arg1:string):Promise<main.PushToTalkKeyInfo>;
 
 export function SetRefinementMode(arg1:string):Promise<void>;
 

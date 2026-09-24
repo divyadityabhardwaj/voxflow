@@ -53,6 +53,8 @@ type Config struct {
 	mu                  sync.RWMutex
 	saveMu              sync.Mutex // serialises Save: concurrent writers would share one .tmp
 	loadWarning         string
+
+	PushToTalkKey string `json:"push_to_talk_key"` // "right_option", "right_command", "fn" or "chord" (PushToTalkHotkey)
 }
 
 // AppRule holds per-application overrides for refinement and injection behavior.
@@ -150,6 +152,13 @@ func (c *Config) applyDefaults() {
 
 	if c.HandsFreeHotkey == "" {
 		c.HandsFreeHotkey = "cmd+shift+space"
+	}
+	// The old default combination moves to the hold key; a chosen one is kept.
+	if c.PushToTalkKey == "" {
+		c.PushToTalkKey = "right_option"
+		if c.PushToTalkHotkey != "" && c.PushToTalkHotkey != "cmd+shift+p" {
+			c.PushToTalkKey = "chord"
+		}
 	}
 	if c.PushToTalkHotkey == "" {
 		c.PushToTalkHotkey = "cmd+shift+p"

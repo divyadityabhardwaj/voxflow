@@ -210,6 +210,20 @@ export namespace main {
 	        this.local = source["local"];
 	    }
 	}
+	export class PushToTalkKeyInfo {
+	    key: string;
+	    active: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PushToTalkKeyInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.active = source["active"];
+	    }
+	}
 
 }
 
