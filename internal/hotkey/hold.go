@@ -29,15 +29,22 @@ func holdKeycode(key string) (int, error) {
 	}
 }
 
-// Events reported by the keyboard event tap; the values are shared with the C side.
-type tapEvent int
+// Kinds of event reported by the keyboard event tap; the values are shared with the C side.
+type tapKind int
 
 const (
-	tapHoldDown tapEvent = iota
+	tapHoldDown tapKind = iota
 	tapHoldUp
 	tapOtherKey
 	tapEscape
 )
+
+// tapEvent is stamped when the tap sees it: the loop may dequeue it late,
+// behind a slow StartRecording, and hold length must not include that wait.
+type tapEvent struct {
+	kind tapKind
+	at   time.Time
+}
 
 // tapEvents is fed by the event tap without blocking; there is one tap per process.
 var tapEvents = make(chan tapEvent, 64)

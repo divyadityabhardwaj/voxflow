@@ -81,9 +81,9 @@ func TestHoldCancelSparesHandsFree(t *testing.T) {
 	if s := <-states; s != StateRecording {
 		t.Fatalf("state %s, want Recording", s)
 	}
-	m.tapEvents <- tapHoldDown // hold key used as a modifier during hands-free
-	m.tapEvents <- tapOtherKey
-	m.tapEvents <- tapEscape
+	m.tapEvents <- tapNow(tapHoldDown) // hold key used as a modifier during hands-free
+	m.tapEvents <- tapNow(tapOtherKey)
+	m.tapEvents <- tapNow(tapEscape)
 	select {
 	case silent := <-cancels:
 		if silent {
@@ -99,16 +99,43 @@ func TestHoldCancelSparesHandsFree(t *testing.T) {
 	}
 }
 
+func tapNow(kind tapKind) tapEvent { return tapEvent{kind: kind, at: time.Now()} }
+
+func TestQuickTapBehindSlowStartIsStillDiscarded(t *testing.T) {
+	cancels := make(chan bool, 4)
+	m := NewManager(func(s State) {
+		if s == StateRecording {
+			time.Sleep(300 * time.Millisecond) // a slow microphone open
+		}
+	})
+	m.tapEvents = make(chan tapEvent, 8)
+	m.OnCancel = func(silent bool) { cancels <- silent }
+	m.running = true
+	go m.loop()
+
+	down := time.Now()
+	m.tapEvents <- tapEvent{kind: tapHoldDown, at: down}
+	m.tapEvents <- tapEvent{kind: tapHoldUp, at: down.Add(100 * time.Millisecond)}
+	select {
+	case silent := <-cancels:
+		if !silent {
+			t.Fatal("a quick tap should discard without a toast")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the quick tap was dictated")
+	}
+}
+
 func TestHoldKeyUsedAsModifierDiscardsSilently(t *testing.T) {
 	m, states := startedManager(t)
 	cancels := make(chan bool, 4)
 	m.OnCancel = func(silent bool) { cancels <- silent }
 
-	m.tapEvents <- tapHoldDown
+	m.tapEvents <- tapNow(tapHoldDown)
 	if s := <-states; s != StateRecording {
 		t.Fatalf("state %s, want Recording", s)
 	}
-	m.tapEvents <- tapOtherKey
+	m.tapEvents <- tapNow(tapOtherKey)
 	select {
 	case silent := <-cancels:
 		if !silent {

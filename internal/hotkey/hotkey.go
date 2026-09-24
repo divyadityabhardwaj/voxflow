@@ -431,11 +431,11 @@ func (m *Manager) handlePushToTalkUp() {
 
 func (m *Manager) handleTapEvent(ev tapEvent) {
 	var action holdAction
-	switch ev {
+	switch ev.kind {
 	case tapHoldDown:
-		action = m.hold.down(time.Now())
+		action = m.hold.down(ev.at)
 	case tapHoldUp:
-		action = m.hold.up(time.Now())
+		action = m.hold.up(ev.at)
 	case tapOtherKey:
 		action = m.hold.other()
 	case tapEscape:
