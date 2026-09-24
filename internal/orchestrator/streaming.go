@@ -39,8 +39,7 @@ var silenceHallucinations = map[string]bool{
 	"ご視聴ありがとうございました": true,
 }
 
-// ponytail: Whisper echoes the vocabulary prompt on silent chunks, so a real dictation
-// of only this many vocabulary terms is dropped with it; a VAD gate would fix both.
+// Whisper echoes the vocabulary prompt on silent chunks.
 const maxVocabularyEchoWords = 4
 
 type streamChunk struct {
@@ -59,31 +58,32 @@ func cleanWhisperText(text string) string {
 	return text
 }
 
-// cleanWhisperSpan also drops Whisper's stock silence phrases, but only when the
-// span's own audio has no speech energy, so a spoken "Thank you." survives.
-func cleanWhisperSpan(text string, samples []int16) string {
+// cleanWhisperChunk also drops Whisper's stock silence phrases and echoes of the
+// vocabulary prompt, but only when the chunk's own audio has no speech energy,
+// so a spoken "Thank you." or "Kubernetes" survives.
+func cleanWhisperChunk(text, vocabulary string, samples []int16) string {
 	text = cleanWhisperText(text)
-	if text != "" && !audio.HasActivity(samples) && isSilenceHallucination(text) {
+	if text == "" || audio.HasActivity(samples) {
+		return text
+	}
+	if isSilenceHallucination(text) || isVocabularyEcho(text, vocabulary) {
 		return ""
 	}
 	return text
 }
 
-// cleanWhisperChunk is cleanWhisperText plus dropping output that only repeats
-// terms from the vocabulary prompt sent with the chunk.
-func cleanWhisperChunk(text, vocabulary string) string {
-	text = cleanWhisperText(text)
+func isVocabularyEcho(text, vocabulary string) bool {
 	words := strings.Fields(normalizeForMatch(text))
-	if len(words) == 0 || len(words) > maxVocabularyEchoWords {
-		return text
+	if len(words) > maxVocabularyEchoWords {
+		return false
 	}
 	vocab := strings.Fields(normalizeForMatch(vocabulary))
 	for _, w := range words {
 		if !slices.Contains(vocab, w) {
-			return text
+			return false
 		}
 	}
-	return ""
+	return true
 }
 
 func isSilenceHallucination(text string) bool {

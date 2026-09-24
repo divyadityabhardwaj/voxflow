@@ -54,12 +54,18 @@ func TestCleanWhisperText(t *testing.T) {
 	}
 }
 
-func TestCleanWhisperSpan_dropsStockPhrasesOnlyWithoutSpeech(t *testing.T) {
-	silent := make([]int16, 16000)
-	speech := make([]int16, 16000)
-	for i := range speech {
-		speech[i] = int16(3000 * (1 - 2*(i%2)))
-	}
+var (
+	silent = make([]int16, 16000)
+	speech = func() []int16 {
+		buf := make([]int16, 16000)
+		for i := range buf {
+			buf[i] = int16(3000 * (1 - 2*(i%2)))
+		}
+		return buf
+	}()
+)
+
+func TestCleanWhisperChunk_dropsStockPhrasesOnlyWithoutSpeech(t *testing.T) {
 	testCases := []struct {
 		input   string
 		samples []int16
@@ -81,8 +87,8 @@ func TestCleanWhisperSpan_dropsStockPhrasesOnlyWithoutSpeech(t *testing.T) {
 		{"[BLANK_AUDIO] Thank you.", speech, "Thank you."},
 	}
 	for _, tc := range testCases {
-		if got := cleanWhisperSpan(tc.input, tc.samples); got != tc.want {
-			t.Errorf("cleanWhisperSpan(%q) = %q, want %q", tc.input, got, tc.want)
+		if got := cleanWhisperChunk(tc.input, "", tc.samples); got != tc.want {
+			t.Errorf("cleanWhisperChunk(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }
@@ -90,21 +96,25 @@ func TestCleanWhisperSpan_dropsStockPhrasesOnlyWithoutSpeech(t *testing.T) {
 func TestCleanWhisperChunk_dropsVocabularyEcho(t *testing.T) {
 	const vocab = "Kubernetes, VoxFlow, Terraform, gRPC, Claude Code"
 	testCases := []struct {
-		input, vocab, want string
+		input, vocab string
+		samples      []int16
+		want         string
 	}{
-		{"Kubernetes,", vocab, ""},
-		{"VoxFlow", vocab, ""},
-		{"Kubernetes, VoxFlow.", vocab, ""},
-		{"Claude Code", vocab, ""},
-		{"[Music] Kubernetes,", vocab, ""},
-		{"Kubernetes, VoxFlow, Terraform, gRPC, Claude", vocab, "Kubernetes, VoxFlow, Terraform, gRPC, Claude"},
-		{"Deploy it to Kubernetes.", vocab, "Deploy it to Kubernetes."},
-		{"Kubernetes,", "", "Kubernetes,"},
-		{"Thank you.", vocab, "Thank you."},
-		{"", vocab, ""},
+		{"Kubernetes,", vocab, silent, ""},
+		{"VoxFlow", vocab, silent, ""},
+		{"Kubernetes, VoxFlow.", vocab, silent, ""},
+		{"Claude Code", vocab, silent, ""},
+		{"[Music] Kubernetes,", vocab, silent, ""},
+		{"Kubernetes, VoxFlow, Terraform, gRPC, Claude", vocab, silent, "Kubernetes, VoxFlow, Terraform, gRPC, Claude"},
+		{"Deploy it to Kubernetes.", vocab, silent, "Deploy it to Kubernetes."},
+		{"Kubernetes,", "", silent, "Kubernetes,"},
+		{"Thank you.", vocab, silent, ""},
+		{"", vocab, silent, ""},
+		{"Kubernetes.", vocab, speech, "Kubernetes."},
+		{"Thank you.", vocab, speech, "Thank you."},
 	}
 	for _, tc := range testCases {
-		if got := cleanWhisperChunk(tc.input, tc.vocab); got != tc.want {
+		if got := cleanWhisperChunk(tc.input, tc.vocab, tc.samples); got != tc.want {
 			t.Errorf("cleanWhisperChunk(%q, %q) = %q, want %q", tc.input, tc.vocab, got, tc.want)
 		}
 	}
