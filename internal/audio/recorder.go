@@ -50,6 +50,7 @@ type Recorder struct {
 	deviceName     string       // guarded by mu
 	missingDevice  string       // guarded by mu
 	atomicCallback atomic.Value // readLoop hot path without mu
+	levelCallback  atomic.Value // func(float64)
 }
 
 func NewRecorder() *Recorder {
@@ -187,6 +188,9 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuffer *[]int16, stop
 	chunkSize := int(SampleRate) * ChunkDuration
 	chunkBuffer := make([]int16, 0, chunkSize)
 	chunkStartTime := time.Duration(0)
+	var levelSq float64
+	var levelN int
+	levelAt := time.Now()
 
 	for {
 		select {
@@ -223,6 +227,17 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuffer *[]int16, stop
 			continue
 		}
 		in := *inputBuffer
+
+		for _, v := range in {
+			levelSq += float64(v) * float64(v)
+		}
+		levelN += len(in)
+		if time.Since(levelAt) >= levelInterval {
+			if cb := r.loadLevelCallback(); cb != nil {
+				cb(meterLevel(levelSq, levelN))
+			}
+			levelSq, levelN, levelAt = 0, 0, time.Now()
+		}
 
 		r.mu.Lock()
 		if r.stream != stream {

@@ -4,6 +4,7 @@ export const Events = {
   RecordingStopped: "recording-stopped",
   ProcessingComplete: "processing-complete",
   PartialTranscript: "partial-transcript",
+  AudioLevel: "audio-level",
 
   MiniMode: "mini-mode",
 

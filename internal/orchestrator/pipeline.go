@@ -114,6 +114,9 @@ func New(cfg Config) *Pipeline {
 	if s := cfg.Injection; s != nil {
 		p.inject, p.typeText, p.copyText = s.Inject, s.Type, s.CopyToClipboard
 	}
+	if cfg.Audio != nil {
+		cfg.Audio.SetLevelCallback(func(level float64) { p.emit(events.AudioLevel, level) })
+	}
 	p.focusTarget = focusTarget
 	p.micStatus = macos.MicrophoneStatus
 	return p
@@ -210,7 +213,7 @@ func (p *Pipeline) StartRecording() error {
 
 	// Only now, with the microphone open, tell the user to start talking.
 	p.setState(hotkey.StateRecording)
-	p.emit(events.RecordingStarted, nil)
+	p.emit(events.RecordingStarted, map[string]interface{}{"started_at": time.Now().UnixMilli()})
 	logger.Infof("Recording started...")
 
 	return nil

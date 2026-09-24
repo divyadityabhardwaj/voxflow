@@ -7,6 +7,7 @@ const (
 	ProcessingComplete = "processing-complete"
 	ResetToIdle        = "reset-to-idle"
 	PartialTranscript  = "partial-transcript"
+	AudioLevel         = "audio-level"
 
 	MiniMode = "mini-mode"
 
