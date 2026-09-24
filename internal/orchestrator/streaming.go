@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"voxflow/internal/audio"
 )
 
 var whisperNoiseMarkerRe = regexp.MustCompile(
@@ -47,13 +49,21 @@ type streamChunk struct {
 	Text     string
 }
 
-// ponytail: exact whole-text match only, but a chunk that really is just "Thank you."
-// (a one-word dictation, or a sign-off after a pause) is dropped too; a per-chunk VAD
-// gate would remove the need for the list.
+// cleanWhisperText strips noise markers and drops text that holds no words.
 func cleanWhisperText(text string) string {
 	text = whisperNoiseMarkerRe.ReplaceAllString(text, " ")
 	text = strings.Join(strings.Fields(text), " ")
-	if isSilenceHallucination(text) {
+	if normalizeForMatch(soundDescriptionRe.ReplaceAllString(text, " ")) == "" {
+		return ""
+	}
+	return text
+}
+
+// cleanWhisperSpan also drops Whisper's stock silence phrases, but only when the
+// span's own audio has no speech energy, so a spoken "Thank you." survives.
+func cleanWhisperSpan(text string, samples []int16) string {
+	text = cleanWhisperText(text)
+	if text != "" && !audio.HasActivity(samples) && isSilenceHallucination(text) {
 		return ""
 	}
 	return text
@@ -77,8 +87,7 @@ func cleanWhisperChunk(text, vocabulary string) string {
 }
 
 func isSilenceHallucination(text string) bool {
-	words := normalizeForMatch(soundDescriptionRe.ReplaceAllString(text, " "))
-	return words == "" || silenceHallucinations[words]
+	return silenceHallucinations[normalizeForMatch(soundDescriptionRe.ReplaceAllString(text, " "))]
 }
 
 // normalizeForMatch lowercases text and reduces it to space-separated letter/digit runs.

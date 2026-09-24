@@ -338,11 +338,11 @@ func (p *Pipeline) streamingWorker(s *streamSession) {
 		}
 
 		text, err := p.whisperService.TranscribeSamples(job.Samples)
-		recycle(job)
 		if err != nil {
 			logger.Errorf("[Pipeline] Streaming chunk transcription error: %v", err)
 		}
-		sp.text, sp.ok = cleanWhisperText(text), err == nil
+		sp.text, sp.ok = cleanWhisperSpan(text, job.Samples), err == nil
+		recycle(job)
 
 		s.mu.Lock()
 		if s.cancelled {
@@ -476,7 +476,8 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 	rawText, err := assembleTranscript(spans, len(samples), func(from, to int) (string, error) {
 		logger.Infof("[Pipeline] Transcribing %.1fs-%.1fs not covered by streaming",
 			float64(from)/audio.SampleRate, float64(to)/audio.SampleRate)
-		return p.whisperService.TranscribeSamples(samples[from:to])
+		text, err := p.whisperService.TranscribeSamples(samples[from:to])
+		return cleanWhisperSpan(text, samples[from:to]), err
 	})
 	cleanStart := time.Now()
 	rawText = cleanWhisperText(rawText)

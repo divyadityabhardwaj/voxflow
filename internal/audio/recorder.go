@@ -392,31 +392,43 @@ func (r *Recorder) AllSilent() bool {
 func (r *Recorder) HasAudioActivity() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	level := activityLevel(r.buffer)
+	logger.Infof("[Audio VAD] Max window energy: %.2f (threshold: %d)", level, activityThreshold)
+	return level > activityThreshold
+}
 
-	if len(r.buffer) == 0 {
-		return false
+const activityThreshold = 100 // conservative vs quiet-room noise (~10–50 RMS)
+
+// HasActivity reports whether samples hold anything louder than a quiet room.
+func HasActivity(samples []int16) bool {
+	return activityLevel(samples) > activityThreshold
+}
+
+// activityLevel is the loudest 100 ms window's RMS, or the mean absolute
+// amplitude when samples are shorter than one window.
+func activityLevel(samples []int16) float64 {
+	if len(samples) == 0 {
+		return 0
 	}
 
 	windowSize := 1600 // 100ms at 16kHz
-	if len(r.buffer) < windowSize {
+	if len(samples) < windowSize {
 		sum := int64(0)
-		for _, s := range r.buffer {
-			abs := s
+		for _, s := range samples {
+			abs := int64(s)
 			if abs < 0 {
 				abs = -abs
 			}
-			sum += int64(abs)
+			sum += abs
 		}
-		avg := float64(sum) / float64(len(r.buffer))
-		logger.Infof("[Audio VAD] Short recording average absolute amplitude: %.2f (threshold: 100)", avg)
-		return avg > 100
+		return float64(sum) / float64(len(samples))
 	}
 
 	maxRMS := float64(0)
-	for i := 0; i <= len(r.buffer)-windowSize; i += windowSize {
+	for i := 0; i <= len(samples)-windowSize; i += windowSize {
 		sumSq := float64(0)
 		for j := 0; j < windowSize; j++ {
-			s := float64(r.buffer[i+j])
+			s := float64(samples[i+j])
 			sumSq += s * s
 		}
 		rms := math.Sqrt(sumSq / float64(windowSize))
@@ -424,10 +436,7 @@ func (r *Recorder) HasAudioActivity() bool {
 			maxRMS = rms
 		}
 	}
-
-	logger.Infof("[Audio VAD] Max sliding window RMS energy: %.2f (threshold: 100)", maxRMS)
-
-	return maxRMS > 100 // conservative vs quiet-room noise (~10–50 RMS)
+	return maxRMS
 }
 
 func (r *Recorder) GetBuffer() []int16 {

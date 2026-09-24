@@ -32,16 +32,9 @@ func TestCleanWhisperText(t *testing.T) {
 		{"[NOISE] hello", "hello"},
 		{"", ""},
 
-		{"Thank you.", ""},
-		{" thank you!! ", ""},
-		{"Thanks for watching!", ""},
-		{"Thank you for watching.", ""},
-		{"you", ""},
-		{"Bye-bye.", ""},
-		{"Subtitles by the Amara.org community", ""},
-		{"[BLANK_AUDIO] Thank you.", ""},
-		{"(upbeat music) Thank you.", ""},
-		{"ご視聴ありがとうございました", ""},
+		{"Thank you.", "Thank you."},
+		{"Bye-bye.", "Bye-bye."},
+		{"[BLANK_AUDIO] Thank you.", "Thank you."},
 		{"[Music]", ""},
 		{"(water running)", ""},
 		{"*sighs*", ""},
@@ -61,6 +54,39 @@ func TestCleanWhisperText(t *testing.T) {
 	}
 }
 
+func TestCleanWhisperSpan_dropsStockPhrasesOnlyWithoutSpeech(t *testing.T) {
+	silent := make([]int16, 16000)
+	speech := make([]int16, 16000)
+	for i := range speech {
+		speech[i] = int16(3000 * (1 - 2*(i%2)))
+	}
+	testCases := []struct {
+		input   string
+		samples []int16
+		want    string
+	}{
+		{"Thank you.", silent, ""},
+		{" thank you!! ", silent, ""},
+		{"Thanks for watching!", silent, ""},
+		{"you", silent, ""},
+		{"Bye-bye.", silent, ""},
+		{"Subtitles by the Amara.org community", silent, ""},
+		{"(upbeat music) Thank you.", silent, ""},
+		{"ご視聴ありがとうございました", silent, ""},
+		{"[Music]", speech, ""},
+		{"Thank you for the update.", silent, "Thank you for the update."},
+		{"Thank you.", speech, "Thank you."},
+		{"Thanks.", speech, "Thanks."},
+		{"Bye.", speech, "Bye."},
+		{"[BLANK_AUDIO] Thank you.", speech, "Thank you."},
+	}
+	for _, tc := range testCases {
+		if got := cleanWhisperSpan(tc.input, tc.samples); got != tc.want {
+			t.Errorf("cleanWhisperSpan(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
 func TestCleanWhisperChunk_dropsVocabularyEcho(t *testing.T) {
 	const vocab = "Kubernetes, VoxFlow, Terraform, gRPC, Claude Code"
 	testCases := []struct {
@@ -74,7 +100,7 @@ func TestCleanWhisperChunk_dropsVocabularyEcho(t *testing.T) {
 		{"Kubernetes, VoxFlow, Terraform, gRPC, Claude", vocab, "Kubernetes, VoxFlow, Terraform, gRPC, Claude"},
 		{"Deploy it to Kubernetes.", vocab, "Deploy it to Kubernetes."},
 		{"Kubernetes,", "", "Kubernetes,"},
-		{"Thank you.", vocab, ""},
+		{"Thank you.", vocab, "Thank you."},
 		{"", vocab, ""},
 	}
 	for _, tc := range testCases {

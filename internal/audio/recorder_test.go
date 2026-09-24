@@ -40,6 +40,38 @@ func TestAllSilent(t *testing.T) {
 	}
 }
 
+func TestHasActivity(t *testing.T) {
+	loud := func(n int) []int16 {
+		buf := make([]int16, n)
+		for i := range buf {
+			buf[i] = int16(3000 * (1 - 2*(i%2)))
+		}
+		return buf
+	}
+	noise := make([]int16, SampleRate)
+	for i := range noise {
+		noise[i] = int16(30 * (1 - 2*(i%2)))
+	}
+	cases := []struct {
+		name string
+		buf  []int16
+		want bool
+	}{
+		{"empty", nil, false},
+		{"digital silence", make([]int16, SampleRate), false},
+		{"quiet room", noise, false},
+		{"speech", loud(SampleRate), true},
+		{"short speech", loud(800), true},
+		{"burst in silence", append(make([]int16, SampleRate), loud(1600)...), true},
+		{"min int16", []int16{-32768}, true},
+	}
+	for _, tc := range cases {
+		if got := HasActivity(tc.buf); got != tc.want {
+			t.Errorf("%s: HasActivity() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestCanTerminateOnlyWithoutLiveReadLoop(t *testing.T) {
 	r := NewRecorder()
 	if !r.canTerminateLocked() {
