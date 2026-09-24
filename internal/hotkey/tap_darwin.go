@@ -33,6 +33,15 @@ static CGEventFlags flagFor(int keycode) {
 static CGEventRef onEvent(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *info) {
 	if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
 		CGEventTapEnable(tap, true);
+		// The release may have happened while the tap was off; don't leave the recording open.
+		int hold = atomic_load(&holdKeycode);
+		if (hold >= 0 && !(CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) & flagFor(hold))) {
+			voxTapEvent(evHoldUp);
+		}
+		return event;
+	}
+	if (type == kCGEventLeftMouseDown || type == kCGEventRightMouseDown || type == kCGEventOtherMouseDown) {
+		voxTapEvent(evOther); // an ⌥-click or ⌘-click, not a dictation
 		return event;
 	}
 	int code = (int)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
@@ -58,7 +67,8 @@ static bool createTap(void) {
 	if (!AXIsProcessTrusted()) {
 		return false;
 	}
-	CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventFlagsChanged);
+	CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventFlagsChanged) |
+		CGEventMaskBit(kCGEventLeftMouseDown) | CGEventMaskBit(kCGEventRightMouseDown) | CGEventMaskBit(kCGEventOtherMouseDown);
 	tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault, mask, onEvent, NULL);
 	return tap != NULL;
 }
