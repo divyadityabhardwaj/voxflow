@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { LogFrontendError } from "../../wailsjs/go/main/App";
 
 interface State {
   crashed: boolean;
@@ -16,6 +17,7 @@ export default class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[VoxFlow] UI crashed:", error, info.componentStack);
+    LogFrontendError(error.message, `${error.stack}\n${info.componentStack}`).catch(() => {});
   }
 
   render() {
