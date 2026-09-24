@@ -44,8 +44,8 @@ export default function ModelDownloader({ onDownloadComplete }: Props) {
                 Before you start
               </h3>
               <p className="text-sm text-secondary font-medium">
-                VoxFlow needs to download a speech recognition model (~142 MB
-                for Base model). The model runs completely offline on your
+                VoxFlow needs to download a speech recognition model (~490 MB
+                for the English model). The model runs completely offline on your
                 device for maximum privacy.
               </p>
             </div>

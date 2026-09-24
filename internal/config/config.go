@@ -25,18 +25,18 @@ type Config struct {
 	HandsFreeHotkey  string `json:"hands_free_hotkey"`   // e.g., "cmd+shift+space"
 	PushToTalkHotkey string `json:"push_to_talk_hotkey"` // e.g., "cmd+shift+p"
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
-	WhisperModel     string `json:"whisper_model"`       // tiny, base, small
-	WhisperLanguage  string `json:"whisper_language"`    // fixed language for transcription (en)
-	WhisperThreads   int    `json:"whisper_threads"`     // 0 = whisper default
-	MiniModeX        int    `json:"mini_mode_x"`         // Saved X position of mini pill
-	MiniModeY        int    `json:"mini_mode_y"`         // Saved Y position of mini pill
-	MaximizedX       int    `json:"maximized_x"`         // Saved X position of maximized window
-	MaximizedY       int    `json:"maximized_y"`         // Saved Y position of maximized window
-	MaximizedW       int    `json:"maximized_w"`         // Saved width of maximized window
-	MaximizedH       int    `json:"maximized_h"`         // Saved height of maximized window
-	GeminiModel      string `json:"gemini_model"`        // Saved Gemini model to use
-	LLMProvider      string `json:"llm_provider"`        // "gemini", "openrouter", "groq", "cerebras"
-	OpenRouterModel  string `json:"openrouter_model"`    // Saved OpenRouter model to use
+	WhisperModel     string `json:"whisper_model"`
+	WhisperLanguage  string `json:"whisper_language"` // fixed language for transcription (en)
+	WhisperThreads   int    `json:"whisper_threads"`  // 0 = whisper default
+	MiniModeX        int    `json:"mini_mode_x"`      // Saved X position of mini pill
+	MiniModeY        int    `json:"mini_mode_y"`      // Saved Y position of mini pill
+	MaximizedX       int    `json:"maximized_x"`      // Saved X position of maximized window
+	MaximizedY       int    `json:"maximized_y"`      // Saved Y position of maximized window
+	MaximizedW       int    `json:"maximized_w"`      // Saved width of maximized window
+	MaximizedH       int    `json:"maximized_h"`      // Saved height of maximized window
+	GeminiModel      string `json:"gemini_model"`     // Saved Gemini model to use
+	LLMProvider      string `json:"llm_provider"`     // "gemini", "openrouter", "groq", "cerebras"
+	OpenRouterModel  string `json:"openrouter_model"` // Saved OpenRouter model to use
 	GroqAPIKey       string `json:"groq_api_key"`
 	GroqModel        string `json:"groq_model"`
 	CerebrasAPIKey   string `json:"cerebras_api_key"`
@@ -165,7 +165,7 @@ func (c *Config) applyDefaults() {
 		c.PushToTalkHotkey = "cmd+shift+p"
 	}
 	if c.WhisperModel == "" {
-		c.WhisperModel = "base"
+		c.WhisperModel = "small.en"
 	}
 	if c.WhisperLanguage == "" {
 		c.WhisperLanguage = "en"

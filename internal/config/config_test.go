@@ -78,7 +78,7 @@ func TestMissingConfigIsNotAnError(t *testing.T) {
 	if err := c.Load(); err != nil || c.LoadWarning() != "" {
 		t.Errorf("first run: err=%v warning=%q", err, c.LoadWarning())
 	}
-	if c.GetWhisperModel() != "base" {
+	if c.GetWhisperModel() != "small.en" {
 		t.Error("defaults should be applied on first run")
 	}
 }
