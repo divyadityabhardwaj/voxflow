@@ -314,9 +314,11 @@ func (p *Pipeline) StopRecording() {
 	p.emit(events.RecordingStopped, nil)
 	logger.Infof("Recording stopped, processing...")
 
+	// Decided now: clicking VoxFlow while it processes must not swallow text meant for another app.
+	inApp := p.inApp != nil && p.inApp()
 	stream := p.stream
 	p.stream = nil
-	go p.processRecording(stream)
+	go p.processRecording(stream, inApp)
 }
 
 // CancelRecording discards the current recording: nothing is transcribed, pasted or saved.
@@ -525,7 +527,7 @@ func joinSpans(spans []span) string {
 	return strings.Join(parts, " ")
 }
 
-func (p *Pipeline) processRecording(stream *streamSession) {
+func (p *Pipeline) processRecording(stream *streamSession, inApp bool) {
 	processingStartTime := time.Now()
 
 	stopAndWavStart := time.Now()
@@ -602,7 +604,7 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 	llmModel := p.llmModel()
 
 	target := p.Target()
-	d := p.deliver(rawText, target.BundleID)
+	d := p.deliver(rawText, target.BundleID, inApp)
 	if d.method == "none" {
 		target = macos.AppInfo{Name: "VoxFlow"}
 	}
@@ -689,8 +691,12 @@ type delivery struct {
 }
 
 // deliver refines rawText as the mode for bundleID asks, then hands it to the
-// target app. A refinement failure always falls back to rawText.
-func (p *Pipeline) deliver(rawText, bundleID string) delivery {
+// target app, or keeps it in VoxFlow's window when inApp. A refinement failure
+// always falls back to rawText.
+func (p *Pipeline) deliver(rawText, bundleID string, inApp bool) delivery {
+	if inApp {
+		bundleID = "" // the previous app's rule doesn't apply to VoxFlow's own window
+	}
 	mode := p.config.ResolveRefinementMode(bundleID)
 	provider := p.config.GetLLMProvider()
 	d := delivery{text: rawText, usedRaw: true}
@@ -726,7 +732,7 @@ func (p *Pipeline) deliver(rawText, bundleID string) delivery {
 	if p.inject == nil {
 		return d
 	}
-	if p.inApp != nil && p.inApp() {
+	if inApp {
 		d.method = "none"
 		return d
 	}

@@ -180,6 +180,15 @@ func TestDeliver(t *testing.T) {
 			wantText: "raw words", wantMethod: "none", wantUsedRaw: true,
 			wantSent: map[string]string{},
 		},
+		{
+			name: "VoxFlow's own window ignores the previous app's rule",
+			cfg: &config.Config{RefinementMode: "refine", GeminiAPIKey: "k",
+				AppRules: map[string]config.AppRule{app: {RefinementMode: "raw"}}},
+			refiner:    stubRefiner{text: "Refined."},
+			inApp:      true,
+			wantRefine: true, wantText: "Refined.", wantMethod: "none",
+			wantSent: map[string]string{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -190,11 +199,8 @@ func TestDeliver(t *testing.T) {
 			if tt.focusWarn != "" {
 				p.focusTarget = func(macos.AppInfo) string { return tt.focusWarn }
 			}
-			if tt.inApp {
-				p.inApp = func() bool { return true }
-			}
 
-			d := p.deliver("raw words", app)
+			d := p.deliver("raw words", app, tt.inApp)
 
 			if got := ref.calls > 0; got != tt.wantRefine {
 				t.Errorf("refiner called = %v, want %v", got, tt.wantRefine)
