@@ -6,6 +6,12 @@
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "Divyaditya Bhardwaj",
+    "productName": "VoxFlow",
+    "productVersion": "0.0.0",
+    "copyright": "© 2026 Divyaditya Bhardwaj"
+  },
   "author": {
     "name": "divyadityabhardwaj1",
     "email": "divyaditya.bhardwaj@capgridsolutions.com"
