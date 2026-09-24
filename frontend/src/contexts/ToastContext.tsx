@@ -1,13 +1,30 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from "react";
+import { Events } from "../constants/events";
+
+export type PrivacyPane = "microphone" | "accessibility";
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 
 export interface Toast {
   id: number;
   message: string;
   type: "error" | "warning" | "success" | "info";
+  // The Privacy & Security pane that fixes the problem.
+  settings?: PrivacyPane;
+  action?: ToastAction;
+}
+
+export interface ToastOptions {
+  settings?: PrivacyPane;
+  action?: ToastAction;
+  ttl?: number | null;
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: Toast["type"]) => void;
+  showToast: (message: string, type?: Toast["type"], options?: ToastOptions) => void;
 }
 
 interface ToastListContextType {
@@ -16,7 +33,8 @@ interface ToastListContextType {
   clearToasts: () => void;
 }
 
-// Errors stay until dismissed so they can still be read after opening the window.
+// Errors, and anything with a fix to click, stay until dismissed so they can
+// still be read after opening the window.
 const TOAST_TTL_MS: Record<Toast["type"], number | null> = {
   error: null,
   warning: 6000,
@@ -24,32 +42,38 @@ const TOAST_TTL_MS: Record<Toast["type"], number | null> = {
   info: 3000,
 };
 
+const openPrivacySettings = (pane: PrivacyPane) =>
+  import("../../wailsjs/go/main/App").then(({ OpenPrivacySettings }) =>
+    OpenPrivacySettings(pane),
+  );
+
+export const settingsAction = (pane: PrivacyPane): ToastAction => ({
+  label: "Open System Settings",
+  onClick: () => void openPrivacySettings(pane),
+});
+
 const ToastContext = createContext<ToastContextType | null>(null);
 // Separate so showToast callers don't re-render on every toast.
 const ToastListContext = createContext<ToastListContextType | null>(null);
 
-import { Events } from "../constants/events";
+const ICONS: Record<Toast["type"], string> = {
+  error: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+  warning:
+    "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
+  success: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+  info: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+};
+
+const TONE: Record<Toast["type"], string> = {
+  error: "bg-red-500/10 border-red-500/30",
+  warning: "bg-amber-500/10 border-amber-500/30",
+  success: "bg-emerald-500/10 border-emerald-500/30",
+  info: "bg-blue-500/10 border-blue-500/30",
+};
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMiniMode, setIsMiniMode] = useState(false);
-
-  React.useEffect(() => {
-    import("../../wailsjs/go/main/App").then(({ IsMiniMode }) => {
-      IsMiniMode().then(setIsMiniMode);
-    });
-
-    let unsub: (() => void) | undefined;
-    import("../../wailsjs/runtime/runtime").then(({ EventsOn }) => {
-      unsub = EventsOn(Events.MiniMode, (isMini: boolean) => {
-        setIsMiniMode(isMini);
-      });
-    });
-
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
 
   const nextId = useRef(0);
 
@@ -60,18 +84,52 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const clearToasts = useCallback(() => setToasts([]), []);
 
   const showToast = useCallback(
-    (message: string, type: Toast["type"] = "error") => {
+    (message: string, type: Toast["type"] = "error", options: ToastOptions = {}) => {
       const id = nextId.current++;
+      const { settings, action = settings && settingsAction(settings) } = options;
+      // App.tsx also forwards backend toasts, without `settings`; merge the two.
       setToasts((prev) =>
         prev.some((t) => t.message === message)
-          ? prev
-          : [...prev, { id, message, type }],
+          ? prev.map((t) =>
+              t.message === message
+                ? { ...t, settings: t.settings ?? settings, action: t.action ?? action }
+                : t,
+            )
+          : [...prev, { id, message, type, settings, action }],
       );
-      const ttl = TOAST_TTL_MS[type];
-      if (ttl) setTimeout(() => dismissToast(id), ttl);
+      const ttl = options.ttl !== undefined ? options.ttl : settings ? null : TOAST_TTL_MS[type];
+      if (ttl) {
+        setTimeout(
+          () => setToasts((prev) => prev.filter((t) => t.id !== id || t.settings)),
+          ttl,
+        );
+      }
     },
-    [dismissToast],
+    [],
   );
+
+  React.useEffect(() => {
+    let unsubs: (() => void)[] = [];
+    let cancelled = false;
+    import("../../wailsjs/go/main/App").then(({ IsMiniMode }) => {
+      IsMiniMode().then(setIsMiniMode);
+    });
+    import("../../wailsjs/runtime/runtime").then(({ EventsOn }) => {
+      if (cancelled) return;
+      unsubs = [
+        EventsOn(Events.MiniMode, (isMini: boolean) => setIsMiniMode(isMini)),
+        EventsOn(
+          Events.Toast,
+          (d: { message: string; type?: Toast["type"]; settings?: PrivacyPane }) =>
+            showToast(d.message, d.type ?? "error", { settings: d.settings }),
+        ),
+      ];
+    });
+    return () => {
+      cancelled = true;
+      unsubs.forEach((u) => u());
+    };
+  }, [showToast]);
 
   const value = useMemo(() => ({ showToast }), [showToast]);
   const listValue = useMemo(
@@ -95,81 +153,35 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toast.id}
               role={toast.type === "error" ? "alert" : undefined}
-              className={`
-                pointer-events-auto max-w-sm p-4 rounded-xl shadow-soft-md animate-scale-in border
-                ${toast.type === "error" ? "bg-red-500/10 text-text border-red-500/30" : ""}
-                ${toast.type === "warning" ? "bg-amber-500/10 text-text border-amber-500/30" : ""}
-                ${
-                  toast.type === "success" ? "bg-emerald-500/10 text-text border-emerald-500/30" : ""
-                }
-                ${toast.type === "info" ? "bg-blue-500/10 text-text border-blue-500/30" : ""}
-              `}
+              className={`pointer-events-auto max-w-sm p-4 rounded-xl shadow-soft-md animate-scale-in border text-text ${TONE[toast.type]}`}
             >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  {toast.type === "error" && (
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
+                <svg
+                  className="w-5 h-5 flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[toast.type]} />
+                </svg>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium">{toast.message}</p>
+                  {toast.action && (
+                    <button
+                      type="button"
+                      className="btn-secondary !py-1 !px-2.5 !text-xs mt-2"
+                      onClick={() => {
+                        toast.action!.onClick();
+                        dismissToast(toast.id);
+                      }}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  )}
-                  {toast.type === "warning" && (
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  )}
-                  {toast.type === "success" && (
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  )}
-                  {toast.type === "info" && (
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                      {toast.action.label}
+                    </button>
                   )}
                 </div>
-
-                <p className="text-[13px] font-medium flex-1">{toast.message}</p>
 
                 <button
                   type="button"
@@ -183,12 +195,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                     strokeWidth={2}
+                    aria-hidden="true"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
