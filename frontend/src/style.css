@@ -310,6 +310,7 @@ body {
   border-bottom-width: 2px;
   border-radius: var(--radius-sm);
   background: var(--surface);
+  font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.02em;

@@ -132,7 +132,7 @@ export default function AdvancedSettings() {
               {!active && (
                 <button
                   type="button"
-                  className="btn btn-ghost !px-2 !py-1 text-danger"
+                  className="btn btn-ghost !px-2 !py-1 !text-danger"
                   aria-label={`Delete ${m.name}`}
                   onClick={() => setToDelete(m.name)}
                 >

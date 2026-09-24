@@ -98,7 +98,7 @@ export default function AppRulesSettings() {
                 </p>
                 <button
                   type="button"
-                  className="btn btn-ghost !px-2 !py-1 text-danger"
+                  className="btn btn-ghost !px-2 !py-1 !text-danger"
                   aria-label={`Remove rule for ${name}`}
                   onClick={() => remove(rule.bundle_id)}
                 >
