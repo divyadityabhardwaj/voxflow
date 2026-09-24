@@ -61,6 +61,7 @@ type Pipeline struct {
 	focusTarget func(target macos.AppInfo) string // nil skips the focus check
 	micStatus   func() string                     // nil skips the permission check
 	requestMic  func() bool
+	inApp       func() bool // true keeps the text in VoxFlow's window instead of pasting it; nil = never
 
 	// lifecycleMu serialises start, stop and cancel, so a stop or second start
 	// that races a slow microphone open waits for it instead of interleaving.
@@ -122,6 +123,7 @@ func New(cfg Config) *Pipeline {
 		cfg.Audio.SetLevelCallback(func(level float64) { p.emit(events.AudioLevel, level) })
 	}
 	p.focusTarget = focusTarget
+	p.inApp = p.dictatingIntoOwnWindow
 	p.micStatus, p.requestMic = macos.MicrophoneStatus, macos.RequestMicrophoneAccess
 	return p
 }
@@ -601,6 +603,9 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 
 	target := p.Target()
 	d := p.deliver(rawText, target.BundleID)
+	if d.method == "none" {
+		target = macos.AppInfo{Name: "VoxFlow"}
+	}
 
 	timeMs := d.llmTime.Milliseconds()
 	var tps float64
@@ -677,7 +682,7 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 
 type delivery struct {
 	text    string
-	method  string // "paste", "type" or "clipboard"
+	method  string // "paste", "type", "clipboard", or "none" when kept in VoxFlow's window
 	usedRaw bool   // raw text on purpose: raw mode, no key, or the LLM judged it already clean
 	tokens  int
 	llmTime time.Duration
@@ -719,6 +724,10 @@ func (p *Pipeline) deliver(rawText, bundleID string) delivery {
 	}
 
 	if p.inject == nil {
+		return d
+	}
+	if p.inApp != nil && p.inApp() {
+		d.method = "none"
 		return d
 	}
 	d.method = p.config.InjectMethodFor(bundleID)
@@ -769,6 +778,18 @@ func (p *Pipeline) copyOrLog(text string) {
 	if err := p.copyText(text); err != nil {
 		logger.Warnf("Could not copy text: %v", err)
 	}
+}
+
+// dictatingIntoOwnWindow reports whether the user dictated with VoxFlow's full
+// window in front (its "Try it" boxes). Pasting would switch to the previous
+// app, so the window shows the text instead. The pill doesn't count: clicking
+// it makes VoxFlow frontmost too, but the text is meant for the previous app.
+func (p *Pipeline) dictatingIntoOwnWindow() bool {
+	if p.windows == nil || !p.windows.UserExplicitlyMaximized() {
+		return false
+	}
+	front, err := macos.FrontmostAppInfo()
+	return err == nil && macos.IsSelf(front)
 }
 
 // focusTarget brings target back to the front if VoxFlow took focus, and

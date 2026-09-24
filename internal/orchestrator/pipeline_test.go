@@ -71,6 +71,7 @@ func TestDeliver(t *testing.T) {
 		refiner   stubRefiner
 		injectErr error
 		focusWarn string
+		inApp     bool
 
 		wantRefine  bool
 		wantText    string
@@ -172,6 +173,13 @@ func TestDeliver(t *testing.T) {
 			focusWarn: "Focus moved to Slack",
 			wantText:  "raw words", wantMethod: "clipboard", wantUsedRaw: true,
 		},
+		{
+			name:     "dictating into VoxFlow's own window sends nothing",
+			cfg:      &config.Config{RefinementMode: "raw"},
+			inApp:    true,
+			wantText: "raw words", wantMethod: "none", wantUsedRaw: true,
+			wantSent: map[string]string{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -181,6 +189,9 @@ func TestDeliver(t *testing.T) {
 			p := newTestPipeline(tt.cfg, &ref, rec, tt.injectErr)
 			if tt.focusWarn != "" {
 				p.focusTarget = func(macos.AppInfo) string { return tt.focusWarn }
+			}
+			if tt.inApp {
+				p.inApp = func() bool { return true }
 			}
 
 			d := p.deliver("raw words", app)
