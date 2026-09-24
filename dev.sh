@@ -17,31 +17,40 @@ if [ "$(basename "$(pwd)")" = "frontend" ]; then
     echo -e "${BLUE}📁 Running from frontend/, moved to root${NC}"
 fi
 
-# Check if Go is installed
+# version_ge HAVE NEED
+version_ge() {
+    [ "$(printf '%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+}
+
+GO_MIN=$(awk '/^go /{print $2}' go.mod)
+# Vite 7 needs Node 20.19+
+NODE_MIN=20.19.0
+
 if ! command -v go &> /dev/null; then
-    echo -e "${RED}❌ Go is not installed. Please install Go 1.21+ first.${NC}"
+    echo -e "${RED}❌ Go is not installed. Please install Go $GO_MIN+ first.${NC}"
     echo "   Visit: https://go.dev/dl/"
     exit 1
 fi
-
-# Check if Node.js is installed
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}❌ Node.js is not installed. Please install Node.js 18+ first.${NC}"
-    echo "   Visit: https://nodejs.org/"
+GO_HAVE=$(go env GOVERSION | sed 's/^go//')
+if ! version_ge "$GO_HAVE" "$GO_MIN"; then
+    echo -e "${RED}❌ Go $GO_HAVE is too old; go.mod needs $GO_MIN+.${NC}"
     exit 1
 fi
 
-# Check for Ollama
+if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
+    echo -e "${RED}❌ Node.js is not installed. Please install Node.js $NODE_MIN+ first.${NC}"
+    echo "   Visit: https://nodejs.org/"
+    exit 1
+fi
+NODE_HAVE=$(node --version | sed 's/^v//')
+if ! version_ge "$NODE_HAVE" "$NODE_MIN"; then
+    echo -e "${RED}❌ Node.js $NODE_HAVE is too old; Vite needs $NODE_MIN+.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Go $GO_HAVE, Node.js $NODE_HAVE${NC}"
+
 if ! command -v ollama &> /dev/null; then
-    echo -e "${YELLOW}⚠️  ollama not found. Installing via Homebrew...${NC}"
-    brew install ollama
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}❌ Failed to install ollama${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✅ ollama installed${NC}"
-else
-    echo -e "${GREEN}✅ ollama is available${NC}"
+    echo -e "${YELLOW}ℹ️  ollama not found (optional, only for local refinement: brew install ollama)${NC}"
 fi
 
 # Check if wails is installed
@@ -57,7 +66,7 @@ if ! command -v wails &> /dev/null; then
     
     # Install wails
     echo -e "${BLUE}📦 Installing Wails CLI...${NC}"
-    go install github.com/wailsapp/wails/v2/cmd/wails@latest
+    go install "github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
     
     if ! command -v wails &> /dev/null; then
         echo -e "${YELLOW}⚠️  Wails not in PATH after install. Trying to use from GOPATH...${NC}"
@@ -99,6 +108,10 @@ if ! brew list portaudio &> /dev/null 2>&1; then
     echo -e "${GREEN}✅ PortAudio installed${NC}"
 else
     echo -e "${GREEN}✅ PortAudio is installed${NC}"
+fi
+
+if ! command -v whisper-cli &> /dev/null; then
+    echo -e "${YELLOW}⚠️  whisper-cli not found; transcription won't work in dev. Run: brew install whisper-cpp${NC}"
 fi
 
 echo ""
