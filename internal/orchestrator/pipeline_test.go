@@ -3,12 +3,15 @@ package orchestrator
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"voxflow/internal/config"
 	"voxflow/internal/events"
 	"voxflow/internal/hotkey"
+	"voxflow/internal/injection"
 	"voxflow/internal/llm"
+	"voxflow/internal/macos"
 )
 
 type stubRefiner struct {
@@ -67,12 +70,14 @@ func TestDeliver(t *testing.T) {
 		cfg       *config.Config
 		refiner   stubRefiner
 		injectErr error
+		focusWarn string
 
 		wantRefine  bool
 		wantText    string
 		wantMethod  string
 		wantUsedRaw bool
-		wantToast   string // substring; "" means no toast
+		wantToast   string            // substring; "" means no toast
+		wantSent    map[string]string // defaults to wantMethod=wantText
 	}{
 		{
 			name:       "refine with key pastes refined text",
@@ -139,11 +144,33 @@ func TestDeliver(t *testing.T) {
 			wantText: "raw words", wantMethod: "clipboard", wantUsedRaw: true,
 		},
 		{
-			name:      "injection failure is reported",
+			name:      "missing Accessibility leaves the text copied",
 			cfg:       &config.Config{RefinementMode: "raw"},
-			injectErr: errors.New("not trusted"),
-			wantText:  "raw words", wantMethod: "paste", wantUsedRaw: true,
+			injectErr: injection.ErrNoAccessibility,
+			wantText:  "raw words", wantMethod: "clipboard", wantUsedRaw: true,
 			wantToast: "Accessibility",
+			wantSent:  map[string]string{"paste": "raw words"},
+		},
+		{
+			name:      "other paste failures copy the text",
+			cfg:       &config.Config{RefinementMode: "raw"},
+			injectErr: errors.New("CGEventPost failed"),
+			wantText:  "raw words", wantMethod: "clipboard", wantUsedRaw: true,
+			wantToast: "text copied",
+			wantSent:  map[string]string{"paste": "raw words", "clipboard": "raw words"},
+		},
+		{
+			name:      "focus moved to another app copies instead of pasting",
+			cfg:       &config.Config{RefinementMode: "raw"},
+			focusWarn: "Focus moved to Slack — text copied, press ⌘V",
+			wantText:  "raw words", wantMethod: "clipboard", wantUsedRaw: true,
+			wantToast: "Focus moved to Slack",
+		},
+		{
+			name:      "focus check does not block copy-only",
+			cfg:       &config.Config{RefinementMode: "copy-only"},
+			focusWarn: "Focus moved to Slack",
+			wantText:  "raw words", wantMethod: "clipboard", wantUsedRaw: true,
 		},
 	}
 
@@ -152,6 +179,9 @@ func TestDeliver(t *testing.T) {
 			ref := tt.refiner
 			rec := &recorder{}
 			p := newTestPipeline(tt.cfg, &ref, rec, tt.injectErr)
+			if tt.focusWarn != "" {
+				p.focusTarget = func(macos.AppInfo) string { return tt.focusWarn }
+			}
 
 			d := p.deliver("raw words", app)
 
@@ -162,8 +192,12 @@ func TestDeliver(t *testing.T) {
 				t.Errorf("got text=%q method=%q usedRaw=%v, want %q %q %v",
 					d.text, d.method, d.usedRaw, tt.wantText, tt.wantMethod, tt.wantUsedRaw)
 			}
-			if len(rec.sent) != 1 || rec.sent[tt.wantMethod] != tt.wantText {
-				t.Errorf("sent %v, want only %s=%q", rec.sent, tt.wantMethod, tt.wantText)
+			wantSent := tt.wantSent
+			if wantSent == nil {
+				wantSent = map[string]string{tt.wantMethod: tt.wantText}
+			}
+			if !reflect.DeepEqual(rec.sent, wantSent) {
+				t.Errorf("sent %v, want %v", rec.sent, wantSent)
 			}
 
 			switch {
@@ -300,5 +334,21 @@ func TestStreamSessionIgnoresLateChunks(t *testing.T) {
 	}
 	if fmt.Sprint(got) != "[2]" {
 		t.Fatalf("queued %v, want [2]", got)
+	}
+}
+
+func TestStartRecordingWithMicrophoneDeniedReturnsToIdle(t *testing.T) {
+	rec := &recorder{}
+	p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)
+	p.micStatus = func() string { return "denied" }
+
+	if err := p.StartRecording(); err == nil {
+		t.Fatal("expected an error")
+	}
+	if p.State() != hotkey.StateIdle {
+		t.Fatalf("state = %s, want Idle", p.State())
+	}
+	if len(rec.toasts) != 1 || rec.toasts[0]["settings"] != "microphone" {
+		t.Fatalf("toasts = %v, want one pointing at the microphone settings", rec.toasts)
 	}
 }

@@ -31,8 +31,8 @@ type WindowController interface {
 	UserExplicitlyMaximized() bool
 }
 
-// frontmostApp finds the app a new recording will paste into.
-var frontmostApp = macos.FrontmostApp
+// targetApp finds the app a recording will paste into.
+var targetApp = macos.TargetApp
 
 // Anything shorter (0.1 s) is not worth a Whisper call.
 const minTranscribeSamples = 1600
@@ -54,10 +54,12 @@ type Pipeline struct {
 	onState        func(hotkey.State)
 
 	// Seams for tests; they default to the Wails runtime and the injection service.
-	emit     func(name string, data ...interface{})
-	inject   func(text string) error
-	typeText func(text string) error
-	copyText func(text string) error
+	emit        func(name string, data ...interface{})
+	inject      func(text string) error
+	typeText    func(text string) error
+	copyText    func(text string) error
+	focusTarget func(target macos.AppInfo) string // nil skips the focus check
+	micStatus   func() string                     // nil skips the permission check
 
 	// lifecycleMu serialises start, stop and cancel, so a stop or second start
 	// that races a slow microphone open waits for it instead of interleaving.
@@ -66,10 +68,8 @@ type Pipeline struct {
 	state       hotkey.State
 	stream      *streamSession // guarded by lifecycleMu
 
-	targetMu          sync.Mutex
-	targetGen         int
-	recordingBundleID string
-	recordingAppName  string
+	targetMu sync.Mutex
+	target   macos.AppInfo
 
 	muteMu   sync.Mutex
 	muteWant bool
@@ -114,6 +114,8 @@ func New(cfg Config) *Pipeline {
 	if s := cfg.Injection; s != nil {
 		p.inject, p.typeText, p.copyText = s.Inject, s.Type, s.CopyToClipboard
 	}
+	p.focusTarget = focusTarget
+	p.micStatus = macos.MicrophoneStatus
 	return p
 }
 
@@ -171,7 +173,16 @@ func (p *Pipeline) StartRecording() error {
 		return err
 	}
 
-	go p.CaptureRecordingTarget()
+	if err := p.checkMicrophone(); err != nil {
+		p.resetToIdle()
+		p.emitSettingsToast(err.Error(), "error", "microphone")
+		return err
+	}
+
+	p.targetMu.Lock()
+	p.target = macos.AppInfo{}
+	p.targetMu.Unlock()
+	p.captureTarget()
 	if p.windows != nil && !p.windows.UserExplicitlyMaximized() {
 		p.windows.ShowMini()
 	}
@@ -202,28 +213,40 @@ func (p *Pipeline) StartRecording() error {
 	return nil
 }
 
-func (p *Pipeline) CaptureRecordingTarget() {
-	// Clear first: the lookup takes a while, and a short dictation that stops before
-	// it returns must not inherit the previous recording's app rules.
-	p.targetMu.Lock()
-	p.targetGen++
-	gen := p.targetGen
-	p.recordingBundleID, p.recordingAppName = "", ""
-	p.targetMu.Unlock()
-
-	bundleID, name, err := frontmostApp()
+// captureTarget records the app the dictation is for. It runs again at stop,
+// since the user may click into the real target while speaking.
+func (p *Pipeline) captureTarget() {
+	app, err := targetApp()
 	if err != nil {
-		logger.Debugf("[Pipeline] Could not detect frontmost app: %v", err)
-	} else {
-		logger.Infof("[Pipeline] Recording target app: %s (%s)", name, bundleID)
+		logger.Debugf("[Pipeline] Could not detect target app: %v", err)
+		return
 	}
-
+	logger.Infof("[Pipeline] Recording target app: %s (%s)", app.Name, app.BundleID)
 	p.targetMu.Lock()
-	if gen == p.targetGen { // a newer recording has started its own lookup
-		p.recordingBundleID, p.recordingAppName = bundleID, name
-	}
+	p.target = app
 	p.targetMu.Unlock()
 }
+
+// checkMicrophone asks for microphone access the first time, and fails when
+// it has been refused.
+func (p *Pipeline) checkMicrophone() error {
+	if p.micStatus == nil {
+		return nil
+	}
+	switch p.micStatus() {
+	case "denied", "restricted":
+		return errMicrophoneDenied
+	case "notDetermined":
+		granted := make(chan bool, 1)
+		go func() { granted <- macos.RequestMicrophoneAccess() }() // never on the main thread
+		if !<-granted {
+			return errMicrophoneDenied
+		}
+	}
+	return nil
+}
+
+var errMicrophoneDenied = errors.New("Microphone access is off — turn on VoxFlow in System Settings › Privacy & Security › Microphone")
 
 func (p *Pipeline) StopRecording() {
 	p.lifecycleMu.Lock()
@@ -231,6 +254,7 @@ func (p *Pipeline) StopRecording() {
 	if p.State() != hotkey.StateRecording {
 		return
 	}
+	p.captureTarget()
 	p.setState(hotkey.StateProcessing)
 	p.emit(events.RecordingStopped, nil)
 	logger.Infof("Recording stopped, processing...")
@@ -461,7 +485,7 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 	audioDuration := p.audioRecorder.GetDuration()
 
 	if p.audioRecorder.AllSilent() {
-		p.emitToast("Microphone access is off — turn on VoxFlow in System Settings › Privacy & Security › Microphone", "warning")
+		p.emitSettingsToast(errMicrophoneDenied.Error(), "warning", "microphone")
 		p.resetToIdle()
 		return
 	}
@@ -510,10 +534,8 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 	llmProvider := p.config.GetLLMProvider()
 	llmModel := p.llmModel()
 
-	// Read the target only now: by this point the frontmost-app lookup has had
-	// the whole stop/transcribe window to finish.
-	targetBundleID, targetAppName := p.RecordingTarget()
-	d := p.deliver(rawText, targetBundleID)
+	target := p.Target()
+	d := p.deliver(rawText, target.BundleID)
 
 	timeMs := d.llmTime.Milliseconds()
 	var tps float64
@@ -533,7 +555,7 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 
 	if p.historyService != nil {
 		go func() {
-			if err := p.historyService.SaveAsync(targetAppName, rawText, d.text, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
+			if err := p.historyService.SaveAsync(target.Name, rawText, d.text, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
 				logger.Errorf("Failed to save to history: %v", err)
 			}
 		}()
@@ -575,6 +597,8 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 		"used_raw":         d.usedRaw,
 		"elapsed":          totalProcessingTime.Milliseconds(),
 		"words_per_second": effectiveWPS,
+		"target_app":       target.Name,
+		"method":           d.method,
 		"details": map[string]float64{
 			"audio":      audioDuration.Seconds(),
 			"stop_wav":   stopAndWavDuration.Seconds(),
@@ -637,25 +661,69 @@ func (p *Pipeline) deliver(rawText, bundleID string) delivery {
 		d.method = "clipboard"
 	}
 
-	var err error
-	switch d.method {
-	case "clipboard":
-		if copyErr := p.copyText(d.text); copyErr != nil {
-			logger.Warnf("Could not copy text: %v", copyErr)
-		} else {
-			logger.Infof("Text copied to clipboard")
-		}
-	case "type":
-		logger.Infof("[Pipeline] Per-app rule: typing keystrokes for %q", bundleID)
-		err = p.typeText(d.text)
-	default:
-		err = p.inject(d.text)
-	}
-	if err != nil {
-		logger.Warnf("Could not inject text: %v", err)
-		p.emitToast("Text injection failed — grant Accessibility permission to VoxFlow in System Preferences → Privacy & Security → Accessibility", "error")
-	}
+	d.method = p.handOff(d.text, d.method)
 	return d
+}
+
+// handOff delivers text by method and returns how it actually arrived:
+// "paste", "type" or "clipboard".
+func (p *Pipeline) handOff(text, method string) string {
+	if method != "clipboard" && p.focusTarget != nil {
+		if warning := p.focusTarget(p.Target()); warning != "" {
+			p.copyOrLog(text)
+			p.emitToast(warning, "warning")
+			return "clipboard"
+		}
+	}
+
+	var err error
+	switch method {
+	case "clipboard":
+		p.copyOrLog(text)
+		return method
+	case "type":
+		err = p.typeText(text)
+	default:
+		method = "paste"
+		err = p.inject(text)
+	}
+	switch {
+	case err == nil:
+		return method
+	case errors.Is(err, injection.ErrNoAccessibility): // the text is already on the clipboard
+		p.emitSettingsToast("Couldn't paste — text copied. Press ⌘V, and allow VoxFlow in Accessibility settings", "warning", "accessibility")
+	default:
+		logger.Warnf("Could not inject text: %v", err)
+		p.copyOrLog(text)
+		p.emitToast("Couldn't paste — text copied, press ⌘V", "warning")
+	}
+	return "clipboard"
+}
+
+func (p *Pipeline) copyOrLog(text string) {
+	if err := p.copyText(text); err != nil {
+		logger.Warnf("Could not copy text: %v", err)
+	}
+}
+
+// focusTarget brings target back to the front if VoxFlow took focus, and
+// returns a warning instead when the text should not be pasted.
+func focusTarget(target macos.AppInfo) string {
+	if target.PID <= 0 {
+		return ""
+	}
+	front, err := macos.FrontmostAppInfo()
+	switch {
+	case err != nil || front.PID == target.PID:
+		return ""
+	case macos.IsSelf(front):
+		if macos.ActivateApp(target.PID, 500*time.Millisecond) {
+			return ""
+		}
+		return "Couldn't switch back to " + target.Name + " — text copied, press ⌘V"
+	default:
+		return "Focus moved to " + front.Name + " — text copied, press ⌘V"
+	}
 }
 
 func (p *Pipeline) llmModel() string {
@@ -683,6 +751,16 @@ func (p *Pipeline) emitToast(message, toastType string) {
 	})
 }
 
+// emitSettingsToast names the Privacy & Security pane ("microphone" or
+// "accessibility") that fixes the problem, so the UI can offer to open it.
+func (p *Pipeline) emitSettingsToast(message, toastType, pane string) {
+	p.emit(events.Toast, map[string]interface{}{
+		"message":  message,
+		"type":     toastType,
+		"settings": pane,
+	})
+}
+
 func (p *Pipeline) resetToIdle() {
 	p.setState(hotkey.StateIdle)
 	p.setMuted(false)
@@ -700,10 +778,10 @@ func (p *Pipeline) ToggleRecording() string {
 	return p.State().String()
 }
 
-func (p *Pipeline) RecordingTarget() (bundleID, appName string) {
+func (p *Pipeline) Target() macos.AppInfo {
 	p.targetMu.Lock()
 	defer p.targetMu.Unlock()
-	return p.recordingBundleID, p.recordingAppName
+	return p.target
 }
 
 // setMuted asks for the system output to be muted or restored. Each call runs
