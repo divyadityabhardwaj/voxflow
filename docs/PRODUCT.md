@@ -125,9 +125,9 @@ Refinement asks the model for structured JSON (`refined_text`, `ok_to_go`, etc.)
 
 ## Current scope & limits
 
-- **Platform**: macOS-focused (CGO / AppKit / CoreGraphics paths). Non-Darwin stubs exist where needed for compile, not as a full Windows/Linux product.
-- **Signing**: releases are not Apple-notarized; users may need `xattr -cr` on first open.
-- **Distribution**: GitHub Actions builds a darwin/arm64 DMG on version tags.
+- **Platform**: macOS 11+ on Apple Silicon (CGO / AppKit / CoreGraphics paths). Non-Darwin stubs exist where needed for compile, not as a full Windows/Linux product.
+- **Signing**: releases are ad-hoc signed, not Apple-notarized; users approve the first open in Privacy & Security (or run `xattr -cr`), and permissions may need re-granting after an update.
+- **Distribution**: GitHub Actions builds a darwin/arm64 DMG on version tags. The release app is self-contained: PortAudio is linked statically, and `whisper-cli` / `whisper-server` (whisper.cpp built with Metal shaders embedded) ship in `voxflow.app/Contents/MacOS/`, where the app looks first. Both are built from source for macOS 11 by `scripts/build-deps.sh`; CI fails the release if any binary links a Homebrew library. Dev builds still use Homebrew's `portaudio` and `whisper-cpp`.
 
 ## Related reading
 
