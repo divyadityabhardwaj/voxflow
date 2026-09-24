@@ -25,6 +25,7 @@ export const Events = {
   Error: "error",
   OpenHistory: "open-history",
   OpenSettings: "open-settings",
+  OpenHome: "open-home",
 
   UpdateAvailable: "update-available",
 } as const;

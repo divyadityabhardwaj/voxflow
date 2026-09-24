@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 
 	"voxflow/internal/config"
+	"voxflow/internal/events"
 	"voxflow/internal/logger"
 
 	"github.com/wailsapp/wails/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"voxflow/internal/window"
 )
 
@@ -55,13 +57,6 @@ func main() {
 	fileMenu.AddText("Reset Window Position", nil, func(cd *menu.CallbackData) {
 		app.ResetWindowPosition()
 	})
-	// ⌘H is Hide on macOS.
-	fileMenu.AddText("View History", keys.CmdOrCtrl("y"), func(cd *menu.CallbackData) {
-		app.OpenHistoryWindow()
-	})
-	fileMenu.AddText("Settings", keys.CmdOrCtrl(","), func(cd *menu.CallbackData) {
-		app.OpenSettings()
-	})
 	fileMenu.AddSeparator()
 	fileMenu.AddText("Close Window", keys.CmdOrCtrl("w"), func(cd *menu.CallbackData) {
 		app.ShowMiniMode()
@@ -71,6 +66,21 @@ func main() {
 	})
 
 	appMenu.Append(menu.EditMenu())
+
+	// ⌘H is Hide on macOS, so views use ⌘1/⌘2 and ⌘, like other Mac apps.
+	viewMenu := appMenu.AddSubmenu("View")
+	viewMenu.AddText("Home", keys.CmdOrCtrl("1"), func(cd *menu.CallbackData) {
+		app.showMainWindow()
+		runtime.EventsEmit(app.ctx, events.OpenHome, nil)
+	})
+	viewMenu.AddText("History", keys.CmdOrCtrl("2"), func(cd *menu.CallbackData) {
+		app.showMainWindow()
+		app.OpenHistoryWindow()
+	})
+	viewMenu.AddText("Settings…", keys.CmdOrCtrl(","), func(cd *menu.CallbackData) {
+		app.showMainWindow()
+		app.OpenSettings()
+	})
 
 	err := wails.Run(&options.App{
 		Title:     "VoxFlow",
