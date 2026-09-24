@@ -69,11 +69,14 @@ func TestTailBufferKeepsTheEnd(t *testing.T) {
 }
 
 func TestInferenceTimeoutScalesWithAudio(t *testing.T) {
-	if got := inferenceTimeout(44); got != 10*time.Second {
-		t.Errorf("empty WAV: %s, want 10s", got)
+	if got := inferenceTimeout(44); got != 120*time.Second {
+		t.Errorf("empty WAV: %s, want 120s", got)
 	}
-	if got := inferenceTimeout(44 + 8*16000*2); got != 34*time.Second {
-		t.Errorf("8 s WAV: %s, want 34s", got)
+	if got := inferenceTimeout(44 + 8*16000*2); got != 120*time.Second {
+		t.Errorf("8 s WAV: %s, want 120s", got)
+	}
+	if got := inferenceTimeout(44 + 60*16000*2); got != 210*time.Second {
+		t.Errorf("60 s WAV: %s, want 210s", got)
 	}
 }
 

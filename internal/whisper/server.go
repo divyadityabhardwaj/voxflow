@@ -37,10 +37,11 @@ var (
 )
 
 // inferenceTimeout is generous for any model on the CPU; a request past it means a
-// wedged server that would stall every later chunk too.
+// wedged server that would stall every later chunk too. Whisper encodes a fixed
+// 30 s window however short the audio, so that is the floor for the audio term.
 func inferenceTimeout(wavLen int) time.Duration {
 	audio := time.Duration(max(wavLen-44, 0)) * time.Second / (16000 * 2)
-	return 10*time.Second + 3*audio
+	return 30*time.Second + 3*max(audio, 30*time.Second)
 }
 
 const outputTailSize = 4 << 10
