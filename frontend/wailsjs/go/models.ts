@@ -128,6 +128,7 @@ export namespace main {
 	    refinement_mode: string;
 	    mute_system_audio: boolean;
 	    vocabulary: string;
+	    input_device: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConfigResponse(source);
@@ -155,6 +156,7 @@ export namespace main {
 	        this.refinement_mode = source["refinement_mode"];
 	        this.mute_system_audio = source["mute_system_audio"];
 	        this.vocabulary = source["vocabulary"];
+	        this.input_device = source["input_device"];
 	    }
 	}
 	export class FrontmostAppInfo {

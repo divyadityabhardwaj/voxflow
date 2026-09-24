@@ -30,6 +30,7 @@ type ConfigResponse struct {
 	RefinementMode      string `json:"refinement_mode"`
 	MuteSystemAudio     bool   `json:"mute_system_audio"`
 	Vocabulary          string `json:"vocabulary"`
+	InputDevice         string `json:"input_device"`
 }
 
 func (a *App) GetConfig() *ConfigResponse {
@@ -54,6 +55,7 @@ func (a *App) GetConfig() *ConfigResponse {
 		RefinementMode:      a.config.GetRefinementMode(),
 		MuteSystemAudio:     a.config.GetMuteSystemAudio(),
 		Vocabulary:          a.config.GetVocabulary(),
+		InputDevice:         a.config.GetInputDevice(),
 	}
 }
 

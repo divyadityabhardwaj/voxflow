@@ -170,6 +170,10 @@ export function OpenHistoryWindow() {
   return window['go']['main']['App']['OpenHistoryWindow']();
 }
 
+export function OpenLogFile() {
+  return window['go']['main']['App']['OpenLogFile']();
+}
+
 export function OpenPrivacySettings(arg1) {
   return window['go']['main']['App']['OpenPrivacySettings'](arg1);
 }

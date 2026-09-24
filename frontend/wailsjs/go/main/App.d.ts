@@ -90,6 +90,8 @@ export function LogFrontendError(arg1:string,arg2:string):Promise<void>;
 
 export function OpenHistoryWindow():Promise<void>;
 
+export function OpenLogFile():Promise<void>;
+
 export function OpenPrivacySettings(arg1:string):Promise<void>;
 
 export function OpenSettings():Promise<void>;
