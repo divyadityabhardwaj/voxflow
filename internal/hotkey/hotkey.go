@@ -477,6 +477,10 @@ func (m *Manager) syncEscapeHotkey() {
 		}
 		m.escapeHK = hk
 		go m.forward(hk.Keydown(), escapeDown)
+		go func() { // unread, the library's key-up relay goroutine never ends
+			for range hk.Keyup() {
+			}
+		}()
 	case !want && m.escapeHK != nil:
 		m.escapeHK.Unregister()
 		m.escapeHK = nil
