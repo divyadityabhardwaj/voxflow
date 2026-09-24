@@ -37,9 +37,10 @@ export default {
       },
       fontFamily: {
         sans: [
-          "Outfit",
-          "ui-sans-serif",
-          "system-ui",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          '"SF Pro Text"',
+          '"Helvetica Neue"',
           "sans-serif",
         ],
       },
@@ -55,7 +56,7 @@ export default {
         xl: "var(--radius-xl)",
       },
       spacing: {
-        sidebar: "56px",
+        sidebar: "200px",
       },
     },
   },
