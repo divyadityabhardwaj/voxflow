@@ -125,9 +125,9 @@ func TestRefineBudget(t *testing.T) {
 		words int
 		want  time.Duration
 	}{
-		{0, 4 * time.Second},
-		{50, 6 * time.Second},
-		{1000, 15 * time.Second},
+		{0, 10 * time.Second},
+		{50, 12 * time.Second},
+		{1000, 20 * time.Second},
 	}
 	for _, tt := range tests {
 		if got := RefineBudget(strings.Repeat("word ", tt.words)); got != tt.want {

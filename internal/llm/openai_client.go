@@ -31,7 +31,7 @@ var ErrRateLimited = errors.New("rate limit reached")
 // short enough that a hung provider falls back to raw text within seconds.
 func RefineBudget(rawText string) time.Duration {
 	perWord := time.Duration(len(strings.Fields(rawText))) * 40 * time.Millisecond
-	return min(4*time.Second+perWord, 15*time.Second)
+	return min(10*time.Second+perWord, 20*time.Second)
 }
 
 func isRetryableStatus(code int) bool {
