@@ -1,143 +1,111 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import {
-  ToggleRecording,
-  GetConfig,
-  GetHistory,
-  CopyToClipboard,
-  InjectText,
-} from "../../wailsjs/go/main/App";
+import { GetHistory, OpenHistoryWindow, ToggleRecording } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
-import { useToast } from "../contexts/ToastContext";
 import { useRecordingState, isBusy } from "../hooks/useRecordingState";
+import {
+  deliveryLabel,
+  formatClock,
+  pasteLabel,
+  useAudioLevel,
+  usePasteTarget,
+  useRecordingSeconds,
+  useShortcuts,
+  useTextActions,
+  type ProcessingResult,
+} from "../hooks/useDictation";
+import Keycap from "./dictation/Keycap";
+import LevelBars from "./dictation/LevelBars";
+import VersionToggle, { type Version } from "./dictation/VersionToggle";
+import { relativeTime } from "./dictation/time";
+import SetupChecklist from "./home/SetupChecklist";
+import { computeStats, countWords } from "./home/stats";
 
 interface Transcript {
   id: number;
   timestamp: string;
+  app_name: string;
   raw_text: string;
   polished_text: string;
+  words_per_second?: number;
 }
 
-const PASTE_HINT = "Paste into the app you were using";
+// ponytail: stats read the latest 500 dictations; add a GetStats query if a week holds more.
+const STATS_LIMIT = 500;
+const RECENT_COUNT = 5;
 
-const formatElapsed = (ms: number) => {
-  const seconds = ms / 1000;
-  return seconds < 1 ? `${ms}ms` : `${seconds.toFixed(1)}s`;
-};
+const MIC_PATH =
+  "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z";
+const COPY_PATH =
+  "M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3";
+const PASTE_PATH =
+  "M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20";
 
-const formatRecentDate = (timestamp: string) => {
-  try {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    if (isToday) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return "";
-  }
+const StrokeIcon = ({ d, className = "w-3.5 h-3.5" }: { d: string; className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+  </svg>
+);
+
+const ICON_BTN =
+  "p-1.5 rounded-md text-secondary hover:text-text hover:bg-secondary transition-colors";
+
+const TITLES = {
+  Idle: "Ready to dictate",
+  Recording: "Listening…",
+  Processing: "Turning speech into text…",
+  Refining: "Cleaning up your text…",
 };
 
 export default function MainView() {
   const status = useRecordingState();
   const busy = isBusy(status);
-  const [handsFreeHotkey, setHandsFreeHotkey] = useState<string>("");
-  const [pttHotkey, setPttHotkey] = useState<string>("");
-  const [lastTranscription, setLastTranscription] = useState<string | null>(
-    null,
-  );
-  const [usedRawNoPolish, setUsedRawNoPolish] = useState(false);
+  const recording = status === "Recording";
+  const level = useAudioLevel(recording);
+  const seconds = useRecordingSeconds(status);
+  const shortcuts = useShortcuts();
+  const pasteApp = usePasteTarget();
+  const { copy, paste } = useTextActions(pasteApp);
+
+  const [history, setHistory] = useState<Transcript[]>([]);
+  const [result, setResult] = useState<ProcessingResult | null>(null);
+  const [resultVersion, setResultVersion] = useState<Version>("cleaned");
+  const [partialText, setPartialText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [partialText, setPartialText] = useState<string>("");
-  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
-  const [wordsPerMinute, setWordsPerMinute] = useState<number | null>(null);
-  const [recents, setRecents] = useState<Transcript[]>([]);
-  const partialRef = useRef<HTMLDivElement>(null);
-  const { showToast } = useToast();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  useEffect(() => {
-    GetConfig().then((cfg) => {
-      if (cfg) {
-        setHandsFreeHotkey(cfg.hands_free_hotkey || cfg.hotkey || "");
-        setPttHotkey(cfg.push_to_talk_hotkey || "");
-      }
-    });
-
-    const loadRecents = () => {
-      GetHistory(4)
-        .then((items) => {
-          setRecents(items || []);
-        })
-        .catch((err) => {
-          console.error("Failed to load recent recordings:", err);
-        });
-    };
-
-    loadRecents();
-
-    // Reset here rather than in an effect on status: the Error event for a failed
-    // start arrives right after "Recording" and must not be wiped by a later effect.
-    const unsubState = EventsOn(Events.StateChanged, (newStatus: string) => {
-      if (newStatus === "Recording") {
-        setError(null);
-        setLastTranscription(null);
-        setUsedRawNoPolish(false);
-        setPartialText("");
-        setElapsedMs(null);
-        setWordsPerMinute(null);
-      } else if (newStatus === "Idle") {
-        loadRecents();
-      }
-    });
-
-    const unsubComplete = EventsOn(
-      Events.ProcessingComplete,
-      (result: {
-        polished: string;
-        elapsed: number;
-        used_raw?: boolean;
-        words_per_second?: number;
-      }) => {
-        setLastTranscription(result.polished);
-        setUsedRawNoPolish(Boolean(result.used_raw));
-        setPartialText("");
-        setElapsedMs(result.elapsed);
-        if (result.words_per_second && result.words_per_second > 0) {
-          setWordsPerMinute(Math.round(result.words_per_second * 60));
-        }
-        loadRecents();
-      },
-    );
-
-    const unsubError = EventsOn(Events.Error, (err: string) => {
-      setError(err);
-    });
-
-    const unsubPartial = EventsOn(
-      Events.PartialTranscript,
-      (data: { text: string }) => {
-        if (data?.text) {
-          setPartialText(data.text);
-        }
-      },
-    );
-
-    return () => {
-      unsubState();
-      unsubComplete();
-      unsubError();
-      unsubPartial();
-    };
+  const loadHistory = useCallback(() => {
+    GetHistory(STATS_LIMIT)
+      .then((items) => setHistory((items as unknown as Transcript[]) || []))
+      .catch((err) => console.error("Failed to load history:", err));
   }, []);
 
   useEffect(() => {
-    if (partialRef.current) {
-      partialRef.current.scrollTop = partialRef.current.scrollHeight;
-    }
-  }, [partialText]);
+    loadHistory();
+    const unsubs = [
+      // Reset here rather than in an effect on status: the Error event for a
+      // failed start arrives right after "Recording" and must survive.
+      EventsOn(Events.StateChanged, (s: string) => {
+        if (s === "Recording") {
+          setError(null);
+          setPartialText("");
+        }
+      }),
+      EventsOn(Events.ProcessingComplete, (r: ProcessingResult) => {
+        setResult(r);
+        setResultVersion("cleaned");
+        setPartialText("");
+        loadHistory();
+      }),
+      EventsOn(Events.Error, (err: string) => setError(String(err))),
+      EventsOn(Events.PartialTranscript, (d: { text: string }) => {
+        if (d?.text) setPartialText(d.text);
+      }),
+    ];
+    return () => unsubs.forEach((u) => u());
+  }, [loadHistory]);
 
-  const handleToggle = async () => {
+  const toggle = async () => {
     try {
       await ToggleRecording();
     } catch (err) {
@@ -145,295 +113,207 @@ export default function MainView() {
     }
   };
 
+  const stats = computeStats(history);
+  const recents = history.slice(0, RECENT_COUNT);
+  const resultText = result ? (resultVersion === "raw" ? result.raw : result.polished) : "";
+  const resultWords = result ? countWords(result.polished) : 0;
+  const spokenSec = result?.details?.audio;
 
-
-  const handleCopy = async (text: string) => {
-    try {
-      await CopyToClipboard(text);
-      showToast("Copied", "success");
-    } catch (err) {
-      console.error("Failed to copy:", err);
-      showToast("Failed to copy text", "error");
-    }
-  };
-
-  const handlePaste = async (text: string) => {
-    try {
-      await InjectText(text);
-      showToast("Pasted", "success");
-    } catch (err) {
-      console.error("Failed to paste:", err);
-      showToast("Couldn't paste the text", "error");
-    }
-  };
-
-  const toggleLabel =
-    status === "Idle"
-      ? "Start recording"
-      : status === "Recording"
-        ? "Stop recording"
-        : status === "Refining"
-          ? "Cleaning up…"
-          : "Processing…";
+  const micLabel = recording ? "Stop" : busy ? TITLES[status] : "Try it here";
 
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-0 px-6 py-8 overflow-y-auto animate-fade-in">
-      <div className="text-center mb-6 max-w-lg">
-        <h1 className="text-xl font-semibold tracking-tight text-text mb-1.5">
-          {status === "Idle" && "Capture a quick thought"}
-          {status === "Recording" && "Listening…"}
-          {status === "Processing" && "Processing…"}
-          {status === "Refining" && "Cleaning up…"}
-        </h1>
-        {status === "Idle" ? (
-          <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs text-secondary mt-2">
-            <span>Press</span>
-            <kbd className="px-2 py-0.5 rounded-md bg-surface border border-border text-[11px] font-mono text-text shadow-sm">
-              {handsFreeHotkey || "Hotkey"}
-            </kbd>
-            <span>to record, or hold</span>
-            <kbd className="px-2 py-0.5 rounded-md bg-surface border border-border text-[11px] font-mono text-text shadow-sm">
-              {pttHotkey || "PTT key"}
-            </kbd>
-            <span>to speak</span>
-          </div>
-        ) : (
-          <p className="text-xs text-secondary mt-1">
-            {status === "Recording" &&
-              "Speak naturally, then press again or release key to stop"}
-            {status === "Processing" &&
-              (partialText
-                ? "Transcribing your recording…"
-                : "Transcribing your recording")}
-            {status === "Refining" && "Cleaning up your text…"}
-          </p>
-        )}
-      </div>
+    <div className="h-full min-h-0 overflow-y-auto animate-fade-in">
+      <div className="max-w-xl mx-auto px-6 py-8 flex flex-col items-center gap-6">
+        <SetupChecklist />
 
-      <div className="w-full max-w-xl mb-8">
-        <div
-          className={`
-            card p-3 pl-4 flex items-center gap-3 transition-all duration-200
-            ${status === "Recording" ? "border-recording ring-1 ring-recording/30" : ""}
-            ${busy ? "border-processing ring-1 ring-processing/30" : ""}
-          `}
-        >
-          <div className="flex-1 min-w-0">
-            {busy && partialText ? (
-              <div
-                ref={partialRef}
-                className="max-h-20 overflow-y-auto"
-              >
-                <p className="text-text text-sm leading-relaxed whitespace-pre-wrap">
-                  {partialText}
-                  <span className="inline-block w-0.5 h-3.5 bg-primary ml-0.5 align-text-bottom animate-pulse-soft" />
-                </p>
-              </div>
-            ) : (
-              <p className="text-tertiary text-[13px] font-normal select-none">
-                {status === "Idle" && "Take a quick note with your voice…"}
-                {status === "Recording" && "Recording in progress…"}
-                {status === "Processing" && "Transcribing…"}
-                {status === "Refining" && "Cleaning up…"}
-              </p>
-            )}
-          </div>
+        <section className="w-full text-center flex flex-col items-center">
+          <h1 aria-live="polite" className="text-xl font-semibold tracking-tight text-text">
+            {TITLES[status]}
+          </h1>
+
+          {status === "Idle" && shortcuts && (
+            <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px] text-secondary mt-3">
+              Hold <Keycap>{shortcuts.hold}</Keycap> to talk
+              <span aria-hidden="true" className="text-tertiary px-0.5">·</span>
+              <Keycap>{shortcuts.toggle}</Keycap> to start/stop
+              <span aria-hidden="true" className="text-tertiary px-0.5">·</span>
+              <Keycap>Esc</Keycap> to cancel
+            </p>
+          )}
+          {recording && (
+            <p className="flex flex-wrap items-center justify-center gap-1.5 text-[13px] text-secondary mt-3">
+              {shortcuts ? (
+                <>
+                  Release the keys, or press <Keycap>{shortcuts.toggle}</Keycap> again to finish ·
+                  <Keycap>Esc</Keycap> to cancel
+                </>
+              ) : (
+                "Press Esc to cancel"
+              )}
+            </p>
+          )}
 
           <button
             type="button"
-            onClick={handleToggle}
+            onClick={toggle}
             disabled={busy}
-            title={toggleLabel}
-            aria-label={toggleLabel}
-            className={`
-              relative w-10 h-10 rounded-xl transition-all duration-200
-              flex items-center justify-center flex-shrink-0 cursor-pointer
-              ${
-                status === "Idle"
-                  ? "bg-primary text-[var(--primary-foreground)] hover:opacity-90 active:scale-95 shadow-sm"
-                  : status === "Recording"
-                    ? "bg-recording text-white shadow-sm"
-                    : "bg-processing text-white shadow-sm"
-              }
-              disabled:cursor-not-allowed disabled:opacity-50
-            `}
+            aria-label={recording ? "Stop dictation" : "Try it here — start dictating"}
+            className={`mt-6 size-12 rounded-full flex items-center justify-center shadow-soft-md transition-transform active:scale-95 disabled:cursor-not-allowed ${
+              recording
+                ? "bg-recording text-white"
+                : busy
+                  ? "bg-processing text-[#1c1917]"
+                  : "bg-primary text-[var(--primary-foreground)] hover:scale-105"
+            }`}
           >
-            {status === "Recording" && (
-              <span className="absolute inset-0 rounded-xl bg-recording/40 animate-recording-ring" />
-            )}
-
-            {busy && (
-              <span className="absolute inset-0 rounded-xl border-2 border-white/20 border-t-white animate-spin-slow" />
-            )}
-
-            {status === "Idle" && (
-              <svg
-                className="w-4 h-4 relative z-10"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-              </svg>
-            )}
-            {status === "Recording" && (
-              <svg
-                className="w-4 h-4 relative z-10"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <rect x="6" y="6" width="12" height="12" rx="2" />
-              </svg>
-            )}
-            {busy && (
-              <svg
-                className="w-4 h-4 relative z-10 animate-pulse"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
+            {recording ? (
+              <span className="size-3.5 rounded-[3px] bg-white" />
+            ) : busy ? (
+              <span className="size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d={MIC_PATH} />
               </svg>
             )}
           </button>
-        </div>
-      </div>
+          <div className="mt-2 h-5 flex items-center gap-2 text-[13px] text-secondary">
+            {recording && <LevelBars level={level} maxHeight={14} color="var(--recording)" />}
+            <span className={recording ? "tabular-nums" : ""}>
+              {recording ? `${micLabel} · ${formatClock(seconds)}` : status === "Idle" ? micLabel : ""}
+            </span>
+          </div>
 
-      {error && (
-        <div className="w-full max-w-xl mb-6 p-3.5 rounded-lg border border-danger/30 bg-danger/10">
-          <p className="text-xs text-[var(--danger)]">{error}</p>
-        </div>
-      )}
+          {(recording || busy) && partialText && (
+            <p className="mt-4 w-full text-left text-sm text-secondary leading-relaxed whitespace-pre-wrap max-h-24 overflow-y-auto card p-3">
+              {partialText}
+            </p>
+          )}
+        </section>
 
-      {lastTranscription && (
-        <div className="w-full max-w-xl animate-fade-in mb-8">
-          <div className="card p-5">
-            <div className="flex items-center gap-2 mb-2.5">
-              <span className="text-[11px] font-semibold text-tertiary uppercase tracking-wider">
-                Result
+        {error && (
+          <div role="alert" className="w-full p-3 rounded-lg border border-danger/30 bg-danger/10 text-[13px] text-text">
+            {error}
+          </div>
+        )}
+
+        {result && !recording && !busy && (
+          <section className="w-full card p-4 animate-fade-in" aria-label="Last dictation">
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="text-[13px] font-semibold text-text">
+                {result.method === "none" ? "Here's what you said" : deliveryLabel(result)}
+              </h2>
+              <span className="text-xs text-tertiary tabular-nums">
+                {resultWords} {resultWords === 1 ? "word" : "words"}
+                {spokenSec ? ` · ${spokenSec.toFixed(1)} s` : ""}
               </span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent-soft text-primary font-medium">
-                Done
-              </span>
-              {elapsedMs != null && (
-                <span className="text-[11px] text-tertiary ml-auto font-mono">
-                  {formatElapsed(elapsedMs)}
-                  {wordsPerMinute != null && ` · ${wordsPerMinute} WPM`}
+              <button
+                type="button"
+                className={`${ICON_BTN} ml-auto`}
+                onClick={() => setResult(null)}
+                aria-label="Dismiss"
+              >
+                <StrokeIcon d="M6 18L18 6M6 6l12 12" />
+              </button>
+            </div>
+            {result.raw && result.raw !== result.polished && (
+              <div className="mb-2">
+                <VersionToggle value={resultVersion} onChange={setResultVersion} />
+              </div>
+            )}
+            <p className="text-sm text-text whitespace-pre-wrap leading-relaxed select-text">{resultText}</p>
+            <div className="flex justify-end gap-2 mt-3">
+              <button type="button" className="btn-secondary !py-1.5 !px-3 !text-xs" onClick={() => copy(resultText)}>
+                Copy
+              </button>
+              <button type="button" className="btn-primary !py-1.5 !px-3 !text-xs" onClick={() => paste(resultText)}>
+                {pasteLabel(pasteApp)}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {stats.words > 0 && (
+          <p className="text-[13px] text-secondary text-center">
+            This week: <span className="text-text font-medium">{stats.words.toLocaleString()} words</span>
+            {stats.minutesSaved > 0 && <> · ~{stats.minutesSaved} min saved</>}
+            {stats.streakDays > 1 && <> · {stats.streakDays}-day streak</>}
+          </p>
+        )}
+
+        <section className="w-full" aria-labelledby="recent-heading">
+          <div className="flex items-center justify-between mb-2 px-0.5">
+            <h2 id="recent-heading" className="text-[13px] font-semibold text-text">
+              Recent
+            </h2>
+            {recents.length > 0 && (
+              <button type="button" className="text-xs text-secondary hover:text-text" onClick={() => OpenHistoryWindow()}>
+                View all history →
+              </button>
+            )}
+          </div>
+          {recents.length === 0 ? (
+            <div className="card p-6 text-center text-[13px] text-secondary">
+              Your dictations will show up here.
+              {shortcuts && (
+                <span className="block mt-1">
+                  Try it: press <Keycap>{shortcuts.toggle}</Keycap>, say something, press it again.
                 </span>
               )}
             </div>
-            {usedRawNoPolish && (
-              <p className="text-xs text-tertiary mb-2">
-                Shown as transcribed — refinement skipped (already clear).
-              </p>
-            )}
-            <p className="text-text text-sm whitespace-pre-wrap leading-relaxed">
-              {lastTranscription}
-            </p>
-            <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-border/50">
-              <button
-                type="button"
-                onClick={() => handleCopy(lastTranscription)}
-                className="btn btn-secondary !py-1.5 !px-3 !text-xs"
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                onClick={() => handlePaste(lastTranscription)}
-                title={PASTE_HINT}
-                className="btn btn-primary !py-1.5 !px-3 !text-xs"
-              >
-                Paste
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!lastTranscription && status === "Idle" && (
-        <div className="w-full max-w-xl animate-fade-in">
-          <div className="flex items-center justify-between mb-2.5 px-0.5">
-            <h2 className="text-[11px] font-semibold tracking-wider text-tertiary uppercase">
-              Recent Recordings
-            </h2>
-          </div>
-          {recents.length === 0 ? (
-            <div className="card p-6 text-center">
-              <p className="text-xs text-tertiary">
-                Your recent recordings will appear here
-              </p>
-            </div>
           ) : (
-            <div className="card overflow-hidden divide-y divide-border/50">
-              {recents.map((item) => (
-                <div
-                  key={item.id}
-                  className="px-4 py-3 flex items-center justify-between gap-4 hover:bg-surface-hover/50 transition-colors group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-text font-medium truncate leading-snug">
-                      {item.polished_text || item.raw_text}
-                    </p>
-                    <span className="text-[11px] text-tertiary font-mono block mt-0.5">
-                      {formatRecentDate(item.timestamp)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(item.polished_text || item.raw_text)}
-                      title="Copy to clipboard"
-                      aria-label="Copy to clipboard"
-                      className="p-1.5 text-secondary hover:text-text hover:bg-surface rounded-md transition-all"
-                    >
-                      <svg
-                        className="w-3.5 h-3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePaste(item.polished_text || item.raw_text)}
-                      title={PASTE_HINT}
-                      aria-label={PASTE_HINT}
-                      className="p-1.5 text-secondary hover:text-text hover:bg-surface rounded-md transition-all"
-                    >
-                      <svg
-                        className="w-3.5 h-3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ul className="card overflow-hidden divide-y divide-border/50">
+              {recents.map((item) => {
+                const text = item.polished_text || item.raw_text;
+                const expanded = expandedId === item.id;
+                return (
+                  <li key={item.id} className="group px-4 py-2.5 hover:bg-surface-hover/50 focus-within:bg-surface-hover/50 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[13px] text-text leading-snug ${expanded ? "whitespace-pre-wrap select-text" : "truncate"}`}>
+                          {text}
+                        </p>
+                        {expanded && item.raw_text && item.raw_text !== item.polished_text && (
+                          <p className="mt-1.5 text-xs text-secondary whitespace-pre-wrap select-text">
+                            <span className="font-medium">As you said it: </span>
+                            {item.raw_text}
+                          </p>
+                        )}
+                        <span className="text-xs text-tertiary block mt-0.5">
+                          {[item.app_name, relativeTime(item.timestamp)].filter(Boolean).join(" · ")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                        <button type="button" onClick={() => copy(text)} title="Copy" aria-label="Copy" className={ICON_BTN}>
+                          <StrokeIcon d={COPY_PATH} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => paste(text)}
+                          title={pasteLabel(pasteApp)}
+                          aria-label={pasteLabel(pasteApp)}
+                          className={ICON_BTN}
+                        >
+                          <StrokeIcon d={PASTE_PATH} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(expanded ? null : item.id)}
+                          aria-expanded={expanded}
+                          title={expanded ? "Show less" : "Show all"}
+                          aria-label={expanded ? "Show less" : "Show all"}
+                          className={ICON_BTN}
+                        >
+                          <StrokeIcon d={expanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </div>
-      )}
+        </section>
+      </div>
     </div>
   );
 }

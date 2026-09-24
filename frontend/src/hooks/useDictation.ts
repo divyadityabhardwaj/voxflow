@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { GetConfig, GetPushToTalkKey } from "../../wailsjs/go/main/App";
+import {
+  CopyToClipboard,
+  GetConfig,
+  GetFrontmostApp,
+  GetPushToTalkKey,
+  InjectText,
+} from "../../wailsjs/go/main/App";
+import { useToast } from "../contexts/ToastContext";
 import { Events } from "../constants/events";
 import { formatShortcut } from "../lib/shortcut";
 import type { Status } from "./useRecordingState";
@@ -15,9 +22,6 @@ export interface ProcessingResult {
   method?: "paste" | "type" | "clipboard" | "none";
   details?: { audio?: number };
 }
-
-export const countWords = (text: string) =>
-  text.trim() ? text.trim().split(/\s+/).length : 0;
 
 // Where the text ended up, for the pill and the result card.
 export function deliveryLabel(r: Pick<ProcessingResult, "method" | "target_app">) {
@@ -109,4 +113,44 @@ export function useShortcuts() {
     return () => window.removeEventListener("focus", load);
   }, []);
   return shortcuts;
+}
+
+// Paste buttons send text to the last app used before VoxFlow.
+export function usePasteTarget() {
+  const [name, setName] = useState("");
+  useEffect(() => {
+    const load = () =>
+      GetFrontmostApp()
+        .then((a) => setName(a.name === "VoxFlow" ? "" : a.name))
+        .catch(() => {});
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, []);
+  return name;
+}
+
+export const pasteLabel = (app: string) => (app ? `Paste into ${app}` : "Paste");
+
+export function useTextActions(app: string) {
+  const { showToast } = useToast();
+  return {
+    copy: async (text: string) => {
+      try {
+        await CopyToClipboard(text);
+        showToast("Copied", "success");
+      } catch {
+        showToast("Couldn't copy the text", "error");
+      }
+    },
+    paste: async (text: string) => {
+      try {
+        await InjectText(text);
+        showToast(app ? `Pasted into ${app}` : "Pasted", "success");
+      } catch (err) {
+        // The backend says what happened, e.g. "… — text copied, press ⌘V".
+        showToast(String(err), "warning");
+      }
+    },
+  };
 }
