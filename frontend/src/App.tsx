@@ -153,8 +153,10 @@ function AppContent() {
 
     const unsub5 = EventsOn(
       Events.ModelStatus,
-      (status: { downloaded: boolean; loaded?: boolean }) => {
-        setModelReady(Boolean(status.downloaded && status.loaded));
+      (status: { downloaded: boolean; loaded?: boolean; error?: string }) => {
+        if (status.downloaded && status.loaded) setModelReady(true);
+        else if (!status.downloaded) setModelReady(false);
+        if (status.error) showToastRef.current(status.error, "error");
       },
     );
 
