@@ -12,9 +12,14 @@ export function useRecordingState() {
   const [status, setStatus] = useState<Status>("Idle");
 
   useEffect(() => {
-    GetStatus().then((s) => setStatus(s as Status));
+    // An event that lands before GetStatus resolves is newer; don't clobber it.
+    let gotEvent = false;
+    GetStatus().then((s) => {
+      if (!gotEvent) setStatus(s as Status);
+    });
 
     const unsub = EventsOn(Events.StateChanged, (newStatus: string) => {
+      gotEvent = true;
       setStatus(newStatus as Status);
     });
 
