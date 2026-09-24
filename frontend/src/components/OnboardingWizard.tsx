@@ -193,16 +193,19 @@ export default function OnboardingWizard({ onComplete }: Props) {
     }
   };
 
+  // Granting Accessibility after skipping undoes the skip.
+  const copyOnly = pasteSkipped && !accessibility;
+
   // One setting holds both choices, so copy-only (no paste permission) wins.
   const finishCleanup = async (on: boolean) => {
     setCleanupOn(on);
-    await SetRefinementMode(pasteSkipped ? "copy-only" : on ? "refine" : "raw").catch(() => {});
+    await SetRefinementMode(copyOnly ? "copy-only" : on ? "refine" : "raw").catch(() => {});
     next();
   };
 
   const finish = async () => {
     await CompleteOnboarding();
-    const skipped = pasteSkipped || !cleanupOn || mic !== "authorized";
+    const skipped = copyOnly || !cleanupOn || mic !== "authorized";
     // Anything skipped shows up as a checklist on Home; otherwise get out of the way.
     if (!skipped && modelReady) ShowMiniMode();
     onComplete();
@@ -332,7 +335,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
               If fn opens the emoji picker, set “Press 🌐 key to” to “Do nothing” in System Settings › Keyboard.
             </p>
           )}
-          {pasteSkipped && holdKey !== "chord" && (
+          {copyOnly && holdKey !== "chord" && (
             <p className="text-xs text-tertiary mb-2">
               Holding a single key needs the paste permission, so the shortcut above is used until it's on.
             </p>
@@ -376,7 +379,7 @@ export default function OnboardingWizard({ onComplete }: Props) {
             Removes “um”s, adds punctuation, formats lists. Uses an AI service with your own key — only text is sent,
             never audio.
           </p>
-          {pasteSkipped && (
+          {copyOnly && (
             <p className="text-xs text-tertiary mb-3">
               Clean-up is off while VoxFlow only copies your text. Turn on paste permission in Settings to use it.
             </p>
