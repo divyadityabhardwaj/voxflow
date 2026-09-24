@@ -305,7 +305,7 @@ export default function MainView() {
       </div>
 
       {error && (
-        <div className="w-full max-w-xl mb-6 p-3.5 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+        <div className="w-full max-w-xl mb-6 p-3.5 rounded-lg border border-danger/30 bg-danger/10">
           <p className="text-xs text-[var(--danger)]">{error}</p>
         </div>
       )}

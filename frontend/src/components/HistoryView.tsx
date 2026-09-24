@@ -294,7 +294,7 @@ export default function HistoryView() {
               onClick={handleClearAll}
               title="Delete all transcripts"
               aria-label="Delete all dictations"
-              className="p-1.5 text-tertiary hover:text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded-lg transition-colors"
+              className="p-1.5 text-tertiary hover:text-[var(--danger)] hover:bg-danger/10 rounded-lg transition-colors"
             >
               <svg
                 className="w-4 h-4"

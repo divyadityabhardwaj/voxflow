@@ -276,7 +276,7 @@ function AppContent() {
             <button
               onClick={() => Quit()}
               aria-label="Quit VoxFlow"
-              className="sidebar-btn no-drag hover:!text-[var(--danger)] hover:!bg-[var(--danger)]/10"
+              className="sidebar-btn no-drag hover:!text-[var(--danger)] hover:!bg-danger/10"
             >
               <CloseIcon />
             </button>
