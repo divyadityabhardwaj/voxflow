@@ -5,169 +5,140 @@ import {
   RemoveAppRule,
   SetAppRule,
 } from "../../../wailsjs/go/main/App";
+import { main } from "../../../wailsjs/go/models";
+import { useToast } from "../../contexts/ToastContext";
+import { MODES } from "../../lib/modes";
 import SettingsSection from "../ui/SettingsSection";
-import { MODES } from "./PipelineSettings";
 
 const INJECT_METHODS = [
   { id: "paste", name: "Pasting (⌘V)" },
-  { id: "clipboard", name: "Copying to the clipboard only" },
   { id: "type", name: "Typing it out (for apps that block paste)" },
+  { id: "clipboard", name: "Copying to the clipboard only" },
 ];
 
-interface AppRuleRow {
-  bundle_id: string;
-  app_name?: string;
-  refinement_mode?: string;
-  inject_method?: string;
-}
-
 export default function AppRulesSettings() {
-  const [rules, setRules] = useState<AppRuleRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const fail = (what: string) => (err: unknown) =>
+    showToast(`${what}: ${String(err)}`, "error");
 
-  const [refinementMode, setRefinementMode] = useState("refine");
-  const [injectMethod, setInjectMethod] = useState("paste");
+  const [rules, setRules] = useState<main.AppRuleDTO[] | null>(null);
+  const [current, setCurrent] = useState<main.FrontmostAppInfo | null>(null);
 
-  const loadRules = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await GetAppRules();
-      setRules(list ?? []);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadRules = useCallback(
+    () =>
+      GetAppRules()
+        .then((r) => {
+          const nameOf = (x: main.AppRuleDTO) => x.app_name || x.bundle_id;
+          // Rules come from a Go map, so their order changes on every load.
+          setRules((r ?? []).sort((a, b) => nameOf(a).localeCompare(nameOf(b))));
+        })
+        .catch(fail("Couldn't load app rules")),
+    [],
+  );
 
+  // The backend reports the last app used before VoxFlow.
   useEffect(() => {
     loadRules();
+    const refresh = () => GetFrontmostApp().then(setCurrent).catch(() => setCurrent(null));
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
   }, [loadRules]);
 
-  const addRuleForFrontmost = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const app = await GetFrontmostApp();
-      if (!app?.bundle_id) {
-        setError("Could not detect the active application.");
-        return;
-      }
-      await SetAppRule(app.bundle_id, refinementMode, injectMethod);
-      await loadRules();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const save = (bundleID: string, mode: string, inject: string) =>
+    SetAppRule(bundleID, mode, inject)
+      .then(loadRules)
+      .catch(fail("Couldn't save the rule"));
 
-  const removeRule = async (bundleID: string) => {
-    setSaving(true);
-    try {
-      await RemoveAppRule(bundleID);
-      await loadRules();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const remove = (bundleID: string) =>
+    RemoveAppRule(bundleID)
+      .then(loadRules)
+      .catch(fail("Couldn't remove the rule"));
+
+  const hasCurrent =
+    !!current?.bundle_id && !rules?.some((r) => r.bundle_id === current.bundle_id);
 
   return (
     <SettingsSection
-      title="Per-app rules"
-      description="Change what happens after you speak in specific apps. Switch to the app, then add a rule."
+      title="Apps"
+      description="Choose how VoxFlow behaves in specific apps."
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="label" htmlFor="rule-refinement">
-            After you speak
-          </label>
-          <select
-            id="rule-refinement"
-            className="select"
-            value={refinementMode}
-            onChange={(e) => setRefinementMode(e.target.value)}
-          >
-            <option value="">Use my default</option>
-            {MODES.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label" htmlFor="rule-inject">
-            Insert text by
-          </label>
-          <select
-            id="rule-inject"
-            className="select"
-            value={injectMethod}
-            onChange={(e) => setInjectMethod(e.target.value)}
-          >
-            {INJECT_METHODS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="settings-row">
+        <p className="text-[13px] text-secondary">
+          {current?.name
+            ? `Last app you used: ${current.name}`
+            : "Switch to an app, then come back here to add it."}
+        </p>
+        <button
+          type="button"
+          className="btn btn-secondary shrink-0"
+          disabled={!hasCurrent}
+          onClick={() => current && save(current.bundle_id, "", "paste")}
+        >
+          {current?.name ? `Add ${current.name}` : "Add current app"}
+        </button>
       </div>
 
-      <button
-        type="button"
-        className="btn btn-primary w-full mb-4"
-        disabled={saving}
-        onClick={addRuleForFrontmost}
-      >
-        {saving ? "Saving…" : "Add rule for active app"}
-      </button>
-
-      {error && (
-        <p className="text-sm text-[var(--danger)] mb-3">{error}</p>
-      )}
-
-      {loading ? (
-        <p className="text-sm text-tertiary">Loading rules…</p>
+      {rules === null ? (
+        <p className="settings-pad text-[13px] text-tertiary">Loading…</p>
       ) : rules.length === 0 ? (
-        <p className="text-sm text-tertiary">No per-app rules yet.</p>
+        <p className="settings-pad text-[13px] text-tertiary">
+          No app rules yet. Every app uses your General settings.
+        </p>
       ) : (
-        <ul className="space-y-2">
-          {rules.map((rule) => (
-            <li
-              key={rule.bundle_id}
-              className="flex items-center justify-between gap-3 p-3 rounded-md border border-border bg-surface"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate text-text">
-                  {rule.app_name || rule.bundle_id}
+        rules.map((rule) => {
+          const name = rule.app_name || rule.bundle_id;
+          const mode = rule.refinement_mode ?? "";
+          const inject = rule.inject_method || "paste";
+          return (
+            <div key={rule.bundle_id} className="settings-pad space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] font-medium text-text truncate" title={rule.bundle_id}>
+                  {name}
                 </p>
-                <p className="text-xs text-tertiary mt-0.5">
-                  {MODES.find((m) => m.id === rule.refinement_mode)?.name ??
-                    "Default"}{" "}
-                  ·{" "}
-                  {INJECT_METHODS.find(
-                    (m) => m.id === (rule.inject_method || "paste"),
-                  )?.name ?? rule.inject_method}
-                </p>
+                <button
+                  type="button"
+                  className="btn btn-ghost !px-2 !py-1 text-danger"
+                  aria-label={`Remove rule for ${name}`}
+                  onClick={() => remove(rule.bundle_id)}
+                >
+                  Remove
+                </button>
               </div>
-              <button
-                type="button"
-                className="btn btn-ghost text-[var(--danger)] shrink-0 !py-1.5 !px-2"
-                disabled={saving}
-                aria-label={`Remove rule for ${rule.app_name || rule.bundle_id}`}
-                onClick={() => removeRule(rule.bundle_id)}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="text-xs text-secondary">
+                  After you speak
+                  <select
+                    className="select mt-1"
+                    value={mode}
+                    onChange={(e) => save(rule.bundle_id, e.target.value, inject)}
+                  >
+                    <option value="">Use my default</option>
+                    {MODES.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-secondary">
+                  Insert text by
+                  <select
+                    className="select mt-1"
+                    value={inject}
+                    onChange={(e) => save(rule.bundle_id, mode, e.target.value)}
+                  >
+                    {INJECT_METHODS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          );
+        })
       )}
     </SettingsSection>
   );

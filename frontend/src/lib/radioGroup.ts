@@ -7,8 +7,8 @@ const STEPS: Record<string, number> = {
   ArrowUp: -1,
 };
 
-// Arrow keys for a role="radiogroup" of role="radio" children: move the
-// selection and focus together, wrapping at the ends.
+// Arrow keys for a role="radiogroup" (or "tablist") of role="radio" (or
+// "tab") children: move the selection and focus together, wrapping at the ends.
 export function onRadioGroupKeyDown<T>(
   e: KeyboardEvent<HTMLElement>,
   values: readonly T[],
@@ -20,5 +20,5 @@ export function onRadioGroupKeyDown<T>(
   e.preventDefault();
   const next = (Math.max(0, values.indexOf(current)) + step + values.length) % values.length;
   select(values[next]);
-  e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
+  e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"], [role="tab"]')[next]?.focus();
 }
