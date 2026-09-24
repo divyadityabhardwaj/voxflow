@@ -6,6 +6,10 @@ export function CancelDownload() {
   return window['go']['main']['App']['CancelDownload']();
 }
 
+export function CancelRecording() {
+  return window['go']['main']['App']['CancelRecording']();
+}
+
 export function CheckCerebrasModel(arg1) {
   return window['go']['main']['App']['CheckCerebrasModel'](arg1);
 }
@@ -130,6 +134,10 @@ export function IsWhisperCLIReady() {
   return window['go']['main']['App']['IsWhisperCLIReady']();
 }
 
+export function LogFrontendError(arg1, arg2) {
+  return window['go']['main']['App']['LogFrontendError'](arg1, arg2);
+}
+
 export function OpenHistoryWindow() {
   return window['go']['main']['App']['OpenHistoryWindow']();
 }
@@ -244,6 +252,10 @@ export function SetWhisperModel(arg1) {
 
 export function ShowMiniMode() {
   return window['go']['main']['App']['ShowMiniMode']();
+}
+
+export function SuspendHotkeys(arg1) {
+  return window['go']['main']['App']['SuspendHotkeys'](arg1);
 }
 
 export function ToggleRecording() {

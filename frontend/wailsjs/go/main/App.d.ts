@@ -6,6 +6,8 @@ import {history} from '../models';
 
 export function CancelDownload():Promise<void>;
 
+export function CancelRecording():Promise<void>;
+
 export function CheckCerebrasModel(arg1:string):Promise<main.CheckResult>;
 
 export function CheckGeminiModel(arg1:string):Promise<main.CheckResult>;
@@ -68,6 +70,8 @@ export function IsModelReady():Promise<boolean>;
 
 export function IsWhisperCLIReady():Promise<boolean>;
 
+export function LogFrontendError(arg1:string,arg2:string):Promise<void>;
+
 export function OpenHistoryWindow():Promise<void>;
 
 export function OpenSettings():Promise<void>;
@@ -125,5 +129,7 @@ export function SetWhisperLanguage(arg1:string):Promise<void>;
 export function SetWhisperModel(arg1:string):Promise<void>;
 
 export function ShowMiniMode():Promise<void>;
+
+export function SuspendHotkeys(arg1:boolean):Promise<void>;
 
 export function ToggleRecording():Promise<string>;
