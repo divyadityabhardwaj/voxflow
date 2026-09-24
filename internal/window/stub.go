@@ -8,5 +8,6 @@ func ConstrainWindow() {}
 
 func InstallStatusItem(StatusItemCallbacks) {}
 func SetStatusItemState(string)             {}
+func SetUpdateItem(string)                  {}
 
 func observeWindowFrame(*Manager) {}

@@ -6,4 +6,5 @@ type StatusItemCallbacks struct {
 	OpenApp         func()
 	OpenSettings    func()
 	Quit            func()
+	OpenUpdate      func()
 }

@@ -4,6 +4,7 @@ import {main} from '../models';
 import {whisper} from '../models';
 import {history} from '../models';
 import {audio} from '../models';
+import {update} from '../models';
 
 export function CancelDownload():Promise<void>;
 
@@ -66,6 +67,8 @@ export function GetProviders():Promise<Array<main.ProviderInfo>>;
 export function GetPushToTalkKey():Promise<main.PushToTalkKeyInfo>;
 
 export function GetStatus():Promise<string>;
+
+export function GetUpdateInfo():Promise<update.Info>;
 
 export function HideMiniMode():Promise<void>;
 

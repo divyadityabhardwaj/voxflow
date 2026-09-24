@@ -125,6 +125,7 @@ func (a *App) startup(ctx context.Context) {
 		OpenApp:         a.showMainWindow,
 		OpenSettings:    func() { a.showMainWindow(); a.OpenSettings() },
 		Quit:            a.Quit,
+		OpenUpdate:      a.openUpdate,
 	})
 
 	if !a.config.GetOnboardingCompleted() {
@@ -162,6 +163,7 @@ func (a *App) startup(ctx context.Context) {
 		logger.Warnf("Warning: Failed to cleanup stale temp audio files: %v", err)
 	}
 	go a.checkModelStatus()
+	go a.watchForUpdates()
 	go a.ensureValidModel(a.config.GetLLMProvider())
 
 	hfHotkey := a.config.GetHandsFreeHotkey()

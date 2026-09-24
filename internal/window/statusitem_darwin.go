@@ -7,6 +7,7 @@ package window
 #cgo LDFLAGS: -framework Cocoa
 
 #import <Cocoa/Cocoa.h>
+#include <stdlib.h>
 
 // Implemented in Go (statusitem_export_darwin.go). The //export must live in a
 // file whose preamble has no definitions, so the class stays here.
@@ -26,6 +27,7 @@ static NSStatusItem *statusItem;
 static VoxStatusTarget *statusTarget;
 static NSMenuItem *recordItem;
 static NSMenuItem *cancelItem;
+static NSMenuItem *updateItem;
 
 static NSMenuItem *addStatusMenuItem(NSMenu *menu, NSString *title, int tag) {
     NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:@selector(menuAction:) keyEquivalent:@""];
@@ -87,6 +89,25 @@ void installStatusItem(void) {
     });
 }
 
+// Copies title before returning.
+void setUpdateItem(const char *title) {
+    NSString *t = [[NSString alloc] initWithUTF8String:title];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (statusItem) {
+            NSMenu *menu = [statusItem menu];
+            if (!updateItem) {
+                updateItem = [[NSMenuItem alloc] initWithTitle:t action:@selector(menuAction:) keyEquivalent:@""];
+                [updateItem setTarget:statusTarget];
+                [updateItem setTag:6];
+                [menu insertItem:updateItem atIndex:0];
+                [menu insertItem:[NSMenuItem separatorItem] atIndex:1];
+            }
+            [updateItem setTitle:t];
+        }
+        [t release];
+    });
+}
+
 void setStatusItemState(int state) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (statusItem) {
@@ -97,11 +118,21 @@ void setStatusItemState(int state) {
 */
 import "C"
 
+import "unsafe"
+
 var statusCallbacks StatusItemCallbacks
 
 func InstallStatusItem(cb StatusItemCallbacks) {
 	statusCallbacks = cb
 	C.installStatusItem()
+}
+
+// SetUpdateItem shows a menu item at the top of the status menu that calls
+// StatusItemCallbacks.OpenUpdate.
+func SetUpdateItem(title string) {
+	cs := C.CString(title)
+	defer C.free(unsafe.Pointer(cs))
+	C.setUpdateItem(cs)
 }
 
 func SetStatusItemState(state string) {

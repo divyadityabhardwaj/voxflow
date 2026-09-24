@@ -28,4 +28,6 @@ const (
 	Error        = "error"
 	OpenHistory  = "open-history"
 	OpenSettings = "open-settings"
+
+	UpdateAvailable = "update-available"
 )

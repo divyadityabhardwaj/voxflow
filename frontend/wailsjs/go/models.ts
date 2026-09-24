@@ -246,6 +246,29 @@ export namespace main {
 
 }
 
+export namespace update {
+	
+	export class Info {
+	    current: string;
+	    latest: string;
+	    url: string;
+	    available: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.url = source["url"];
+	        this.available = source["available"];
+	    }
+	}
+
+}
+
 export namespace whisper {
 	
 	export class ModelInfo {

@@ -126,6 +126,10 @@ export function GetStatus() {
   return window['go']['main']['App']['GetStatus']();
 }
 
+export function GetUpdateInfo() {
+  return window['go']['main']['App']['GetUpdateInfo']();
+}
+
 export function HideMiniMode() {
   return window['go']['main']['App']['HideMiniMode']();
 }
