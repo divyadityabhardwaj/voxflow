@@ -88,8 +88,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       const id = nextId.current++;
       const { settings, action = settings && settingsAction(settings) } = options;
       // App.tsx also forwards backend toasts, without `settings`; merge the two.
+      // Never merge an explicit action: each Undo belongs to its own row.
       setToasts((prev) =>
-        prev.some((t) => t.message === message)
+        !options.action && prev.some((t) => t.message === message)
           ? prev.map((t) =>
               t.message === message
                 ? { ...t, settings: t.settings ?? settings, action: t.action ?? action }
