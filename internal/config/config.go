@@ -213,22 +213,6 @@ func (c *Config) Save() error {
 	return os.Rename(tmp, configPath)
 }
 
-// *_API_KEY env vars win at read time and are never copied into the struct, so Save can't persist them.
-func (c *Config) GetGeminiAPIKey() string {
-	if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
-		return envKey
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.GeminiAPIKey
-}
-
-func (c *Config) SetGeminiAPIKey(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.GeminiAPIKey = key
-}
-
 func (c *Config) GetHandsFreeHotkey() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -354,36 +338,6 @@ func (c *Config) SetMaximizedWindowSize(w, h int) {
 	c.MaximizedH = h
 }
 
-func (c *Config) GetGeminiModel() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.GeminiModel == "" {
-		return DefaultGeminiModel
-	}
-	return c.GeminiModel
-}
-
-func (c *Config) SetGeminiModel(model string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.GeminiModel = model
-}
-
-func (c *Config) GetOpenRouterAPIKey() string {
-	if envKey := os.Getenv("OPENROUTER_API_KEY"); envKey != "" {
-		return envKey
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.OpenRouterAPIKey
-}
-
-func (c *Config) SetOpenRouterAPIKey(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.OpenRouterAPIKey = key
-}
-
 func (c *Config) GetLLMProvider() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -399,108 +353,70 @@ func (c *Config) SetLLMProvider(provider string) {
 	c.LLMProvider = provider
 }
 
-// Whether the provider can be called at all; "local" needs only a server URL.
-// Unknown providers resolve to Gemini, like the app's refiner switch.
-func (c *Config) HasAPIKey(provider string) bool {
+// Provider fields stay flat in config.json so existing files keep loading.
+// Unknown providers resolve to Gemini, like the app's refiner lookup.
+func (c *Config) providerFields(provider string) (key, model *string, keyEnv, defaultModel string) {
 	switch provider {
-	case "local":
-		return c.GetLocalURL() != ""
 	case "openrouter":
-		return c.GetOpenRouterAPIKey() != ""
+		return &c.OpenRouterAPIKey, &c.OpenRouterModel, "OPENROUTER_API_KEY", DefaultOpenRouterModel
 	case "groq":
-		return c.GetGroqAPIKey() != ""
+		return &c.GroqAPIKey, &c.GroqModel, "GROQ_API_KEY", DefaultGroqModel
 	case "cerebras":
-		return c.GetCerebrasAPIKey() != ""
+		return &c.CerebrasAPIKey, &c.CerebrasModel, "CEREBRAS_API_KEY", DefaultCerebrasModel
+	case "local":
+		return nil, &c.LocalModel, "", ""
 	default:
-		return c.GetGeminiAPIKey() != ""
+		return &c.GeminiAPIKey, &c.GeminiModel, "GEMINI_API_KEY", DefaultGeminiModel
 	}
 }
 
-func (c *Config) GetOpenRouterModel() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.OpenRouterModel == "" {
-		return DefaultOpenRouterModel
+// *_API_KEY env vars win at read time and are never copied into the struct, so Save can't persist them.
+func (c *Config) GetAPIKey(provider string) string {
+	key, _, env, _ := c.providerFields(provider)
+	if key == nil {
+		return ""
 	}
-	return c.OpenRouterModel
-}
-
-func (c *Config) SetOpenRouterModel(model string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.OpenRouterModel = model
-}
-
-func (c *Config) GetGroqAPIKey() string {
-	if envKey := os.Getenv("GROQ_API_KEY"); envKey != "" {
-		return envKey
+	if v := os.Getenv(env); v != "" {
+		return v
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.GroqAPIKey
+	return *key
 }
 
-func (c *Config) SetGroqAPIKey(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.GroqAPIKey = key
-}
-
-func (c *Config) GetGroqModel() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.GroqModel == "" {
-		return DefaultGroqModel
+func (c *Config) SetAPIKey(provider, value string) {
+	key, _, _, _ := c.providerFields(provider)
+	if key == nil {
+		return
 	}
-	return c.GroqModel
-}
-
-func (c *Config) SetGroqModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.GroqModel = model
+	*key = value
 }
 
-func (c *Config) GetCerebrasAPIKey() string {
-	if envKey := os.Getenv("CEREBRAS_API_KEY"); envKey != "" {
-		return envKey
+func (c *Config) GetModel(provider string) string {
+	_, model, _, def := c.providerFields(provider)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if *model == "" {
+		return def
 	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.CerebrasAPIKey
+	return *model
 }
 
-func (c *Config) SetCerebrasAPIKey(key string) {
+func (c *Config) SetModel(provider, value string) {
+	_, model, _, _ := c.providerFields(provider)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.CerebrasAPIKey = key
+	*model = value
 }
 
-func (c *Config) GetCerebrasModel() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.CerebrasModel == "" {
-		return DefaultCerebrasModel
+// Whether the provider can be called at all; "local" needs only a server URL.
+func (c *Config) HasAPIKey(provider string) bool {
+	if provider == "local" {
+		return c.GetLocalURL() != ""
 	}
-	return c.CerebrasModel
-}
-
-func (c *Config) SetCerebrasModel(model string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.CerebrasModel = model
-}
-
-func (c *Config) GetLocalModel() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.LocalModel
-}
-
-func (c *Config) SetLocalModel(model string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.LocalModel = model
+	return c.GetAPIKey(provider) != ""
 }
 
 func (c *Config) GetLocalURL() string {

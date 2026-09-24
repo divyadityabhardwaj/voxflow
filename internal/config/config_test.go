@@ -99,7 +99,7 @@ func TestEnvAPIKeysAreNotSaved(t *testing.T) {
 	if err := c.Load(); err != nil {
 		t.Fatal(err)
 	}
-	if c.GetGeminiAPIKey() != "env-gemini" || c.GetGroqAPIKey() != "env-groq" {
+	if c.GetAPIKey("gemini") != "env-gemini" || c.GetAPIKey("groq") != "env-groq" {
 		t.Error("env keys should override the file")
 	}
 	if err := c.Save(); err != nil {
@@ -135,5 +135,33 @@ func TestHasAPIKey(t *testing.T) {
 		if got := c.HasAPIKey(provider); got != want {
 			t.Errorf("HasAPIKey(%q) = %v, want %v", provider, got, want)
 		}
+	}
+}
+
+func TestProviderFieldsReadExistingConfig(t *testing.T) {
+	writeConfig(t, `{"gemini_api_key":"gk","gemini_model":"gm","openrouter_api_key":"ok","openrouter_model":"om",
+		"groq_api_key":"qk","groq_model":"qm","cerebras_api_key":"ck","cerebras_model":"","local_model":"lm"}`)
+	clearKeyEnv(t)
+	c := &Config{}
+	if err := c.Load(); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][2]string{
+		"gemini":     {"gk", "gm"},
+		"openrouter": {"ok", "om"},
+		"groq":       {"qk", "qm"},
+		"cerebras":   {"ck", DefaultCerebrasModel},
+		"local":      {"", "lm"},
+		"unknown":    {"gk", "gm"},
+	}
+	for p, w := range want {
+		if k, m := c.GetAPIKey(p), c.GetModel(p); k != w[0] || m != w[1] {
+			t.Errorf("%s: key %q model %q, want %q %q", p, k, m, w[0], w[1])
+		}
+	}
+	c.SetAPIKey("local", "ignored")
+	c.SetModel("groq", "new")
+	if c.GroqModel != "new" || c.GetAPIKey("local") != "" {
+		t.Error("setters should write the provider's own field")
 	}
 }

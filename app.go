@@ -6,18 +6,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"voxflow/internal/audio"
-	"voxflow/internal/cerebras"
 	"voxflow/internal/config"
 	"voxflow/internal/events"
-	"voxflow/internal/gemini"
-	"voxflow/internal/groq"
 	"voxflow/internal/history"
 	"voxflow/internal/hotkey"
 	"voxflow/internal/injection"
 	"voxflow/internal/llm"
-	"voxflow/internal/localclient"
 	"voxflow/internal/logger"
-	"voxflow/internal/openrouter"
 	"voxflow/internal/orchestrator"
 	"voxflow/internal/whisper"
 	"voxflow/internal/window"
@@ -33,11 +28,7 @@ type App struct {
 	pipeline         *orchestrator.Pipeline
 	audioRecorder    *audio.Recorder
 	whisperService   *whisper.Service
-	localClient      *localclient.Client
-	geminiClient     *gemini.Client
-	openRouterClient *openrouter.Client
-	groqClient       *groq.Client
-	cerebrasClient   *cerebras.Client
+	llmClients       map[string]*llm.OpenAIClient
 	historyService   *history.Service
 	injectionService *injection.Service
 	modelReady       atomic.Bool
@@ -52,16 +43,16 @@ type App struct {
 func NewApp() *App {
 	cfg := config.GetInstance()
 	app := &App{
-		ctx:              context.Background(),
-		config:           cfg,
-		audioRecorder:    audio.NewRecorder(),
-		whisperService:   whisper.NewService(),
-		geminiClient:     gemini.NewClient(cfg.GetGeminiAPIKey(), cfg.GetGeminiModel()),
-		openRouterClient: openrouter.NewClient(cfg.GetOpenRouterAPIKey()),
-		groqClient:       groq.NewClient(cfg.GetGroqAPIKey()),
-		cerebrasClient:   cerebras.NewClient(cfg.GetCerebrasAPIKey()),
-		localClient:      localclient.NewClient(cfg.GetLocalURL()),
+		ctx:            context.Background(),
+		config:         cfg,
+		audioRecorder:  audio.NewRecorder(),
+		whisperService: whisper.NewService(),
+		llmClients:     map[string]*llm.OpenAIClient{},
 	}
+	for _, p := range llm.Providers {
+		app.llmClients[p.ID] = llm.NewClient(p, cfg.GetAPIKey(p.ID))
+	}
+	app.llmClients["local"].SetServerURL(cfg.GetLocalURL())
 	app.whisperService.SetLanguage(cfg.GetWhisperLanguage())
 	app.whisperService.SetThreads(cfg.GetWhisperThreads())
 	app.whisperService.SetPrompt(cfg.GetVocabulary())
@@ -103,34 +94,16 @@ func (a *App) rebuildPipeline() {
 	})
 }
 
+func (a *App) llmClient(provider string) *llm.OpenAIClient {
+	return a.llmClients[llm.ProviderByID(provider).ID]
+}
+
 func (a *App) activeRefiner() llm.Refiner {
-	switch a.config.GetLLMProvider() {
-	case "openrouter":
-		return a.openRouterClient
-	case "groq":
-		return a.groqClient
-	case "cerebras":
-		return a.cerebrasClient
-	case "local":
-		return a.localClient
-	default:
-		return a.geminiClient
-	}
+	return a.llmClient(a.config.GetLLMProvider())
 }
 
 func (a *App) activeLLMModel() string {
-	switch a.config.GetLLMProvider() {
-	case "openrouter":
-		return a.config.GetOpenRouterModel()
-	case "groq":
-		return a.config.GetGroqModel()
-	case "cerebras":
-		return a.config.GetCerebrasModel()
-	case "local":
-		return a.config.GetLocalModel()
-	default:
-		return a.config.GetGeminiModel()
-	}
+	return a.config.GetModel(a.config.GetLLMProvider())
 }
 
 func (a *App) startup(ctx context.Context) {

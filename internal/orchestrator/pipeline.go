@@ -541,7 +541,7 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 
 	logger.Debugf("[Pipeline] Output: %d chars", len(d.text))
 
-	llmName := providerDisplayName(llmProvider)
+	llmName := llm.ProviderByID(llmProvider).Name
 	output := fmt.Sprintf(
 		"\nProcessing Complete:\n"+
 			"Audio captured:        %.2fs\n"+
@@ -604,7 +604,7 @@ func (p *Pipeline) deliver(rawText, bundleID string) delivery {
 	switch {
 	case mode == "raw" || mode == "copy-only":
 		logger.Infof("[Pipeline] Refinement mode '%s' for app %q — bypassing LLM", mode, bundleID)
-	case !providerConfigured(p.config, provider):
+	case !p.config.HasAPIKey(provider):
 		// Skipping the key in onboarding shouldn't make every dictation show an error.
 		logger.Infof("[Pipeline] No %s API key set — pasting raw transcription", provider)
 	default:
@@ -658,43 +658,11 @@ func (p *Pipeline) deliver(rawText, bundleID string) delivery {
 	return d
 }
 
-// providerConfigured reports whether refinement can be attempted at all. The
-// local server needs no key, only a URL.
-func providerConfigured(c *config.Config, provider string) bool {
-	switch provider {
-	case "openrouter":
-		return c.GetOpenRouterAPIKey() != ""
-	case "groq":
-		return c.GetGroqAPIKey() != ""
-	case "cerebras":
-		return c.GetCerebrasAPIKey() != ""
-	case "local":
-		return c.GetLocalURL() != ""
-	default:
-		return c.GetGeminiAPIKey() != ""
-	}
-}
-
 func (p *Pipeline) llmModel() string {
 	if p.activeLLMModel == nil {
 		return ""
 	}
 	return p.activeLLMModel()
-}
-
-func providerDisplayName(provider string) string {
-	switch provider {
-	case "openrouter":
-		return "OpenRouter"
-	case "groq":
-		return "Groq"
-	case "cerebras":
-		return "Cerebras"
-	case "local":
-		return "Local"
-	default:
-		return "Gemini"
-	}
 }
 
 // Provider errors can carry whole HTML pages or response bodies.

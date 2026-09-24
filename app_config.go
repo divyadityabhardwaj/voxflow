@@ -40,75 +40,20 @@ func (a *App) GetConfig() *ConfigResponse {
 		WhisperModel:        a.config.GetWhisperModel(),
 		WhisperLanguage:     a.config.GetWhisperLanguage(),
 		WhisperThreads:      a.config.GetWhisperThreads(),
-		GeminiModel:         a.config.GetGeminiModel(),
-		APIKeySet:           a.config.GetGeminiAPIKey() != "",
+		GeminiModel:         a.config.GetModel("gemini"),
+		APIKeySet:           a.config.GetAPIKey("gemini") != "",
 		LLMProvider:         a.config.GetLLMProvider(),
-		OpenRouterModel:     a.config.GetOpenRouterModel(),
-		OpenRouterAPIKeySet: a.config.GetOpenRouterAPIKey() != "",
-		GroqModel:           a.config.GetGroqModel(),
-		GroqAPIKeySet:       a.config.GetGroqAPIKey() != "",
-		CerebrasModel:       a.config.GetCerebrasModel(),
-		CerebrasAPIKeySet:   a.config.GetCerebrasAPIKey() != "",
-		LocalModel:          a.config.GetLocalModel(),
+		OpenRouterModel:     a.config.GetModel("openrouter"),
+		OpenRouterAPIKeySet: a.config.GetAPIKey("openrouter") != "",
+		GroqModel:           a.config.GetModel("groq"),
+		GroqAPIKeySet:       a.config.GetAPIKey("groq") != "",
+		CerebrasModel:       a.config.GetModel("cerebras"),
+		CerebrasAPIKeySet:   a.config.GetAPIKey("cerebras") != "",
+		LocalModel:          a.config.GetModel("local"),
 		LocalURL:            a.config.GetLocalURL(),
 		RefinementMode:      a.config.GetRefinementMode(),
 		MuteSystemAudio:     a.config.GetMuteSystemAudio(),
 		Vocabulary:          a.config.GetVocabulary(),
-	}
-}
-
-func (a *App) SetAPIKey(key string) error {
-	a.config.SetGeminiAPIKey(key)
-	a.geminiClient.SetAPIKey(key)
-	_ = config.ClearModelCache("gemini")
-	go a.ensureValidModel("gemini")
-	return a.config.Save()
-}
-
-func (a *App) ensureValidModel(provider string) {
-	var (
-		models       []string
-		err          error
-		current, def string
-		set          func(string)
-	)
-	switch provider {
-	case "gemini":
-		if a.config.GetGeminiAPIKey() == "" {
-			return
-		}
-		models, err = a.GetGeminiModels()
-		current, def = a.config.GetGeminiModel(), config.DefaultGeminiModel
-		set = func(m string) { a.config.SetGeminiModel(m); a.geminiClient.SetModel(m) }
-	case "openrouter":
-		models, err = a.GetOpenRouterModels()
-		current, def, set = a.config.GetOpenRouterModel(), config.DefaultOpenRouterModel, a.config.SetOpenRouterModel
-	case "groq":
-		if a.config.GetGroqAPIKey() == "" {
-			return
-		}
-		models, err = a.GetGroqModels()
-		current, def, set = a.config.GetGroqModel(), config.DefaultGroqModel, a.config.SetGroqModel
-	case "cerebras":
-		if a.config.GetCerebrasAPIKey() == "" {
-			return
-		}
-		models, err = a.GetCerebrasModels()
-		current, def, set = a.config.GetCerebrasModel(), config.DefaultCerebrasModel, a.config.SetCerebrasModel
-	default:
-		return
-	}
-	if err != nil || len(models) == 0 || slices.Contains(models, current) {
-		return
-	}
-	pick := models[0]
-	if slices.Contains(models, def) {
-		pick = def
-	}
-	logger.Warnf("[LLM] %s no longer lists %q, switching to %q", provider, current, pick)
-	set(pick)
-	if err := a.config.Save(); err != nil {
-		logger.Errorf("[LLM] Failed to save model switch: %v", err)
 	}
 }
 
@@ -172,9 +117,65 @@ func (a *App) GetAllModels() ([]whisper.ModelInfo, error) {
 	return a.whisperService.GetAllModels()
 }
 
-func (a *App) SetGeminiModel(model string) error {
-	a.config.SetGeminiModel(model)
-	a.geminiClient.SetModel(model)
+type ProviderInfo struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	NeedsKey     bool   `json:"needs_key"`
+	KeySet       bool   `json:"key_set"`
+	Model        string `json:"model"`
+	DefaultModel string `json:"default_model"`
+	Local        bool   `json:"local"`
+}
+
+func (a *App) GetProviders() []ProviderInfo {
+	out := make([]ProviderInfo, 0, len(llm.Providers))
+	for _, p := range llm.Providers {
+		out = append(out, ProviderInfo{
+			ID:           p.ID,
+			Name:         p.Name,
+			NeedsKey:     p.NeedsKey,
+			KeySet:       a.config.GetAPIKey(p.ID) != "",
+			Model:        a.config.GetModel(p.ID),
+			DefaultModel: p.DefaultModel,
+			Local:        p.Local,
+		})
+	}
+	return out
+}
+
+func knownProvider(id string) error {
+	if llm.ProviderByID(id).ID != id {
+		return fmt.Errorf("unknown provider %q", id)
+	}
+	return nil
+}
+
+func (a *App) SetProvider(id string) error {
+	if err := knownProvider(id); err != nil {
+		return err
+	}
+	a.config.SetLLMProvider(id)
+	go a.ensureValidModel(id)
+	return a.config.Save()
+}
+
+// Not SetAPIKey(id, key): that name is still the Gemini-only binding the frontend calls.
+func (a *App) SetProviderAPIKey(id, key string) error {
+	if err := knownProvider(id); err != nil {
+		return err
+	}
+	a.config.SetAPIKey(id, key)
+	a.llmClient(id).APIKey = a.config.GetAPIKey(id)
+	_ = config.ClearModelCache(id)
+	go a.ensureValidModel(id)
+	return a.config.Save()
+}
+
+func (a *App) SetProviderModel(id, model string) error {
+	if err := knownProvider(id); err != nil {
+		return err
+	}
+	a.config.SetModel(id, model)
 	return a.config.Save()
 }
 
@@ -183,148 +184,126 @@ type CheckResult struct {
 	TPS       float64 `json:"tps"`
 }
 
-func (a *App) GetGeminiModels() ([]string, error) {
-	if cached, ok := config.LoadModelCache("gemini"); ok {
+func (a *App) GetProviderModels(id string) ([]string, error) {
+	if err := knownProvider(id); err != nil {
+		return nil, err
+	}
+	if cached, ok := config.LoadModelCache(id); ok {
 		return cached, nil
 	}
-	models, err := a.geminiClient.ListModels()
+	models, err := a.llmClient(id).GetModels()
 	if err == nil && len(models) > 0 {
-		_ = config.SaveModelCache("gemini", models)
+		_ = config.SaveModelCache(id, models)
 	}
 	return models, err
 }
 
-func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
-	latency, tps, err := a.geminiClient.CheckModel(model)
+func (a *App) CheckProviderModel(id, model string) (*CheckResult, error) {
+	if err := knownProvider(id); err != nil {
+		return nil, err
+	}
+	latency, tps, err := a.llmClient(id).CheckModel(model)
 	if err != nil {
 		return nil, err
 	}
 	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
 }
 
-func (a *App) GetOpenRouterModels() ([]string, error) {
-	if cached, ok := config.LoadModelCache("openrouter"); ok {
-		return cached, nil
+// Swaps out a model the provider no longer lists.
+func (a *App) ensureValidModel(provider string) {
+	p := llm.ProviderByID(provider)
+	if p.Local || (!p.OpenModels && a.config.GetAPIKey(p.ID) == "") {
+		return
 	}
-	models, err := a.openRouterClient.GetFreeModels()
-	if err == nil && len(models) > 0 {
-		_ = config.SaveModelCache("openrouter", models)
+	models, err := a.GetProviderModels(p.ID)
+	current := a.config.GetModel(p.ID)
+	if err != nil || len(models) == 0 || slices.Contains(models, current) {
+		return
 	}
-	return models, err
-}
-
-func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
-	latency, tps, err := a.openRouterClient.CheckModel(model)
-	if err != nil {
-		return nil, err
+	pick := models[0]
+	if slices.Contains(models, p.DefaultModel) {
+		pick = p.DefaultModel
 	}
-	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
-}
-
-func (a *App) SetOpenRouterAPIKey(key string) error {
-	a.config.SetOpenRouterAPIKey(key)
-	a.openRouterClient.SetAPIKey(key)
-	_ = config.ClearModelCache("openrouter")
-	go a.ensureValidModel("openrouter")
-	return a.config.Save()
-}
-
-func (a *App) SetLLMProvider(provider string) error {
-	a.config.SetLLMProvider(provider)
-	go a.ensureValidModel(provider)
-	return a.config.Save()
-}
-
-func (a *App) SetOpenRouterModel(model string) error {
-	a.config.SetOpenRouterModel(model)
-	return a.config.Save()
-}
-
-func (a *App) GetGroqModels() ([]string, error) {
-	if cached, ok := config.LoadModelCache("groq"); ok {
-		return cached, nil
+	logger.Warnf("[LLM] %s no longer lists %q, switching to %q", p.ID, current, pick)
+	a.config.SetModel(p.ID, pick)
+	if err := a.config.Save(); err != nil {
+		logger.Errorf("[LLM] Failed to save model switch: %v", err)
 	}
-	models, err := a.groqClient.GetModels()
-	if err == nil && len(models) > 0 {
-		_ = config.SaveModelCache("groq", models)
-	}
-	return models, err
 }
 
-func (a *App) CheckGroqModel(model string) (*CheckResult, error) {
-	latency, tps, err := a.groqClient.CheckModel(model)
-	if err != nil {
-		return nil, err
-	}
-	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
-}
-
-func (a *App) SetGroqAPIKey(key string) error {
-	a.config.SetGroqAPIKey(key)
-	a.groqClient.SetAPIKey(key)
-	a.groqClient.ClearModelsCache()
-	_ = config.ClearModelCache("groq")
-	go a.ensureValidModel("groq")
-	return a.config.Save()
-}
-
-func (a *App) SetGroqModel(model string) error {
-	a.config.SetGroqModel(model)
-	return a.config.Save()
-}
-
-func (a *App) GetCerebrasModels() ([]string, error) {
-	if cached, ok := config.LoadModelCache("cerebras"); ok {
-		return cached, nil
-	}
-	models, err := a.cerebrasClient.GetModels()
-	if err == nil && len(models) > 0 {
-		_ = config.SaveModelCache("cerebras", models)
-	}
-	return models, err
-}
-
-func (a *App) CheckCerebrasModel(model string) (*CheckResult, error) {
-	latency, tps, err := a.cerebrasClient.CheckModel(model)
-	if err != nil {
-		return nil, err
-	}
-	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
-}
-
-func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
-	latency, tps, err := a.localClient.CheckModel(model)
-	if err != nil {
-		return nil, err
-	}
-	return &CheckResult{LatencyMs: latency, TPS: tps}, nil
-}
-
-// Also reinitialises the local HTTP client.
 func (a *App) SetLocalURL(url string) error {
 	a.config.SetLocalURL(url)
-	a.localClient.SetBaseURL(url)
+	a.llmClient("local").SetServerURL(url)
+	_ = config.ClearModelCache("local")
 	return a.config.Save()
 }
 
-func (a *App) SetLocalModel(model string) error {
-	a.config.SetLocalModel(model)
-	return a.config.Save()
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetAPIKey(key string) error { return a.SetProviderAPIKey("gemini", key) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetLLMProvider(provider string) error { return a.SetProvider(provider) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetGeminiModel(model string) error { return a.SetProviderModel("gemini", model) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) GetGeminiModels() ([]string, error) { return a.GetProviderModels("gemini") }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
+	return a.CheckProviderModel("gemini", model)
 }
 
-func (a *App) SetCerebrasAPIKey(key string) error {
-	a.config.SetCerebrasAPIKey(key)
-	a.cerebrasClient.SetAPIKey(key)
-	a.cerebrasClient.ClearModelsCache()
-	_ = config.ClearModelCache("cerebras")
-	go a.ensureValidModel("cerebras")
-	return a.config.Save()
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) GetOpenRouterModels() ([]string, error) { return a.GetProviderModels("openrouter") }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
+	return a.CheckProviderModel("openrouter", model)
 }
 
-func (a *App) SetCerebrasModel(model string) error {
-	a.config.SetCerebrasModel(model)
-	return a.config.Save()
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetOpenRouterAPIKey(key string) error { return a.SetProviderAPIKey("openrouter", key) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetOpenRouterModel(model string) error { return a.SetProviderModel("openrouter", model) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) GetGroqModels() ([]string, error) { return a.GetProviderModels("groq") }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) CheckGroqModel(model string) (*CheckResult, error) {
+	return a.CheckProviderModel("groq", model)
 }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetGroqAPIKey(key string) error { return a.SetProviderAPIKey("groq", key) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetGroqModel(model string) error { return a.SetProviderModel("groq", model) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) GetCerebrasModels() ([]string, error) { return a.GetProviderModels("cerebras") }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) CheckCerebrasModel(model string) (*CheckResult, error) {
+	return a.CheckProviderModel("cerebras", model)
+}
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetCerebrasAPIKey(key string) error { return a.SetProviderAPIKey("cerebras", key) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetCerebrasModel(model string) error { return a.SetProviderModel("cerebras", model) }
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
+	return a.CheckProviderModel("local", model)
+}
+
+// Deprecated: remove once the frontend uses the generic bindings.
+func (a *App) SetLocalModel(model string) error { return a.SetProviderModel("local", model) }
 
 // mode: "refine", "raw", or "copy-only".
 func (a *App) SetRefinementMode(mode string) error {

@@ -25,7 +25,16 @@ const (
 	maxErrorLen   = 200
 )
 
-var ErrRateLimited = errors.New("rate limit reached")
+var (
+	ErrRateLimited = errors.New("rate limit reached")
+	ErrNoAPIKey    = errors.New("API key not set")
+)
+
+// A cold local server loads the model before answering, which can take tens of seconds.
+const (
+	localRequestTimeout = 30 * time.Second
+	localPrewarmTimeout = 60 * time.Second
+)
 
 // Bounds a dictation-path refine: enough for a slow model on a long dictation,
 // short enough that a hung provider falls back to raw text within seconds.
@@ -74,18 +83,16 @@ type modelsResponse struct {
 }
 
 type OpenAIClient struct {
-	BaseURL      string
-	APIKey       string
-	ExtraHeaders map[string]string
-	HTTPClient   *http.Client
-	// DisableReasoning sends {"reasoning":{"enabled":false}}; only OpenRouter accepts it.
-	DisableReasoning bool
+	Provider   Provider
+	BaseURL    string
+	APIKey     string
+	HTTPClient *http.Client
 	// RefineTimeout replaces RefineBudget, for servers that may have to load the model first.
 	RefineTimeout time.Duration
 }
 
 func (c *OpenAIClient) reasoning() *reasoningOpts {
-	if c.DisableReasoning {
+	if c.Provider.DisableReasoning {
 		return &reasoningOpts{Enabled: false}
 	}
 	return nil
@@ -106,16 +113,30 @@ func NewTransport() *http.Transport {
 	}
 }
 
-func NewOpenAIClient(baseURL, apiKey string, extraHeaders map[string]string) *OpenAIClient {
-	return &OpenAIClient{
-		BaseURL:      baseURL,
-		APIKey:       apiKey,
-		ExtraHeaders: extraHeaders,
+func NewClient(p Provider, apiKey string) *OpenAIClient {
+	c := &OpenAIClient{
+		Provider: p,
+		BaseURL:  p.BaseURL,
+		APIKey:   apiKey,
 		HTTPClient: &http.Client{
 			Timeout:   15 * time.Second,
 			Transport: NewTransport(),
 		},
 	}
+	if p.Local {
+		c.HTTPClient.Timeout = localRequestTimeout
+		c.RefineTimeout = localRequestTimeout
+	}
+	return c
+}
+
+// serverURL is the local server's root; /v1 is appended.
+func (c *OpenAIClient) SetServerURL(serverURL string) {
+	c.BaseURL = strings.TrimRight(serverURL, "/") + "/v1"
+}
+
+func (c *OpenAIClient) missingKey() bool {
+	return c.Provider.NeedsKey && c.APIKey == ""
 }
 
 func DoWithRetry(hc *http.Client, newReq func() (*http.Request, error)) ([]byte, int, error) {
@@ -225,10 +246,15 @@ func StatusError(status int, body []byte) error {
 	return fmt.Errorf("API error (status %d): %s", status, msg)
 }
 
-// {"error":{"message":"..."}} (OpenAI-style and Gemini) or {"error":"..."} (Ollama).
+// {"error":{"message":"..."}} (OpenAI-style), [{"error":{...}}] (Gemini's OpenAI
+// endpoint) or {"error":"..."} (Ollama).
 func providerMessage(body []byte) string {
 	var env struct {
 		Error json.RawMessage `json:"error"`
+	}
+	var list []json.RawMessage
+	if json.Unmarshal(body, &list) == nil && len(list) > 0 {
+		body = list[0]
 	}
 	if json.Unmarshal(body, &env) != nil || len(env.Error) == 0 {
 		return ""
@@ -271,7 +297,7 @@ func (c *OpenAIClient) applyHeaders(req *http.Request) {
 	if c.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	}
-	for k, v := range c.ExtraHeaders {
+	for k, v := range c.Provider.Headers {
 		req.Header.Set(k, v)
 	}
 }
@@ -284,6 +310,9 @@ func refineMessages(rawText string) []chatMessage {
 }
 
 func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, error) {
+	if c.missingKey() {
+		return "", 0, false, ErrNoAPIKey
+	}
 	req := chatRequest{
 		Model:       model,
 		Messages:    refineMessages(rawText),
@@ -334,6 +363,9 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 }
 
 func (c *OpenAIClient) RetryWithInstruction(text, instruction, model string) (string, error) {
+	if c.missingKey() {
+		return "", ErrNoAPIKey
+	}
 	prompt := fmt.Sprintf(`Apply the following instruction to the text:
 Instruction: %s
 
@@ -379,6 +411,9 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 }
 
 func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
+	if c.missingKey() {
+		return 0, 0, ErrNoAPIKey
+	}
 	req := chatRequest{
 		Model: model,
 		Messages: []chatMessage{
@@ -410,13 +445,12 @@ func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 
 	latency := time.Since(startTime).Milliseconds()
 
-	if resp.StatusCode != http.StatusOK {
-		return 0, 0, fmt.Errorf("API error (status %d)", resp.StatusCode)
-	}
-
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, StatusError(resp.StatusCode, respBody)
 	}
 
 	var apiResp chatResponse
@@ -433,35 +467,51 @@ func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 	return latency, tps, nil
 }
 
-func (c *OpenAIClient) GetModels(filter func(id string) bool) ([]string, error) {
-	url := fmt.Sprintf("%s/models", c.BaseURL)
-
-	respBody, statusCode, err := c.doGet(url)
-	if err != nil {
-		return nil, err
+// Falls back to the provider's built-in list when the catalog can't be read.
+func (c *OpenAIClient) GetModels() ([]string, error) {
+	p := c.Provider
+	if c.missingKey() && !p.OpenModels {
+		return p.FallbackModels, ErrNoAPIKey
 	}
 
+	respBody, statusCode, err := c.doGet(c.BaseURL + "/models" + p.ModelsQuery)
+	if err != nil {
+		return p.FallbackModels, err
+	}
 	if statusCode != http.StatusOK {
-		return nil, StatusError(statusCode, respBody)
+		return p.FallbackModels, StatusError(statusCode, respBody)
 	}
 
 	var modResp modelsResponse
 	if err := json.Unmarshal(respBody, &modResp); err != nil {
-		return nil, fmt.Errorf("failed to parse models: %w", err)
+		return p.FallbackModels, fmt.Errorf("failed to parse models: %w", err)
 	}
 
 	var models []string
 	for _, m := range modResp.Data {
-		if filter == nil || filter(m.ID) {
-			models = append(models, m.ID)
+		id := strings.TrimPrefix(m.ID, p.ModelPrefix)
+		if p.KeepModel == nil || p.KeepModel(id) {
+			models = append(models, id)
 		}
+	}
+	if len(models) == 0 {
+		return p.FallbackModels, nil
 	}
 
 	sort.Strings(models)
 	return models, nil
 }
 
+// Opens the connection (or, for a local server, loads the model) while the user
+// is still speaking. Fire-and-forget.
 func (c *OpenAIClient) Prewarm(model string) {
+	if c.missingKey() {
+		return
+	}
+	if c.Provider.Local {
+		c.prewarmLocal(model)
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -477,6 +527,40 @@ func (c *OpenAIClient) Prewarm(model string) {
 			resp.Body.Close()
 		}
 	}()
+}
+
+func (c *OpenAIClient) prewarmLocal(model string) {
+	if model == "" {
+		return
+	}
+	root := strings.TrimSuffix(c.BaseURL, "/v1")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), localPrewarmTimeout)
+		defer cancel()
+		if strings.Contains(root, ":11434") || strings.Contains(root, "ollama") {
+			c.keepOllamaLoaded(ctx, root, model)
+		}
+		_ = c.WarmUp(ctx, model)
+	}()
+}
+
+// Ollama unloads a model after 5 idle minutes and ignores keep_alive on its /v1 API.
+func (c *OpenAIClient) keepOllamaLoaded(ctx context.Context, root, model string) {
+	body, err := json.Marshal(map[string]string{"model": model, "keep_alive": "30m"})
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", root+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Transport: c.HTTPClient.Transport}).Do(req)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 }
 
 // Asks for one token behind the refine system prompt, so a local server loads the
