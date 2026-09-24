@@ -173,6 +173,36 @@ func TestPlausibleRefinement(t *testing.T) {
 			want:    true,
 		},
 		{
+			name:    "spoken percentage to digits",
+			raw:     "twenty five percent",
+			refined: "25%",
+			want:    true,
+		},
+		{
+			name:    "spoken port number to digits",
+			raw:     "set the port to eight zero eight zero",
+			refined: "Set the port to 8080.",
+			want:    true,
+		},
+		{
+			name:    "mostly digits after conversion",
+			raw:     "twenty twenty four budget ninety nine thousand",
+			refined: "2024 budget: 99,000",
+			want:    true,
+		},
+		{
+			name:    "digits do not excuse an answer",
+			raw:     "what year did the war end",
+			refined: "The Second World War ended in 1945.",
+			want:    false,
+		},
+		{
+			name:    "short contraction",
+			raw:     "do not",
+			refined: "Don't.",
+			want:    true,
+		},
+		{
 			name:    "chatty preamble",
 			raw:     "hello there",
 			refined: "Sure! Here is the cleaned up version of your text: Hello there.",

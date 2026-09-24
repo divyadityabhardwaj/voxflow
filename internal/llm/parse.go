@@ -55,20 +55,30 @@ func plausibleRefinement(raw, refined string) bool {
 		return false
 	}
 	words := wordTokens(refined)
-	if len(words) == 0 {
+	// Too few words for a ratio to mean anything ("Don't", "25%").
+	if len(words) <= 3 {
 		return true
 	}
 	known := make(map[string]bool)
 	for _, w := range wordTokens(raw) {
 		known[w] = true
 	}
-	hits := 0
+	hits, counted := 0, 0
 	for _, w := range words {
+		// Spoken numbers come back as digits, so digits never match raw text.
+		if isNumeric(w) {
+			continue
+		}
+		counted++
 		if known[w] {
 			hits++
 		}
 	}
-	return hits*2 >= len(words)
+	return hits*2 >= counted
+}
+
+func isNumeric(w string) bool {
+	return strings.IndexFunc(w, func(r rune) bool { return !unicode.IsNumber(r) }) < 0
 }
 
 func wordTokens(s string) []string {
