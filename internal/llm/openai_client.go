@@ -55,7 +55,13 @@ type chatRequest struct {
 	Temperature float64       `json:"temperature,omitempty"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 	// OpenRouter-only: turn off hybrid-thinking so the reply is just the text.
-	Reasoning *reasoningOpts `json:"reasoning,omitempty"`
+	Reasoning       *reasoningOpts  `json:"reasoning,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	ResponseFormat  *responseFormat `json:"response_format,omitempty"`
+}
+
+type responseFormat struct {
+	Type string `json:"type"`
 }
 
 type reasoningOpts struct {
@@ -94,6 +100,28 @@ type OpenAIClient struct {
 func (c *OpenAIClient) reasoning() *reasoningOpts {
 	if c.Provider.DisableReasoning {
 		return &reasoningOpts{Enabled: false}
+	}
+	return nil
+}
+
+// Lowest thinking Gemini Flash accepts: it halved latency with no quality loss in
+// scripts/bench-refine. gpt-oss at "low" was only ~100ms faster and left fillers
+// in and cleaned less, so it keeps its default.
+func (c *OpenAIClient) reasoningEffort(model string) string {
+	switch {
+	case c.Provider.ID != "gemini" || !strings.Contains(model, "flash"):
+		return ""
+	case strings.HasPrefix(model, "gemini-2.5"):
+		return "none"
+	case strings.HasPrefix(model, "gemini-3"):
+		return "minimal" // 3.x can't turn thinking off
+	}
+	return ""
+}
+
+func (c *OpenAIClient) jsonMode() *responseFormat {
+	if c.Provider.JSONMode {
+		return &responseFormat{Type: "json_object"}
 	}
 	return nil
 }
@@ -314,11 +342,13 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 		return "", 0, false, ErrNoAPIKey
 	}
 	req := chatRequest{
-		Model:       model,
-		Messages:    refineMessages(rawText),
-		Temperature: 0.3,
-		MaxTokens:   RefineMaxTokens(rawText),
-		Reasoning:   c.reasoning(),
+		Model:           model,
+		Messages:        refineMessages(rawText),
+		Temperature:     0.3,
+		MaxTokens:       RefineMaxTokens(rawText),
+		Reasoning:       c.reasoning(),
+		ReasoningEffort: c.reasoningEffort(model),
+		ResponseFormat:  c.jsonMode(),
 	}
 
 	reqBody, err := json.Marshal(req)
@@ -379,8 +409,9 @@ Return ONLY the modified text, nothing else.`, instruction, text)
 		Messages: []chatMessage{
 			{Role: "user", Content: prompt},
 		},
-		Temperature: 0.3,
-		Reasoning:   c.reasoning(),
+		Temperature:     0.3,
+		Reasoning:       c.reasoning(),
+		ReasoningEffort: c.reasoningEffort(model),
 	}
 
 	reqBody, err := json.Marshal(req)
@@ -419,8 +450,9 @@ func (c *OpenAIClient) CheckModel(model string) (int64, float64, error) {
 		Messages: []chatMessage{
 			{Role: "user", Content: LatencyTestText},
 		},
-		Temperature: 0.3,
-		Reasoning:   c.reasoning(),
+		Temperature:     0.3,
+		Reasoning:       c.reasoning(),
+		ReasoningEffort: c.reasoningEffort(model),
 	}
 
 	reqBody, err := json.Marshal(req)

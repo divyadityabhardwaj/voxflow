@@ -20,6 +20,8 @@ type Provider struct {
 	FallbackModels []string
 	// Sends {"reasoning":{"enabled":false}}; only OpenRouter accepts it.
 	DisableReasoning bool
+	// Sends response_format json_object; only where every listed model accepts it.
+	JSONMode bool
 }
 
 func excludes(subs ...string) func(string) bool {
@@ -39,6 +41,7 @@ var Providers = []Provider{
 		BaseURL:      "https://generativelanguage.googleapis.com/v1beta/openai",
 		DefaultModel: config.DefaultGeminiModel,
 		NeedsKey:     true,
+		JSONMode:     true,
 		ModelPrefix:  "models/",
 		KeepModel: func(id string) bool {
 			// Only text chat models: the list also carries TTS, image, live-audio and embedding models.
@@ -76,6 +79,7 @@ var Providers = []Provider{
 		BaseURL:        "https://api.groq.com/openai/v1",
 		DefaultModel:   config.DefaultGroqModel,
 		NeedsKey:       true,
+		JSONMode:       true,
 		KeepModel:      excludes("whisper", "tts", "embedding", "guard", "tool-use"),
 		FallbackModels: []string{"openai/gpt-oss-20b", "openai/gpt-oss-120b"},
 	},

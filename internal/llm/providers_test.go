@@ -96,6 +96,10 @@ func TestProviders(t *testing.T) {
 				t.Errorf("reasoning sent = %v, want %v", ok, p.DisableReasoning)
 			}
 
+			if _, ok := chat["response_format"]; ok != p.JSONMode {
+				t.Errorf("response_format sent = %v, want %v", ok, p.JSONMode)
+			}
+
 			got, err := c.GetModels()
 			if err != nil || !slices.Equal(got, models[p.ID].want) {
 				t.Errorf("GetModels = %v, %v; want %v", got, err, models[p.ID].want)
@@ -112,5 +116,26 @@ func TestProviders(t *testing.T) {
 				t.Errorf("failed GetModels = %v, %v; want fallback", got, err)
 			}
 		})
+	}
+}
+
+func TestReasoningEffort(t *testing.T) {
+	cases := []struct{ provider, model, want string }{
+		{"groq", "openai/gpt-oss-20b", ""},
+		{"cerebras", "gpt-oss-120b", ""},
+		{"gemini", "gemini-flash-latest", ""},
+		{"openrouter", "google/gemini-2.5-flash", ""},
+		{"local", "gpt-oss:20b", ""},
+		{"gemini", "gemini-2.5-flash", "none"},
+		{"gemini", "gemini-2.5-flash-lite", "none"},
+		{"gemini", "gemini-3.5-flash-lite", "minimal"},
+		{"gemini", "gemini-2.5-pro", ""},
+		{"gemini", "gemini-3.1-pro-preview", ""},
+	}
+	for _, tc := range cases {
+		c := NewClient(ProviderByID(tc.provider), "k")
+		if got := c.reasoningEffort(tc.model); got != tc.want {
+			t.Errorf("%s %s: %q, want %q", tc.provider, tc.model, got, tc.want)
+		}
 	}
 }
