@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   GetConfig,
   GetPermissions,
@@ -36,17 +36,17 @@ const POLL_MS = 1000;
 // Shown only while something needs fixing.
 export default function SetupChecklist() {
   const [setup, setSetup] = useState<Setup | null>(null);
+  const hadAccessibility = useRef<boolean | null>(null);
 
   const refresh = useCallback(async () => {
     const next = await loadSetup().catch(() => null);
     if (!next) return;
-    setSetup((prev) => {
-      // The hold key's event tap needs Accessibility; retry it once it's granted.
-      if (prev && !prev.accessibility && next.accessibility) {
-        GetPushToTalkKey().then((k) => SetPushToTalkKey(k.key)).catch(() => {});
-      }
-      return next;
-    });
+    // The hold key's event tap needs Accessibility; retry it once it's granted.
+    if (hadAccessibility.current === false && next.accessibility) {
+      GetPushToTalkKey().then((k) => SetPushToTalkKey(k.key)).catch(() => {});
+    }
+    hadAccessibility.current = next.accessibility;
+    setSetup(next);
   }, []);
 
   useEffect(() => {
