@@ -176,9 +176,9 @@ func (r *Recorder) Start() error {
 }
 
 // readLoop owns one recording's stream; callback via atomicCallback (no lock on hot path).
+// stopped is closed under r.mu, so Stop's timeout path sees either a finished
+// loop or one that will still find r.stream changed and close its own stream.
 func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuffer *[]int16, stop <-chan struct{}, stopped chan<- struct{}) {
-	defer close(stopped)
-
 	full := *inputBuffer
 	chunkSize := int(SampleRate) * ChunkDuration
 	chunkBuffer := make([]int16, 0, chunkSize)
@@ -192,6 +192,13 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuffer *[]int16, stop
 				copy(samples, chunkBuffer)
 				cb(samples, chunkStartTime, true)
 			}
+			r.mu.Lock()
+			if r.stream != stream {
+				stream.Abort()
+				stream.Close()
+			}
+			close(stopped)
+			r.mu.Unlock()
 			return
 		default:
 		}
@@ -218,6 +225,7 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuffer *[]int16, stop
 			// Stop gave up waiting for this loop; only this goroutine can close the stream safely.
 			stream.Abort()
 			stream.Close()
+			close(stopped)
 			r.mu.Unlock()
 			return
 		}
@@ -284,6 +292,13 @@ func (r *Recorder) Stop() (string, error) {
 		logger.Warnf("[Audio] Read loop did not stop in time; leaking its stream")
 		r.mu.Lock()
 		r.stream, r.leakedStream = nil, true
+		select {
+		case <-stopped: // exited just after the timeout, leaving the stream to us
+			stream.Abort()
+			stream.Close()
+			r.leakedStream = false
+		default:
+		}
 		r.mu.Unlock()
 	}
 
