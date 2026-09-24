@@ -240,79 +240,6 @@ func (a *App) SetLocalURL(url string) error {
 	return a.config.Save()
 }
 
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetAPIKey(key string) error { return a.SetProviderAPIKey("gemini", key) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetLLMProvider(provider string) error { return a.SetProvider(provider) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetGeminiModel(model string) error { return a.SetProviderModel("gemini", model) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) GetGeminiModels() ([]string, error) { return a.GetProviderModels("gemini") }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) CheckGeminiModel(model string) (*CheckResult, error) {
-	return a.CheckProviderModel("gemini", model)
-}
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) GetOpenRouterModels() ([]string, error) { return a.GetProviderModels("openrouter") }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) CheckOpenRouterModel(model string) (*CheckResult, error) {
-	return a.CheckProviderModel("openrouter", model)
-}
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetOpenRouterAPIKey(key string) error { return a.SetProviderAPIKey("openrouter", key) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetOpenRouterModel(model string) error { return a.SetProviderModel("openrouter", model) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) GetGroqModels() ([]string, error) { return a.GetProviderModels("groq") }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) CheckGroqModel(model string) (*CheckResult, error) {
-	return a.CheckProviderModel("groq", model)
-}
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetGroqAPIKey(key string) error { return a.SetProviderAPIKey("groq", key) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetGroqModel(model string) error { return a.SetProviderModel("groq", model) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) GetCerebrasModels() ([]string, error) { return a.GetProviderModels("cerebras") }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) CheckCerebrasModel(model string) (*CheckResult, error) {
-	return a.CheckProviderModel("cerebras", model)
-}
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetCerebrasAPIKey(key string) error { return a.SetProviderAPIKey("cerebras", key) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetCerebrasModel(model string) error { return a.SetProviderModel("cerebras", model) }
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) CheckLocalModel(model string) (*CheckResult, error) {
-	return a.CheckProviderModel("local", model)
-}
-
-// Deprecated: remove once the frontend uses the generic bindings.
-func (a *App) SetLocalModel(model string) error { return a.SetProviderModel("local", model) }
-
-// mode: "refine", "raw", or "copy-only".
-func (a *App) SetRefinementMode(mode string) error {
-	a.config.SetRefinementMode(mode)
-	return a.config.Save()
-}
-
 // Pushes custom terms to Whisper and the LLM prompt.
 func (a *App) SetVocabulary(v string) error {
 	a.config.SetVocabulary(v)
@@ -330,5 +257,11 @@ func (a *App) SetWhisperLanguage(lang string) error {
 
 func (a *App) SetMuteSystemAudio(val bool) error {
 	a.config.SetMuteSystemAudio(val)
+	return a.config.Save()
+}
+
+// mode: "refine", "raw", or "copy-only".
+func (a *App) SetRefinementMode(mode string) error {
+	a.config.SetRefinementMode(mode)
 	return a.config.Save()
 }

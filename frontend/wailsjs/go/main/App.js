@@ -10,26 +10,6 @@ export function CancelRecording() {
   return window['go']['main']['App']['CancelRecording']();
 }
 
-export function CheckCerebrasModel(arg1) {
-  return window['go']['main']['App']['CheckCerebrasModel'](arg1);
-}
-
-export function CheckGeminiModel(arg1) {
-  return window['go']['main']['App']['CheckGeminiModel'](arg1);
-}
-
-export function CheckGroqModel(arg1) {
-  return window['go']['main']['App']['CheckGroqModel'](arg1);
-}
-
-export function CheckLocalModel(arg1) {
-  return window['go']['main']['App']['CheckLocalModel'](arg1);
-}
-
-export function CheckOpenRouterModel(arg1) {
-  return window['go']['main']['App']['CheckOpenRouterModel'](arg1);
-}
-
 export function CheckProviderModel(arg1, arg2) {
   return window['go']['main']['App']['CheckProviderModel'](arg1, arg2);
 }
@@ -70,24 +50,12 @@ export function GetAppRules() {
   return window['go']['main']['App']['GetAppRules']();
 }
 
-export function GetCerebrasModels() {
-  return window['go']['main']['App']['GetCerebrasModels']();
-}
-
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }
 
 export function GetFrontmostApp() {
   return window['go']['main']['App']['GetFrontmostApp']();
-}
-
-export function GetGeminiModels() {
-  return window['go']['main']['App']['GetGeminiModels']();
-}
-
-export function GetGroqModels() {
-  return window['go']['main']['App']['GetGroqModels']();
 }
 
 export function GetHistory(arg1) {
@@ -104,10 +72,6 @@ export function GetInputDevices() {
 
 export function GetOnboardingCompleted() {
   return window['go']['main']['App']['GetOnboardingCompleted']();
-}
-
-export function GetOpenRouterModels() {
-  return window['go']['main']['App']['GetOpenRouterModels']();
 }
 
 export function GetPermissions() {
@@ -210,32 +174,8 @@ export function SearchHistoryPage(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SearchHistoryPage'](arg1, arg2, arg3, arg4);
 }
 
-export function SetAPIKey(arg1) {
-  return window['go']['main']['App']['SetAPIKey'](arg1);
-}
-
 export function SetAppRule(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetAppRule'](arg1, arg2, arg3);
-}
-
-export function SetCerebrasAPIKey(arg1) {
-  return window['go']['main']['App']['SetCerebrasAPIKey'](arg1);
-}
-
-export function SetCerebrasModel(arg1) {
-  return window['go']['main']['App']['SetCerebrasModel'](arg1);
-}
-
-export function SetGeminiModel(arg1) {
-  return window['go']['main']['App']['SetGeminiModel'](arg1);
-}
-
-export function SetGroqAPIKey(arg1) {
-  return window['go']['main']['App']['SetGroqAPIKey'](arg1);
-}
-
-export function SetGroqModel(arg1) {
-  return window['go']['main']['App']['SetGroqModel'](arg1);
 }
 
 export function SetHandsFreeHotkey(arg1) {
@@ -244,14 +184,6 @@ export function SetHandsFreeHotkey(arg1) {
 
 export function SetInputDevice(arg1) {
   return window['go']['main']['App']['SetInputDevice'](arg1);
-}
-
-export function SetLLMProvider(arg1) {
-  return window['go']['main']['App']['SetLLMProvider'](arg1);
-}
-
-export function SetLocalModel(arg1) {
-  return window['go']['main']['App']['SetLocalModel'](arg1);
 }
 
 export function SetLocalURL(arg1) {
@@ -264,14 +196,6 @@ export function SetMiniModeExpanded(arg1, arg2) {
 
 export function SetMuteSystemAudio(arg1) {
   return window['go']['main']['App']['SetMuteSystemAudio'](arg1);
-}
-
-export function SetOpenRouterAPIKey(arg1) {
-  return window['go']['main']['App']['SetOpenRouterAPIKey'](arg1);
-}
-
-export function SetOpenRouterModel(arg1) {
-  return window['go']['main']['App']['SetOpenRouterModel'](arg1);
 }
 
 export function SetProvider(arg1) {

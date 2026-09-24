@@ -10,16 +10,6 @@ export function CancelDownload():Promise<void>;
 
 export function CancelRecording():Promise<void>;
 
-export function CheckCerebrasModel(arg1:string):Promise<main.CheckResult>;
-
-export function CheckGeminiModel(arg1:string):Promise<main.CheckResult>;
-
-export function CheckGroqModel(arg1:string):Promise<main.CheckResult>;
-
-export function CheckLocalModel(arg1:string):Promise<main.CheckResult>;
-
-export function CheckOpenRouterModel(arg1:string):Promise<main.CheckResult>;
-
 export function CheckProviderModel(arg1:string,arg2:string):Promise<main.CheckResult>;
 
 export function ClearAllHistory():Promise<void>;
@@ -40,15 +30,9 @@ export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 
 export function GetAppRules():Promise<Array<main.AppRuleDTO>>;
 
-export function GetCerebrasModels():Promise<Array<string>>;
-
 export function GetConfig():Promise<main.ConfigResponse>;
 
 export function GetFrontmostApp():Promise<main.FrontmostAppInfo>;
-
-export function GetGeminiModels():Promise<Array<string>>;
-
-export function GetGroqModels():Promise<Array<string>>;
 
 export function GetHistory(arg1:number):Promise<Array<history.Transcript>>;
 
@@ -57,8 +41,6 @@ export function GetHistoryPage(arg1:string,arg2:number,arg3:number):Promise<main
 export function GetInputDevices():Promise<Array<audio.InputDevice>>;
 
 export function GetOnboardingCompleted():Promise<boolean>;
-
-export function GetOpenRouterModels():Promise<Array<string>>;
 
 export function GetPermissions():Promise<main.Permissions>;
 
@@ -110,37 +92,17 @@ export function RetryRefinement(arg1:number,arg2:string):Promise<string>;
 
 export function SearchHistoryPage(arg1:string,arg2:string,arg3:number,arg4:number):Promise<main.HistoryPage>;
 
-export function SetAPIKey(arg1:string):Promise<void>;
-
 export function SetAppRule(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function SetCerebrasAPIKey(arg1:string):Promise<void>;
-
-export function SetCerebrasModel(arg1:string):Promise<void>;
-
-export function SetGeminiModel(arg1:string):Promise<void>;
-
-export function SetGroqAPIKey(arg1:string):Promise<void>;
-
-export function SetGroqModel(arg1:string):Promise<void>;
 
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
 export function SetInputDevice(arg1:string):Promise<void>;
-
-export function SetLLMProvider(arg1:string):Promise<void>;
-
-export function SetLocalModel(arg1:string):Promise<void>;
 
 export function SetLocalURL(arg1:string):Promise<void>;
 
 export function SetMiniModeExpanded(arg1:boolean,arg2:number):Promise<void>;
 
 export function SetMuteSystemAudio(arg1:boolean):Promise<void>;
-
-export function SetOpenRouterAPIKey(arg1:string):Promise<void>;
-
-export function SetOpenRouterModel(arg1:string):Promise<void>;
 
 export function SetProvider(arg1:string):Promise<void>;
 
