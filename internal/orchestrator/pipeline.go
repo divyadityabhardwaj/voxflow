@@ -460,6 +460,11 @@ func (p *Pipeline) processRecording(stream *streamSession) {
 
 	audioDuration := p.audioRecorder.GetDuration()
 
+	if p.audioRecorder.AllSilent() {
+		p.emitToast("Microphone access is off — turn on VoxFlow in System Settings › Privacy & Security › Microphone", "warning")
+		p.resetToIdle()
+		return
+	}
 	if !p.audioRecorder.HasAudioActivity() {
 		p.emitToast("No speech detected. Please try speaking louder or check your microphone.", "warning")
 		p.resetToIdle()
