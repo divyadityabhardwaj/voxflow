@@ -8,8 +8,7 @@ import RecordingIndicator from "./components/RecordingIndicator";
 import RecordingPill from "./components/RecordingPill";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
-import { Tooltip } from "./components/Tooltip";
-import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
+import { EventsOn } from "../wailsjs/runtime/runtime";
 import {
   GetOnboardingCompleted,
   IsMiniMode,
@@ -21,8 +20,10 @@ import { Events } from "./constants/events";
 
 type View = "main" | "history" | "settings";
 
+const DRAG = { "--wails-draggable": "drag" } as CSSProperties;
+
 const MicIcon = () => (
-  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+  <svg fill="currentColor" viewBox="0 0 24 24">
     <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
     <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
   </svg>
@@ -82,24 +83,9 @@ const MinimizeIcon = () => (
   </svg>
 );
 
-const CloseIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-    strokeWidth={1.5}
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M6 18L18 6M6 6l12 12"
-    />
-  </svg>
-);
-
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>("main");
+  const [settingsTab, setSettingsTab] = useState<string | undefined>();
   const [modelReady, setModelReady] = useState<boolean>(false);
   const [isMiniMode, setIsMiniMode] = useState<boolean>(true);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
@@ -132,7 +118,11 @@ function AppContent() {
     IsModelReady().then((ready) => ready && setModelReady(true));
 
     const unsub1 = EventsOn(Events.OpenHistory, () => setCurrentView("history"));
-    const unsub2 = EventsOn(Events.OpenSettings, () => setCurrentView("settings"));
+    const unsub2 = EventsOn(Events.OpenSettings, (tab?: string) => {
+      setSettingsTab(typeof tab === "string" ? tab : undefined);
+      setCurrentView("settings");
+    });
+    const unsubHome = EventsOn(Events.OpenHome, () => setCurrentView("main"));
     const unsub3 = EventsOn(Events.MiniMode, (isMini: boolean) => {
       setIsMiniMode(isMini);
     });
@@ -167,6 +157,7 @@ function AppContent() {
       unsub4();
       unsub5();
       unsubError();
+      unsubHome();
     };
   }, []);
 
@@ -190,157 +181,48 @@ function AppContent() {
     return <ModelDownloader onDownloadComplete={() => setModelReady(true)} />;
   }
 
+  const navItem = (view: View, label: string, icon: JSX.Element) => (
+    <button
+      type="button"
+      onClick={() => setCurrentView(view)}
+      aria-current={currentView === view ? "page" : undefined}
+      className="sidebar-item no-drag"
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
   return (
     <div className="h-full min-h-0 flex app-shell">
       <RecordingPill />
 
       <aside className="sidebar">
-        <Tooltip content="Move" position="bottom">
-          <div
-            className="w-full h-9 cursor-grab active:cursor-grabbing flex items-center justify-center group relative bg-surface hover:bg-surface-hover transition-colors border-b border-border"
-            style={{ "--wails-draggable": "drag" } as unknown as CSSProperties}
-          >
-            <div className="flex flex-col gap-[2px] opacity-30 group-hover:opacity-60 transition-opacity text-tertiary">
-              <div className="flex gap-[3px]">
-                <div className="w-1 h-1 rounded-full bg-current" />
-                <div className="w-1 h-1 rounded-full bg-current" />
-              </div>
-              <div className="flex gap-[2px]">
-                <div className="w-1 h-1 rounded-full bg-current" />
-                <div className="w-1 h-1 rounded-full bg-current" />
-              </div>
-            </div>
-          </div>
-        </Tooltip>
-
-        <div className="flex flex-col items-center gap-2 pt-4">
-          <div className="h-2" />
-
-          <Tooltip content="Dictation" position="right">
-            <button
-              onClick={() => setCurrentView("main")}
-              aria-label="Dictation"
-              aria-current={currentView === "main" ? "page" : undefined}
-              className={`sidebar-btn no-drag ${
-                currentView === "main" ? "active" : ""
-              }`}
-            >
-              <MicIcon />
-            </button>
-          </Tooltip>
-
-          <Tooltip content="History" position="right">
-            <button
-              onClick={() => setCurrentView("history")}
-              aria-label="History"
-              aria-current={currentView === "history" ? "page" : undefined}
-              className={`sidebar-btn no-drag ${
-                currentView === "history" ? "active" : ""
-              }`}
-            >
-              <HistoryIcon />
-            </button>
-          </Tooltip>
-
-          <Tooltip content="Settings" position="right">
-            <button
-              onClick={() => setCurrentView("settings")}
-              aria-label="Settings"
-              aria-current={currentView === "settings" ? "page" : undefined}
-              className={`sidebar-btn no-drag ${
-                currentView === "settings" ? "active" : ""
-              }`}
-            >
-              <SettingsIcon />
-            </button>
-          </Tooltip>
-        </div>
-
-        <div className="flex-1" />
-
-        <div className="flex flex-col items-center gap-2 pb-4">
-
-          <Tooltip content="Mini mode" position="right">
-            <button
-              onClick={() => ShowMiniMode()}
-              aria-label="Mini mode"
-              className="sidebar-btn no-drag"
-            >
-              <MinimizeIcon />
-            </button>
-          </Tooltip>
-
-          <div className="h-px w-6 bg-border my-1" />
-
-          <Tooltip content="Quit VoxFlow" position="right">
-            <button
-              onClick={() => Quit()}
-              aria-label="Quit VoxFlow"
-              className="sidebar-btn no-drag hover:!text-[var(--danger)] hover:!bg-danger/10"
-            >
-              <CloseIcon />
-            </button>
-          </Tooltip>
-        </div>
+        <div className="sidebar-titlebar" style={DRAG} />
+        <nav aria-label="VoxFlow" className="flex flex-col gap-0.5">
+          {navItem("main", "Home", <MicIcon />)}
+          {navItem("history", "History", <HistoryIcon />)}
+          {navItem("settings", "Settings", <SettingsIcon />)}
+        </nav>
+        <div className="flex-1" style={DRAG} />
+        <button
+          type="button"
+          onClick={() => ShowMiniMode()}
+          className="sidebar-item no-drag text-secondary"
+        >
+          <MinimizeIcon />
+          Collapse to pill
+        </button>
       </aside>
 
-      <main className="flex-1 overflow-hidden relative">
+      <main className="flex-1 min-w-0 overflow-hidden relative">
+        <div className="absolute inset-x-0 top-0 h-3 z-10" style={DRAG} />
         <div className="view-enter h-full">
           {currentView === "main" && <MainView />}
           {currentView === "history" && <HistoryView />}
-          {currentView === "settings" && <SettingsView />}
+          {currentView === "settings" && <SettingsView initialTab={settingsTab} />}
         </div>
       </main>
-
-      {!isMiniMode && (
-        <Tooltip content="Resize" position="top">
-          <div
-            className="absolute bottom-0 right-0 w-6 h-6 z-50 cursor-se-resize flex items-end justify-end p-1 no-drag group"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              const startX = e.screenX;
-              const startY = e.screenY;
-
-              import("../wailsjs/runtime/runtime").then(
-                ({ WindowGetSize, WindowSetSize }) => {
-                  WindowGetSize().then((size) => {
-                    const startW = size.w;
-                    const startH = size.h;
-
-                    const onMouseMove = (ev: MouseEvent) => {
-                      const newW = Math.max(
-                        400,
-                        startW + (ev.screenX - startX),
-                      );
-                      const newH = Math.max(
-                        300,
-                        startH + (ev.screenY - startY),
-                      );
-                      WindowSetSize(newW, newH);
-                    };
-
-                    const onMouseUp = () => {
-                      window.removeEventListener("mousemove", onMouseMove);
-                      window.removeEventListener("mouseup", onMouseUp);
-                    };
-
-                    window.addEventListener("mousemove", onMouseMove);
-                    window.addEventListener("mouseup", onMouseUp);
-                  });
-                },
-              );
-            }}
-          >
-            <svg
-              className="w-4 h-4 text-secondary opacity-50 group-hover:opacity-100 transition-opacity"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path d="M22 22H20V20H22V22ZM22 18H18V20H22V18ZM18 22H16V20H18V22ZM14 22H12V20H14V22ZM22 14H20V16H22V14Z" />
-            </svg>
-          </div>
-        </Tooltip>
-      )}
     </div>
   );
 }
