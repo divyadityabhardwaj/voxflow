@@ -5,11 +5,12 @@ import {
   GetProviders,
   GetPushToTalkKey,
   OpenPrivacySettings,
-  OpenSettings,
   PromptAccessibilityExplanation,
   RequestMicrophoneAccess,
   SetPushToTalkKey,
 } from "../../../wailsjs/go/main/App";
+import { EventsEmit } from "../../../wailsjs/runtime/runtime";
+import { Events } from "../../constants/events";
 
 interface Setup {
   mic: string;
@@ -26,7 +27,7 @@ async function loadSetup(): Promise<Setup> {
     mic: perms.microphone,
     accessibility: perms.accessibility,
     copyOnly: mode === "copy-only",
-    cleanupOff: mode === "raw" || (mode === "refine" && !!provider?.needs_key && !provider.key_set),
+    cleanupOff: mode === "refine" && !!provider?.needs_key && !provider.key_set,
   };
 }
 
@@ -89,7 +90,7 @@ export default function SetupChecklist() {
       ok: !setup.cleanupOff,
       label: setup.cleanupOff ? "Clean-up is off — 'um's and punctuation stay as spoken" : "Clean-up",
       action: "Set up",
-      onFix: () => OpenSettings(),
+      onFix: () => EventsEmit(Events.OpenSettings, "cleanup"),
     },
   ];
 
