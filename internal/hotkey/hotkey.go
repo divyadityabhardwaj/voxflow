@@ -81,7 +81,8 @@ type Manager struct {
 	suspended    bool
 	holdKey      string
 	hold         holdTracker
-	holdStarted  bool           // this hold started a recording that isn't confirmed yet
+	holdStarted  bool // this hold started a recording that isn't confirmed yet
+	tapRetrying  bool
 	escapeHK     *hotkey.Hotkey // only while recording, when there is no event tap
 
 	requests chan request
@@ -283,6 +284,7 @@ func (m *Manager) rebind() error {
 			pttStr = ""
 		} else {
 			logger.Warnf("[Hotkey] No event tap (Accessibility not granted?); using %s for push-to-talk", m.pttStr)
+			m.retryTapLater()
 		}
 	}
 
@@ -443,6 +445,42 @@ func (m *Manager) handlePushToTalkUp() {
 		callback(newState)
 	}
 }
+
+// retryTapLater keeps trying the event tap, since nothing announces that
+// Accessibility was granted, and switches to the hold key once it works.
+func (m *Manager) retryTapLater() {
+	if m.tapRetrying {
+		return
+	}
+	m.tapRetrying = true
+	go func() {
+		for {
+			time.Sleep(tapRetryInterval)
+			err := m.do(func() error {
+				code, _ := holdKeycode(m.holdKey)
+				switch {
+				case code < 0 || isTapRunning(): // a later rebind retries if needed
+				case m.suspended || !startTap():
+					return nil
+				default:
+					logger.Infof("[Hotkey] Event tap started; hold-to-talk is active")
+					if err := m.rebind(); err != nil {
+						logger.Warnf("[Hotkey] %v", err)
+					}
+				}
+				m.tapRetrying = false
+				return errStopRetry
+			})
+			if err == errStopRetry {
+				return
+			}
+		}
+	}()
+}
+
+const tapRetryInterval = 5 * time.Second
+
+var errStopRetry = errors.New("stop retrying")
 
 func (m *Manager) handleTapEvent(ev tapEvent) {
 	var action holdAction
