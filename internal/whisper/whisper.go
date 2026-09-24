@@ -548,7 +548,7 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 		"-otxt",
 		"--no-timestamps",
 		"-of", strings.TrimSuffix(outputPath, ".txt"),
-		"-bs", "1",
+		"-bs", "5",
 		"-bo", "1",
 		"--no-fallback",
 	}

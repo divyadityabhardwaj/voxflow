@@ -93,7 +93,7 @@ func spawnWhisperServer(bin, modelPath string, threads int) (*whisperServer, err
 	if err != nil {
 		return nil, err
 	}
-	args := []string{"-m", modelPath, "--host", "127.0.0.1", "--port", strconv.Itoa(port), "-bs", "1", "-bo", "1", "-nf", "-nt"}
+	args := []string{"-m", modelPath, "--host", "127.0.0.1", "--port", strconv.Itoa(port), "-bs", "5", "-bo", "1", "-nf", "-nt"}
 	if threads > 0 {
 		args = append(args, "-t", strconv.Itoa(threads))
 	}
