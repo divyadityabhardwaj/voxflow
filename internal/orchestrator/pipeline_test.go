@@ -353,6 +353,25 @@ func TestStartRecordingWithMicrophoneDeniedReturnsToIdle(t *testing.T) {
 	}
 }
 
+func TestHeldStartKeepsFailuresQuietUntilConfirmed(t *testing.T) {
+	rec := &recorder{}
+	p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)
+	p.micStatus = func() string { return "denied" }
+
+	p.StartHeldRecording()
+	if p.State() != hotkey.StateIdle {
+		t.Fatalf("state = %s, want Idle", p.State())
+	}
+	if len(rec.toasts) != 0 {
+		t.Fatalf("toast before the hold was confirmed: %v", rec.toasts)
+	}
+	p.ConfirmHold()
+	p.ConfirmHold()
+	if len(rec.toasts) != 1 || rec.toasts[0]["settings"] != "microphone" {
+		t.Fatalf("toasts = %v, want the microphone one once", rec.toasts)
+	}
+}
+
 func TestStartRecordingAsksForMicrophoneWithoutWaiting(t *testing.T) {
 	rec := &recorder{}
 	p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)

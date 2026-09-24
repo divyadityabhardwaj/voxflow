@@ -62,6 +62,10 @@ type request struct {
 type Manager struct {
 	// OnCancel discards the recording in progress; silent skips the "Cancelled" toast.
 	OnCancel func(silent bool)
+	// OnHoldStart, when set, replaces the Recording callback for the hold key,
+	// and OnHoldConfirmed follows once it has been held for minHold.
+	OnHoldStart     func()
+	OnHoldConfirmed func()
 
 	state         State
 	callback      Callback
@@ -77,6 +81,7 @@ type Manager struct {
 	suspended    bool
 	holdKey      string
 	hold         holdTracker
+	holdStarted  bool           // this hold started a recording that isn't confirmed yet
 	escapeHK     *hotkey.Hotkey // only while recording, when there is no event tap
 
 	requests chan request
@@ -370,13 +375,18 @@ func (m *Manager) handleHandsFree() {
 }
 
 func (m *Manager) handlePushToTalkDown() {
+	m.pushToTalkDown(false)
+}
+
+// pushToTalkDown reports whether it started a recording.
+func (m *Manager) pushToTalkDown(held bool) bool {
 	logger.Debugf("[Hotkey] PushToTalk DOWN triggered!")
 	m.mu.Lock()
 
 	if !m.running {
 		logger.Debugf("[Hotkey] PushToTalk DOWN ignored - not running")
 		m.mu.Unlock()
-		return
+		return false
 	}
 
 	logger.Debugf("[Hotkey] PushToTalk DOWN current state: %s", m.state)
@@ -390,13 +400,18 @@ func (m *Manager) handlePushToTalkDown() {
 		shouldCallback = true
 	}
 
-	callback := m.callback
+	callback, onHoldStart := m.callback, m.OnHoldStart
 	m.mu.Unlock()
 
-	if shouldCallback && callback != nil {
+	switch {
+	case !shouldCallback:
+	case held && onHoldStart != nil:
+		onHoldStart()
+	case callback != nil:
 		logger.Debugf("[Hotkey] PushToTalk DOWN calling callback with state: %s", newState)
 		callback(newState)
 	}
+	return shouldCallback
 }
 
 func (m *Manager) handlePushToTalkUp() {
@@ -440,15 +455,36 @@ func (m *Manager) handleTapEvent(ev tapEvent) {
 		action = m.hold.other()
 	case tapEscape:
 		m.hold.spoil()
+		m.holdStarted = false
 		m.cancel(false, false)
+	case tapHoldConfirm:
+		if m.hold.held && !m.hold.spoiled && m.hold.since.Equal(ev.at) {
+			m.confirmHold()
+		}
 	}
 	switch action {
 	case holdStart:
-		m.handlePushToTalkDown()
+		m.holdStarted = m.pushToTalkDown(true)
+		if m.holdStarted {
+			at, events := ev.at, m.tapEvents
+			time.AfterFunc(minHold-time.Since(at), func() { events <- tapEvent{kind: tapHoldConfirm, at: at} })
+		}
 	case holdStop:
+		m.confirmHold() // the release may beat the timer through the queue
 		m.handlePushToTalkUp()
 	case holdCancel:
+		m.holdStarted = false
 		m.cancel(true, true)
+	}
+}
+
+func (m *Manager) confirmHold() {
+	if !m.holdStarted {
+		return
+	}
+	m.holdStarted = false
+	if m.OnHoldConfirmed != nil {
+		m.OnHoldConfirmed()
 	}
 }
 

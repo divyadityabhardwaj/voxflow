@@ -68,6 +68,9 @@ type Pipeline struct {
 	stateMu     sync.Mutex
 	state       hotkey.State
 	stream      *streamSession // guarded by lifecycleMu
+	// heldFeedback reports a failed hold-to-talk start once ConfirmHold shows
+	// the press was meant as a dictation; guarded by lifecycleMu.
+	heldFeedback func()
 
 	targetMu sync.Mutex
 	target   macos.AppInfo
@@ -163,24 +166,56 @@ func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 // StartRecording is the single entry point for every way of starting a
 // dictation. It does nothing unless the pipeline is idle.
 func (p *Pipeline) StartRecording() error {
+	return p.startRecording(false)
+}
+
+// StartHeldRecording starts recording for the hold-to-talk key. The press may
+// turn out to be ordinary modifier use, so muting and failure messages wait
+// for ConfirmHold.
+func (p *Pipeline) StartHeldRecording() {
+	_ = p.startRecording(true)
+}
+
+// ConfirmHold is called once the hold-to-talk key has been held long enough
+// to be a dictation.
+func (p *Pipeline) ConfirmHold() {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if feedback := p.heldFeedback; feedback != nil {
+		p.heldFeedback = nil
+		feedback()
+		return
+	}
+	if p.State() == hotkey.StateRecording && p.config.GetMuteSystemAudio() {
+		p.setMuted(true)
+	}
+}
+
+func (p *Pipeline) startRecording(held bool) error {
 	p.lifecycleMu.Lock()
 	defer p.lifecycleMu.Unlock()
 	if p.State() != hotkey.StateIdle {
 		return nil
 	}
-
-	if p.modelReady != nil && !p.modelReady() {
-		// The hotkey manager has already moved to Recording; put it back.
+	p.heldFeedback = nil
+	// The hotkey manager has already moved to Recording; put it back.
+	fail := func(err error, feedback func()) error {
 		p.resetToIdle()
-		err := fmt.Errorf("model not ready")
-		p.emit(events.Error, err.Error())
+		if held {
+			p.heldFeedback = feedback
+		} else {
+			feedback()
+		}
 		return err
 	}
 
+	if p.modelReady != nil && !p.modelReady() {
+		err := fmt.Errorf("model not ready")
+		return fail(err, func() { p.emit(events.Error, err.Error()) })
+	}
+
 	if err := p.checkMicrophone(); err != nil {
-		p.resetToIdle()
-		p.microphoneFeedback(err)()
-		return err
+		return fail(err, p.microphoneFeedback(err))
 	}
 
 	p.targetMu.Lock()
@@ -193,9 +228,7 @@ func (p *Pipeline) StartRecording() error {
 
 	if err := p.audioRecorder.Start(); err != nil {
 		if !p.audioRecorder.IsRecording() {
-			p.resetToIdle()
-			p.emit(events.Error, err.Error())
-			return err
+			return fail(err, func() { p.emit(events.Error, err.Error()) })
 		}
 		logger.Warnf("[Pipeline] Recorder was still running, continuing: %v", err)
 	}
@@ -208,7 +241,7 @@ func (p *Pipeline) StartRecording() error {
 	if p.refiner != nil {
 		go p.refiner().Prewarm(p.llmModel())
 	}
-	if p.config.GetMuteSystemAudio() {
+	if p.config.GetMuteSystemAudio() && !held {
 		p.setMuted(true)
 	}
 

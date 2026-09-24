@@ -37,6 +37,7 @@ const (
 	tapHoldUp
 	tapOtherKey
 	tapEscape
+	tapHoldConfirm // from a timer, not the tap: the hold starting at `at` reached minHold
 )
 
 // tapEvent is stamped when the tap sees it: the loop may dequeue it late,

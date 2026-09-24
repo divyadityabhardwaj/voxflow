@@ -126,6 +126,41 @@ func TestQuickTapBehindSlowStartIsStillDiscarded(t *testing.T) {
 	}
 }
 
+func TestHoldIsConfirmedOnlyAfterMinHold(t *testing.T) {
+	m, _ := startedManager(t)
+	started := make(chan struct{}, 4)
+	confirmed := make(chan struct{}, 4)
+	m.OnHoldStart = func() { started <- struct{}{} }
+	m.OnHoldConfirmed = func() { confirmed <- struct{}{} }
+	m.OnCancel = func(bool) { m.SetState(StateIdle) }
+
+	// A quick tap starts, then is discarded without confirmation.
+	down := time.Now()
+	m.tapEvents <- tapEvent{kind: tapHoldDown, at: down}
+	m.tapEvents <- tapEvent{kind: tapHoldUp, at: down.Add(50 * time.Millisecond)}
+	<-started
+	select {
+	case <-confirmed:
+		t.Fatal("a quick tap was confirmed")
+	case <-time.After(minHold + 100*time.Millisecond):
+	}
+
+	// A real hold is confirmed while still held.
+	m.tapEvents <- tapNow(tapHoldDown)
+	<-started
+	select {
+	case <-confirmed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a long hold was never confirmed")
+	}
+	m.tapEvents <- tapNow(tapHoldUp)
+	select {
+	case <-confirmed:
+		t.Fatal("confirmed twice")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestHoldKeyUsedAsModifierDiscardsSilently(t *testing.T) {
 	m, states := startedManager(t)
 	cancels := make(chan bool, 4)

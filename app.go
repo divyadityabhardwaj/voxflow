@@ -75,6 +75,8 @@ func NewApp() *App {
 
 	app.hotkeyManager = hotkey.NewManager(app.onHotkeyPressed)
 	app.hotkeyManager.OnCancel = app.onHotkeyCancel
+	app.hotkeyManager.OnHoldStart = func() { app.pipeline.StartHeldRecording() }
+	app.hotkeyManager.OnHoldConfirmed = func() { app.pipeline.ConfirmHold() }
 
 	app.rebuildPipeline()
 	return app
