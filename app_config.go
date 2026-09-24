@@ -161,7 +161,6 @@ func (a *App) SetProvider(id string) error {
 	return a.config.Save()
 }
 
-// Not SetAPIKey(id, key): that name is still the Gemini-only binding the frontend calls.
 func (a *App) SetProviderAPIKey(id, key string) error {
 	if err := knownProvider(id); err != nil {
 		return err
