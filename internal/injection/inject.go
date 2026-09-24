@@ -48,16 +48,14 @@ func (s *Service) Inject(text string) error {
 
 	time.Sleep(30 * time.Millisecond)
 
-	if err := simulatePaste(key); err != nil { // Accessibility on this process, not osascript
-		return err
+	err := simulatePaste(key) // Accessibility on this process, not osascript
+	if err == nil {
+		time.Sleep(50 * time.Millisecond)
 	}
-
-	time.Sleep(50 * time.Millisecond)
-
 	if s.preserveClipboard {
 		time.AfterFunc(restoreDelay, func() { s.restore(gen) })
 	}
-	return nil
+	return err
 }
 
 // writeTransient puts text on the pasteboard for one paste, saving what it
