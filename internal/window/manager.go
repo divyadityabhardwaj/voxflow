@@ -133,6 +133,7 @@ func (m *Manager) ShowMini() {
 }
 
 func (m *Manager) HideMini() {
+	m.cancelMiniResize()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.isMiniMode {
@@ -247,6 +248,7 @@ func (m *Manager) Shutdown() {
 }
 
 func (m *Manager) ResetPosition() {
+	m.cancelMiniResize()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.config.SetMiniModePosition(0, 0)
@@ -265,4 +267,15 @@ func (m *Manager) ResetPosition() {
 	runtime.WindowSetAlwaysOnTop(m.ctx, false)
 	runtime.EventsEmit(m.ctx, events.MiniMode, false)
 	logger.Infof("[Window] Reset window position to center")
+}
+
+// cancelMiniResize stops an in-flight pill resize animation so it can't
+// resize the window after a mode switch.
+func (m *Manager) cancelMiniResize() {
+	m.miniResizeMu.Lock()
+	defer m.miniResizeMu.Unlock()
+	if m.miniResizeCancel != nil {
+		m.miniResizeCancel()
+		m.miniResizeCancel = nil
+	}
 }
