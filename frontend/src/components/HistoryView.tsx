@@ -29,6 +29,9 @@ interface Transcript {
   words_per_second?: number;
 }
 
+// Module scope so leaving History doesn't strand the Undo toast: timers commit on their own.
+const pendingDeletes = new Map<number, ReturnType<typeof setTimeout>>();
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const highlightText = (text: string, highlight: string) => {
@@ -132,7 +135,6 @@ export default function HistoryView() {
 
   // Deleted rows hide at once and are removed for real when Undo times out.
   const [hidden, setHidden] = useState<Set<number>>(new Set());
-  const pendingDeletes = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
   const { confirm, ConfirmModalComponent } = useConfirmModal();
   const { showToast } = useToast();
@@ -197,17 +199,6 @@ export default function HistoryView() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Leaving the view deletes right away whatever is still waiting for Undo.
-  useEffect(() => {
-    const pending = pendingDeletes.current;
-    return () => {
-      pending.forEach((timer, id) => {
-        clearTimeout(timer);
-        DeleteTranscript(id).catch(() => {});
-      });
-    };
-  }, []);
-
   // Callback ref: sentinel mounts after first list paint; plain ref+effect misses it.
   const observer = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useCallback(
@@ -255,7 +246,7 @@ export default function HistoryView() {
     if (selectedId === t.id) setSelectedId(neighbour?.id ?? null);
 
     const commit = () => {
-      pendingDeletes.current.delete(t.id);
+      pendingDeletes.delete(t.id);
       DeleteTranscript(t.id)
         .then(() => setTranscripts((prev) => prev.filter((x) => x.id !== t.id)))
         .catch(() => {
@@ -263,7 +254,7 @@ export default function HistoryView() {
           showToast("Couldn't delete that dictation", "error");
         });
     };
-    pendingDeletes.current.set(t.id, setTimeout(commit, UNDO_MS));
+    pendingDeletes.set(t.id, setTimeout(commit, UNDO_MS));
 
     const preview = (t.polished_text || t.raw_text).slice(0, 40);
     showToast(`Deleted “${preview}${preview.length === 40 ? "…" : ""}”`, "info", {
@@ -271,8 +262,8 @@ export default function HistoryView() {
       action: {
         label: "Undo",
         onClick: () => {
-          clearTimeout(pendingDeletes.current.get(t.id));
-          pendingDeletes.current.delete(t.id);
+          clearTimeout(pendingDeletes.get(t.id));
+          pendingDeletes.delete(t.id);
           unhide(t.id);
         },
       },
@@ -293,8 +284,8 @@ export default function HistoryView() {
 
     try {
       await ClearAllHistory();
-      pendingDeletes.current.forEach((timer) => clearTimeout(timer));
-      pendingDeletes.current.clear();
+      pendingDeletes.forEach((timer) => clearTimeout(timer));
+      pendingDeletes.clear();
       setTranscripts([]);
       setHidden(new Set());
       setSelectedId(null);
