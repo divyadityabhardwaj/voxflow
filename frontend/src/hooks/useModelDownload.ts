@@ -42,6 +42,8 @@ export function useModelDownload(onReady: () => void) {
         const pct = Math.round(
           d.progress ?? (d.total ? ((d.downloaded ?? 0) / d.total) * 100 : 0),
         );
+        // A download started elsewhere (e.g. onboarding) is still ours to show.
+        setDownloading(true);
         // Progress fires on every network read; only re-render per whole percent.
         setProgress((prev) =>
           prev.percent === pct
