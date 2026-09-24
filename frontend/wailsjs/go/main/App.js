@@ -110,6 +110,10 @@ export function GetOpenRouterModels() {
   return window['go']['main']['App']['GetOpenRouterModels']();
 }
 
+export function GetPermissions() {
+  return window['go']['main']['App']['GetPermissions']();
+}
+
 export function GetProviderModels(arg1) {
   return window['go']['main']['App']['GetProviderModels'](arg1);
 }
@@ -166,6 +170,10 @@ export function OpenHistoryWindow() {
   return window['go']['main']['App']['OpenHistoryWindow']();
 }
 
+export function OpenPrivacySettings(arg1) {
+  return window['go']['main']['App']['OpenPrivacySettings'](arg1);
+}
+
 export function OpenSettings() {
   return window['go']['main']['App']['OpenSettings']();
 }
@@ -180,6 +188,10 @@ export function Quit() {
 
 export function RemoveAppRule(arg1) {
   return window['go']['main']['App']['RemoveAppRule'](arg1);
+}
+
+export function RequestMicrophoneAccess() {
+  return window['go']['main']['App']['RequestMicrophoneAccess']();
 }
 
 export function ResetWindowPosition() {

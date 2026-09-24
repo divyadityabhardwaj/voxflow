@@ -205,6 +205,20 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class Permissions {
+	    microphone: string;
+	    accessibility: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Permissions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.microphone = source["microphone"];
+	        this.accessibility = source["accessibility"];
+	    }
+	}
 	export class ProviderInfo {
 	    id: string;
 	    name: string;

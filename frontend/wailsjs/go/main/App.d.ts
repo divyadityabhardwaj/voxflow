@@ -60,6 +60,8 @@ export function GetOnboardingCompleted():Promise<boolean>;
 
 export function GetOpenRouterModels():Promise<Array<string>>;
 
+export function GetPermissions():Promise<main.Permissions>;
+
 export function GetProviderModels(arg1:string):Promise<Array<string>>;
 
 export function GetProviders():Promise<Array<main.ProviderInfo>>;
@@ -88,6 +90,8 @@ export function LogFrontendError(arg1:string,arg2:string):Promise<void>;
 
 export function OpenHistoryWindow():Promise<void>;
 
+export function OpenPrivacySettings(arg1:string):Promise<void>;
+
 export function OpenSettings():Promise<void>;
 
 export function PromptAccessibilityExplanation():Promise<boolean>;
@@ -95,6 +99,8 @@ export function PromptAccessibilityExplanation():Promise<boolean>;
 export function Quit():Promise<void>;
 
 export function RemoveAppRule(arg1:string):Promise<void>;
+
+export function RequestMicrophoneAccess():Promise<boolean>;
 
 export function ResetWindowPosition():Promise<void>;
 
