@@ -141,11 +141,16 @@ export default function OnboardingWizard({ onComplete }: Props) {
       return;
     }
     // The hold key's event tap needs Accessibility; retry it now that it's granted.
-    if (step === "paste" && holdKey) SetPushToTalkKey(holdKey).catch(() => {});
+    if (step === "paste" && holdKey) {
+      SetPushToTalkKey(holdKey)
+        .then(loadShortcuts)
+        .then(setShortcuts)
+        .catch(() => {});
+    }
     if (waitingFor.current !== step) return;
     waitingFor.current = null;
-    const t = setTimeout(next, 900);
-    return () => clearTimeout(t);
+    // Let the check mark show first; skip if the user already moved on.
+    setTimeout(() => setStep((s) => (s === step ? STEPS[STEPS.indexOf(s) + 1] : s)), 900);
   }, [step, mic, accessibility, holdKey]);
 
   useEffect(() => {
