@@ -13,7 +13,7 @@ import (
 // Default refinement models. Cloud catalogs churn, so ensureValidModel in the app
 // swaps these out when a provider stops listing them.
 const (
-	DefaultGeminiModel     = "gemini-2.5-flash-lite"
+	DefaultGeminiModel     = "gemini-3.5-flash-lite"
 	DefaultOpenRouterModel = "google/gemma-4-31b-it:free"
 	DefaultGroqModel       = "openai/gpt-oss-20b"
 	DefaultCerebrasModel   = "llama3.1-8b"
