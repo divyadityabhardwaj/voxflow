@@ -3,6 +3,7 @@ import {
   CancelDownload,
   DeleteModelByName,
   DownloadModelByName,
+  GetActiveDownload,
   GetAllModels,
   GetConfig,
   IsWhisperCLIReady,
@@ -52,15 +53,25 @@ export default function AdvancedSettings() {
     GetConfig().then(setConfig).catch(fail("Couldn't load settings"));
     loadModels();
     IsWhisperCLIReady().then(setEngineReady).catch(() => {});
+    // The download runs in the backend and outlives this tab; pick it back up.
+    GetActiveDownload()
+      .then((d) => {
+        if (d.model) {
+          setDownloading(d.model);
+          setProgress(Math.round(d.progress));
+        }
+      })
+      .catch(() => {});
 
     const stop = () => {
       setDownloading(null);
       setProgress(0);
     };
     const offs = [
-      EventsOn(Events.ModelDownloadProgress, (d: { progress: number }) =>
-        setProgress(Math.round(d.progress)),
-      ),
+      EventsOn(Events.ModelDownloadProgress, (d: { model: string; progress: number }) => {
+        setDownloading(d.model);
+        setProgress(Math.round(d.progress));
+      }),
       EventsOn(Events.ModelDownloadComplete, () => {
         stop();
         loadModels();

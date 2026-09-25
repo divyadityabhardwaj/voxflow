@@ -86,7 +86,19 @@ type modelDownload struct {
 	name   string
 	cancel context.CancelFunc
 	done   chan struct{}
-	err    error // set before done closes
+	err    error              // set before done closes
+	latest modelDownloadEvent // guarded by App.downloadMu
+}
+
+// GetActiveDownload reports the download in progress, so a view opened
+// mid-download can show it; Model is "" when there is none.
+func (a *App) GetActiveDownload() modelDownloadEvent {
+	a.downloadMu.Lock()
+	defer a.downloadMu.Unlock()
+	if a.download == nil {
+		return modelDownloadEvent{}
+	}
+	return a.download.latest
 }
 
 // DownloadModelByName downloads one model at a time: another model's download
@@ -103,7 +115,7 @@ func (a *App) DownloadModelByName(modelName string) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	d := &modelDownload{name: modelName, cancel: cancel, done: make(chan struct{})}
+	d := &modelDownload{name: modelName, cancel: cancel, done: make(chan struct{}), latest: modelDownloadEvent{Model: modelName}}
 	a.download = d
 	a.downloadMu.Unlock()
 
@@ -111,6 +123,9 @@ func (a *App) DownloadModelByName(modelName string) error {
 	err := a.whisperService.DownloadModelWithContext(ctx, modelName, func(downloaded, total int64) {
 		ev.Downloaded, ev.Total = downloaded, total
 		ev.Progress = float64(downloaded) / float64(total) * 100
+		a.downloadMu.Lock()
+		d.latest = ev
+		a.downloadMu.Unlock()
 		runtime.EventsEmit(a.ctx, events.ModelDownloadProgress, ev)
 	})
 

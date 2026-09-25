@@ -26,6 +26,8 @@ export function DownloadModel():Promise<void>;
 
 export function DownloadModelByName(arg1:string):Promise<void>;
 
+export function GetActiveDownload():Promise<main.modelDownloadEvent>;
+
 export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 
 export function GetAppRules():Promise<Array<main.AppRuleDTO>>;

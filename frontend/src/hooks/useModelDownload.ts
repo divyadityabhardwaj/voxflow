@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { DownloadModel } from "../../wailsjs/go/main/App";
+import { DownloadModel, GetActiveDownload } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
 
 interface DownloadProgress {
@@ -37,6 +37,17 @@ export function useModelDownload(onReady: () => void) {
   };
 
   useEffect(() => {
+    GetActiveDownload()
+      .then((d) => {
+        if (!d.model) return;
+        setDownloading(true);
+        setProgress({
+          percent: Math.round(d.progress),
+          downloadedMB: Number((d.downloaded / MB).toFixed(1)),
+          totalMB: Number((d.total / MB).toFixed(1)),
+        });
+      })
+      .catch(() => {});
     const unsubs = [
       EventsOn(Events.ModelDownloadProgress, (d: DownloadProgress) => {
         const pct = Math.round(

@@ -42,6 +42,10 @@ export function DownloadModelByName(arg1) {
   return window['go']['main']['App']['DownloadModelByName'](arg1);
 }
 
+export function GetActiveDownload() {
+  return window['go']['main']['App']['GetActiveDownload']();
+}
+
 export function GetAllModels() {
   return window['go']['main']['App']['GetAllModels']();
 }
