@@ -3,7 +3,7 @@
 package macos
 
 /*
-#cgo CFLAGS: -x objective-c -fobjc-arc
+#cgo CFLAGS: -x objective-c -fobjc-arc -mmacosx-version-min=11.0
 #cgo LDFLAGS: -framework AVFoundation
 
 #import <AVFoundation/AVFoundation.h>
