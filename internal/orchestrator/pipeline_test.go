@@ -26,11 +26,11 @@ func (r *stubRefiner) RefineText(raw, model string) (string, int, bool, error) {
 	r.calls++
 	return r.text, 7, r.okToGo, r.err
 }
-func (r *stubRefiner) CheckModel(string) (int64, float64, error)                   { return 0, 0, nil }
+func (r *stubRefiner) CheckModel(string) (int64, float64, error) { return 0, 0, nil }
 func (r *stubRefiner) RetryWithInstruction(string, string, string) (string, error) {
 	return r.edited, r.err
 }
-func (r *stubRefiner) Prewarm(string)                                              {}
+func (r *stubRefiner) Prewarm(string) {}
 
 type recorder struct {
 	events []string
