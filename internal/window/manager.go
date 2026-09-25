@@ -94,6 +94,7 @@ func (m *Manager) StartupMiniMode() {
 	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
 	runtime.WindowSetSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
 	setChrome(false)
+	FloatEverywhere()
 
 	if x != 0 || y != 0 {
 		runtime.WindowSetPosition(m.ctx, x, y)
@@ -107,14 +108,15 @@ func (m *Manager) ShowMini() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.isMiniMode {
+		FloatEverywhere() // bring it into the current Space if it was left behind
 		return
 	}
 	m.saveFrameLocked()
 	m.isMiniMode = true
 	m.userExplicitlyMaximized = false
 
-	FloatEverywhere()
 	setChrome(false)
+	FloatEverywhere()
 
 	runtime.WindowSetMinSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
 	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
@@ -128,7 +130,7 @@ func (m *Manager) ShowMini() {
 	}
 	ConstrainWindow()
 
-	runtime.WindowSetAlwaysOnTop(m.ctx, true)
+	// Not runtime.WindowSetAlwaysOnTop: it drops the level FloatEverywhere set to NSFloatingWindowLevel.
 	runtime.EventsEmit(m.ctx, events.MiniMode, true)
 
 	logger.Infof("[Window] Switched to mini mode")

@@ -10,20 +10,33 @@ package window
 
 void makeWindowFloatEverywhere() {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSApplication *app = [NSApplication sharedApplication];
-        for (NSWindow *window in [app windows]) {
-            [window setCollectionBehavior:273];
-            [window setLevel:101];
+        Class wailsWindow = NSClassFromString(@"WailsWindow");
+        for (NSWindow *window in [NSApp windows]) {
+            if (![window isKindOfClass:wailsWindow]) {
+                continue;
+            }
+            [window setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                          NSWindowCollectionBehaviorStationary |
+                                          NSWindowCollectionBehaviorFullScreenAuxiliary];
+            [window setLevel:NSPopUpMenuWindowLevel];
             [window setAnimationBehavior:NSWindowAnimationBehaviorNone];
             [window setHasShadow:NO];
+            // A new collection behaviour only takes effect in the current Space
+            // (e.g. another app's full screen) once the window is ordered in again.
+            if ([window isVisible]) {
+                [window orderFrontRegardless];
+            }
         }
     });
 }
 
 void resetWindowBehavior() {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSApplication *app = [NSApplication sharedApplication];
-        for (NSWindow *window in [app windows]) {
+        Class wailsWindow = NSClassFromString(@"WailsWindow");
+        for (NSWindow *window in [NSApp windows]) {
+            if (![window isKindOfClass:wailsWindow]) {
+                continue;
+            }
             // The green button zooms rather than entering a full-screen Space the pill can't leave.
             [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenNone];
             [window setLevel:NSNormalWindowLevel];
