@@ -19,6 +19,7 @@ type stubRefiner struct {
 	okToGo bool
 	err    error
 	calls  int
+	edited string
 }
 
 func (r *stubRefiner) RefineText(raw, model string) (string, int, bool, error) {
@@ -26,7 +27,9 @@ func (r *stubRefiner) RefineText(raw, model string) (string, int, bool, error) {
 	return r.text, 7, r.okToGo, r.err
 }
 func (r *stubRefiner) CheckModel(string) (int64, float64, error)                   { return 0, 0, nil }
-func (r *stubRefiner) RetryWithInstruction(string, string, string) (string, error) { return "", nil }
+func (r *stubRefiner) RetryWithInstruction(string, string, string) (string, error) {
+	return r.edited, r.err
+}
 func (r *stubRefiner) Prewarm(string)                                              {}
 
 type recorder struct {
@@ -408,4 +411,45 @@ func TestStartRecordingAsksForMicrophoneWithoutWaiting(t *testing.T) {
 	if len(rec.toasts) != 1 || !strings.Contains(rec.toasts[0]["message"].(string), "Allow microphone access") {
 		t.Fatalf("toasts = %v", rec.toasts)
 	}
+}
+
+func TestEditSelection(t *testing.T) {
+	t.Setenv("GEMINI_API_KEY", "")
+	keyed := &config.Config{GeminiAPIKey: "k"}
+
+	t.Run("needs a clean-up provider", func(t *testing.T) {
+		rec := &recorder{}
+		p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)
+		p.copySelection = func() (string, error) { t.Fatal("copied without a provider"); return "", nil }
+		if p.checkEditable() == nil || len(rec.toasts) != 1 {
+			t.Fatalf("want an error and a toast, got toasts %v", rec.toasts)
+		}
+	})
+
+	t.Run("nothing selected", func(t *testing.T) {
+		rec := &recorder{}
+		p := newTestPipeline(keyed, &stubRefiner{}, rec, nil)
+		p.copySelection = func() (string, error) { return " \n", nil }
+		if p.checkEditable() == nil || !strings.Contains(rec.toasts[0]["message"].(string), "Select some text") {
+			t.Fatalf("toasts = %v", rec.toasts)
+		}
+	})
+
+	t.Run("pastes the rewrite over the selection", func(t *testing.T) {
+		rec := &recorder{}
+		p := newTestPipeline(keyed, &stubRefiner{edited: " • one\n• two \n"}, rec, nil)
+		p.applyEdit("one, two\n", "make it a list", 0)
+		if got := rec.sent["paste"]; got != "• one\n• two\n" {
+			t.Fatalf("pasted %q", got)
+		}
+	})
+
+	t.Run("an AI failure leaves the selection alone", func(t *testing.T) {
+		rec := &recorder{}
+		p := newTestPipeline(keyed, &stubRefiner{err: errors.New("boom")}, rec, nil)
+		p.applyEdit("one, two", "make it a list", 0)
+		if len(rec.sent) != 0 || len(rec.toasts) != 1 {
+			t.Fatalf("sent %v, toasts %v", rec.sent, rec.toasts)
+		}
+	})
 }

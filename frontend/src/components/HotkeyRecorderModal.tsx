@@ -16,7 +16,7 @@ interface HotkeyRecorderModalProps {
   // Reject to keep the modal open; the error message is shown inline.
   onSave: (hotkey: string) => void | Promise<void>;
   initialValue?: string;
-  otherHotkey?: string;
+  otherHotkeys?: string[];
 }
 
 const MODIFIER_CODES = /^(Meta|Control|Alt|Shift)(Left|Right)$/;
@@ -26,7 +26,7 @@ export default function HotkeyRecorderModal({
   onClose,
   onSave,
   initialValue = "",
-  otherHotkey = "",
+  otherHotkeys = [],
 }: HotkeyRecorderModalProps) {
   const [combo, setCombo] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function HotkeyRecorderModal({
     return () => void SuspendHotkeys(false).catch(() => {});
   }, [isOpen]);
 
-  const problem = combo ? validateShortcut(combo, otherHotkey) : null;
+  const problem = combo ? validateShortcut(combo, otherHotkeys) : null;
   const canSave = !!combo && !problem && !saving;
 
   const save = async () => {

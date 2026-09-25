@@ -39,6 +39,7 @@ const (
 	TriggerNone TriggerType = iota
 	TriggerHandsFree
 	TriggerPushToTalk
+	TriggerEdit
 )
 
 type Callback func(state State)
@@ -50,6 +51,8 @@ const (
 	handsFreeUp
 	pushToTalkDown
 	pushToTalkUp
+	editDown
+	editUp
 	escapeDown
 	escapeSync // state changed: (un)register the Carbon Esc fallback
 )
@@ -66,6 +69,8 @@ type Manager struct {
 	// and OnHoldConfirmed follows once it has been held for minHold.
 	OnHoldStart     func()
 	OnHoldConfirmed func()
+	// OnEditStart replaces the Recording callback for the edit-selection hotkey.
+	OnEditStart func()
 
 	state         State
 	callback      Callback
@@ -76,8 +81,10 @@ type Manager struct {
 	// Owned by the loop goroutine.
 	handsFreeHK  *hotkey.Hotkey
 	pushToTalkHK *hotkey.Hotkey
+	editHK       *hotkey.Hotkey
 	handsFreeStr string
 	pttStr       string
+	editStr      string
 	suspended    bool
 	holdKey      string
 	hold         holdTracker
@@ -160,13 +167,13 @@ func parseKey(keyStr string) (hotkey.Key, error) {
 	return 0, fmt.Errorf("unknown key: %s", keyStr)
 }
 
-// Update re-registers both hotkeys. While suspended it only validates them;
+// Update re-registers the hotkeys. While suspended it only validates them;
 // they are registered when the suspension ends.
-func (m *Manager) Update(handsFreeStr, pttStr string) error {
+func (m *Manager) Update(handsFreeStr, pttStr, editStr string) error {
 	return m.do(func() error {
-		m.handsFreeStr, m.pttStr = handsFreeStr, pttStr
+		m.handsFreeStr, m.pttStr, m.editStr = handsFreeStr, pttStr, editStr
 		if m.suspended {
-			return validate(handsFreeStr, pttStr)
+			return validate(handsFreeStr, pttStr, editStr)
 		}
 		return m.rebind()
 	})
@@ -220,7 +227,7 @@ func (m *Manager) HoldKeyActive() bool {
 
 // Start registers hotkeys. No mainthread.Init — Wails owns Cocoa; a second loop caused ~100% idle CPU. Idempotent via m.running.
 // The listener runs even when a registration fails; the error names which one.
-func (m *Manager) Start(handsFreeStr, pttStr, holdKey string) error {
+func (m *Manager) Start(handsFreeStr, pttStr, editStr, holdKey string) error {
 	m.mu.Lock()
 	if m.running {
 		m.mu.Unlock()
@@ -232,7 +239,7 @@ func (m *Manager) Start(handsFreeStr, pttStr, holdKey string) error {
 	if _, err := holdKeycode(holdKey); err != nil {
 		holdKey = HoldChord
 	}
-	m.handsFreeStr, m.pttStr, m.holdKey = handsFreeStr, pttStr, holdKey
+	m.handsFreeStr, m.pttStr, m.editStr, m.holdKey = handsFreeStr, pttStr, editStr, holdKey
 	err := m.rebind()
 	go m.loop()
 	return err
@@ -251,6 +258,8 @@ func (m *Manager) loop() {
 				m.handlePushToTalkDown()
 			case pushToTalkUp:
 				m.handlePushToTalkUp()
+			case editDown:
+				m.handleEdit()
 			case escapeDown:
 				m.hold.spoil()
 				m.cancel(false, false)
@@ -263,15 +272,15 @@ func (m *Manager) loop() {
 	}
 }
 
-// rebind replaces both registrations. Each hotkey registers on its own, so one
+// rebind replaces every registration. Each hotkey registers on its own, so one
 // bad combo doesn't take the other down.
 func (m *Manager) rebind() error {
-	for _, hk := range []*hotkey.Hotkey{m.handsFreeHK, m.pushToTalkHK} {
+	for _, hk := range []*hotkey.Hotkey{m.handsFreeHK, m.pushToTalkHK, m.editHK} {
 		if hk != nil {
 			hk.Unregister()
 		}
 	}
-	m.handsFreeHK, m.pushToTalkHK = nil, nil
+	m.handsFreeHK, m.pushToTalkHK, m.editHK = nil, nil, nil
 	setHoldKeycode(-1)
 	if m.suspended {
 		return nil
@@ -298,6 +307,11 @@ func (m *Manager) rebind() error {
 	if pttStr != "" {
 		if m.pushToTalkHK, err = m.bind(pttStr, pushToTalkDown, pushToTalkUp); err != nil {
 			errs = append(errs, fmt.Errorf("push-to-talk hotkey %s: %w", pttStr, err))
+		}
+	}
+	if m.editStr != "" {
+		if m.editHK, err = m.bind(m.editStr, editDown, editUp); err != nil {
+			errs = append(errs, fmt.Errorf("edit hotkey %s: %w", m.editStr, err))
 		}
 	}
 	return errors.Join(errs...)
@@ -373,6 +387,28 @@ func (m *Manager) handleHandsFree() {
 	if shouldCallback && callback != nil { // outside lock — callback may re-enter
 		logger.Debugf("[Hotkey] HandsFree calling callback with state: %s", newState)
 		callback(newState)
+	}
+}
+
+// handleEdit starts an edit of the selected text, or finishes the one it started.
+func (m *Manager) handleEdit() {
+	m.mu.Lock()
+	var start, stop bool
+	switch {
+	case !m.running:
+	case m.state == StateIdle:
+		m.state, m.activeTrigger, start = StateRecording, TriggerEdit, true
+	case m.state == StateRecording && m.activeTrigger == TriggerEdit:
+		m.state, m.activeTrigger, stop = StateProcessing, TriggerNone, true
+	}
+	callback, onEditStart := m.callback, m.OnEditStart
+	m.mu.Unlock()
+
+	switch {
+	case start && onEditStart != nil:
+		onEditStart()
+	case stop && callback != nil:
+		callback(StateProcessing)
 	}
 }
 

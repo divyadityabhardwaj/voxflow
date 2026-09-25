@@ -13,6 +13,7 @@ type ConfigResponse struct {
 	Hotkey              string `json:"hotkey"`
 	HandsFreeHotkey     string `json:"hands_free_hotkey"`
 	PushToTalkHotkey    string `json:"push_to_talk_hotkey"`
+	EditHotkey          string `json:"edit_hotkey"`
 	WhisperModel        string `json:"whisper_model"`
 	WhisperLanguage     string `json:"whisper_language"`
 	WhisperThreads      int    `json:"whisper_threads"`
@@ -38,6 +39,7 @@ func (a *App) GetConfig() *ConfigResponse {
 		Hotkey:              a.config.GetHotkey(),
 		HandsFreeHotkey:     a.config.GetHandsFreeHotkey(),
 		PushToTalkHotkey:    a.config.GetPushToTalkHotkey(),
+		EditHotkey:          a.config.GetEditHotkey(),
 		WhisperModel:        a.config.GetWhisperModel(),
 		WhisperLanguage:     a.config.GetWhisperLanguage(),
 		WhisperThreads:      a.config.GetWhisperThreads(),
@@ -62,10 +64,11 @@ func (a *App) GetConfig() *ConfigResponse {
 func (a *App) reloadHotkeys() error {
 	hf := a.config.GetHandsFreeHotkey()
 	ptt := a.config.GetPushToTalkHotkey()
+	edit := a.config.GetEditHotkey()
 
 	if a.hotkeyManager != nil {
-		logger.Infof("Updating hotkeys: HF=%s, PTT=%s", hf, ptt)
-		return a.hotkeyManager.Update(hf, ptt)
+		logger.Infof("Updating hotkeys: HF=%s, PTT=%s, edit=%s", hf, ptt, edit)
+		return a.hotkeyManager.Update(hf, ptt, edit)
 	}
 	return fmt.Errorf("hotkey manager not initialized")
 }
@@ -97,6 +100,20 @@ func (a *App) SetPushToTalkHotkey(hotkeyStr string) error {
 		logger.Errorf("Error reloading hotkeys (PTT): %v", err)
 		a.config.SetPushToTalkHotkey(old) // Revert on error
 		a.reloadHotkeys()                 // Restore state
+		return err
+	}
+
+	return a.config.Save()
+}
+
+func (a *App) SetEditHotkey(hotkeyStr string) error {
+	old := a.config.GetEditHotkey()
+	a.config.SetEditHotkey(hotkeyStr)
+
+	if err := a.reloadHotkeys(); err != nil {
+		logger.Errorf("Error reloading hotkeys (edit): %v", err)
+		a.config.SetEditHotkey(old)
+		a.reloadHotkeys()
 		return err
 	}
 

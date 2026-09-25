@@ -77,6 +77,7 @@ func NewApp() *App {
 	app.hotkeyManager.OnCancel = app.onHotkeyCancel
 	app.hotkeyManager.OnHoldStart = func() { app.pipeline.StartHeldRecording() }
 	app.hotkeyManager.OnHoldConfirmed = func() { app.pipeline.ConfirmHold() }
+	app.hotkeyManager.OnEditStart = func() { _ = app.pipeline.StartEdit() }
 
 	app.rebuildPipeline()
 	return app
@@ -172,7 +173,7 @@ func (a *App) startup(ctx context.Context) {
 	pttHotkey := a.config.GetPushToTalkHotkey()
 
 	logger.Infof("Starting hotkey manager: HF=%s, PTT=%s", hfHotkey, pttHotkey)
-	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey, a.config.GetPushToTalkKey()); err != nil {
+	if err := a.hotkeyManager.Start(hfHotkey, pttHotkey, a.config.GetEditHotkey(), a.config.GetPushToTalkKey()); err != nil {
 		logger.Errorf("Failed to register hotkeys: %v", err)
 		a.warn("Couldn't register a shortcut (" + strings.ReplaceAll(err.Error(), "\n", "; ") + "). Choose another in Settings.")
 	}

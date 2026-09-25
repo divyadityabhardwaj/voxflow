@@ -44,10 +44,10 @@ func TestUpdateWhileSuspendedOnlyValidates(t *testing.T) {
 	if err := m.Suspend(true); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Update("cmd+shift+space", "cmd+bogus+p"); err == nil {
+	if err := m.Update("cmd+shift+space", "cmd+bogus+p", ""); err == nil {
 		t.Fatal("invalid hotkey accepted while suspended")
 	}
-	if err := m.Update("cmd+shift+space", "ctrl+alt+space"); err != nil {
+	if err := m.Update("cmd+shift+space", "ctrl+alt+space", "ctrl+shift+e"); err != nil {
 		t.Fatal(err)
 	}
 

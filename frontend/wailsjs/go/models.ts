@@ -111,6 +111,7 @@ export namespace main {
 	    hotkey: string;
 	    hands_free_hotkey: string;
 	    push_to_talk_hotkey: string;
+	    edit_hotkey: string;
 	    whisper_model: string;
 	    whisper_language: string;
 	    whisper_threads: number;
@@ -139,6 +140,7 @@ export namespace main {
 	        this.hotkey = source["hotkey"];
 	        this.hands_free_hotkey = source["hands_free_hotkey"];
 	        this.push_to_talk_hotkey = source["push_to_talk_hotkey"];
+	        this.edit_hotkey = source["edit_hotkey"];
 	        this.whisper_model = source["whisper_model"];
 	        this.whisper_language = source["whisper_language"];
 	        this.whisper_threads = source["whisper_threads"];

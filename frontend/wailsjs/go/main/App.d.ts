@@ -94,6 +94,8 @@ export function SearchHistoryPage(arg1:string,arg2:string,arg3:number,arg4:numbe
 
 export function SetAppRule(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function SetEditHotkey(arg1:string):Promise<void>;
+
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
 export function SetInputDevice(arg1:string):Promise<void>;

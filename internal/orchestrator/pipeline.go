@@ -54,14 +54,15 @@ type Pipeline struct {
 	onState        func(hotkey.State)
 
 	// Seams for tests; they default to the Wails runtime and the injection service.
-	emit        func(name string, data ...interface{})
-	inject      func(text string) error
-	typeText    func(text string) error
-	copyText    func(text string) error
-	focusTarget func(target macos.AppInfo) string // nil skips the focus check
-	micStatus   func() string                     // nil skips the permission check
-	requestMic  func() bool
-	inApp       func() bool // true keeps the text in VoxFlow's window instead of pasting it; nil = never
+	emit          func(name string, data ...interface{})
+	inject        func(text string) error
+	typeText      func(text string) error
+	copyText      func(text string) error
+	copySelection func() (string, error)
+	focusTarget   func(target macos.AppInfo) string // nil skips the focus check
+	micStatus     func() string                     // nil skips the permission check
+	requestMic    func() bool
+	inApp         func() bool // true keeps the text in VoxFlow's window instead of pasting it; nil = never
 
 	// lifecycleMu serialises start, stop and cancel, so a stop or second start
 	// that races a slow microphone open waits for it instead of interleaving.
@@ -72,6 +73,8 @@ type Pipeline struct {
 	// heldFeedback reports a failed hold-to-talk start once ConfirmHold shows
 	// the press was meant as a dictation; guarded by lifecycleMu.
 	heldFeedback func()
+	// selection is the text an edit recording rewrites; "" for a dictation. Guarded by lifecycleMu.
+	selection string
 
 	targetMu sync.Mutex
 	target   macos.AppInfo
@@ -117,7 +120,7 @@ func New(cfg Config) *Pipeline {
 		runtime.EventsEmit(p.ctx, name, data...)
 	}
 	if s := cfg.Injection; s != nil {
-		p.inject, p.typeText, p.copyText = s.Inject, s.Type, s.CopyToClipboard
+		p.inject, p.typeText, p.copyText, p.copySelection = s.Inject, s.Type, s.CopyToClipboard, s.CopySelection
 	}
 	if cfg.Audio != nil {
 		cfg.Audio.SetLevelCallback(func(level float64) { p.emit(events.AudioLevel, level) })
@@ -193,12 +196,61 @@ func (p *Pipeline) ConfirmHold() {
 	}
 }
 
+// StartEdit copies the selected text and records a spoken instruction for
+// rewriting it; stopping pastes the result over the selection.
+func (p *Pipeline) StartEdit() error {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if p.State() != hotkey.StateIdle {
+		return nil
+	}
+	if err := p.checkEditable(); err != nil {
+		p.resetToIdle()
+		return err
+	}
+	return p.startRecordingLocked(false)
+}
+
+// checkEditable copies the selection into p.selection, or reports why an edit can't start.
+func (p *Pipeline) checkEditable() error {
+	if !p.config.HasAPIKey(p.config.GetLLMProvider()) {
+		err := errors.New("Editing selected text needs AI clean-up — add a provider in Settings › Clean-up")
+		p.emitToast(err.Error(), "warning")
+		return err
+	}
+	if front, err := macos.FrontmostAppInfo(); err == nil && macos.IsSelf(front) {
+		err := errors.New("Select text in another app, then press the edit shortcut")
+		p.emitToast(err.Error(), "info")
+		return err
+	}
+	text, err := p.copySelection()
+	switch {
+	case errors.Is(err, injection.ErrNoAccessibility):
+		p.emitSettingsToast("Allow VoxFlow in Accessibility settings to edit selected text", "warning", "accessibility")
+		return err
+	case err != nil:
+		p.emitToast("Couldn't copy the selection: "+err.Error(), "error")
+		return err
+	case strings.TrimSpace(text) == "":
+		err := errors.New("Select some text first, then press the edit shortcut")
+		p.emitToast(err.Error(), "info")
+		return err
+	}
+	p.selection = text
+	return nil
+}
+
 func (p *Pipeline) startRecording(held bool) error {
 	p.lifecycleMu.Lock()
 	defer p.lifecycleMu.Unlock()
 	if p.State() != hotkey.StateIdle {
 		return nil
 	}
+	p.selection = ""
+	return p.startRecordingLocked(held)
+}
+
+func (p *Pipeline) startRecordingLocked(held bool) error {
 	p.heldFeedback = nil
 	// The hotkey manager has already moved to Recording; put it back.
 	fail := func(err error, feedback func()) error {
@@ -249,7 +301,7 @@ func (p *Pipeline) startRecording(held bool) error {
 
 	// Only now, with the microphone open, tell the user to start talking.
 	p.setState(hotkey.StateRecording)
-	p.emit(events.RecordingStarted, map[string]interface{}{"started_at": time.Now().UnixMilli()})
+	p.emit(events.RecordingStarted, map[string]interface{}{"started_at": time.Now().UnixMilli(), "edit": p.selection != ""})
 	logger.Infof("Recording started...")
 
 	return nil
@@ -316,9 +368,9 @@ func (p *Pipeline) StopRecording() {
 
 	// Decided now: clicking VoxFlow while it processes must not swallow text meant for another app.
 	inApp := p.inApp != nil && p.inApp()
-	stream := p.stream
-	p.stream = nil
-	go p.processRecording(stream, inApp)
+	stream, selection := p.stream, p.selection
+	p.stream, p.selection = nil, ""
+	go p.processRecording(stream, inApp, selection)
 }
 
 // CancelRecording discards the current recording: nothing is transcribed, pasted or saved.
@@ -340,7 +392,7 @@ func (p *Pipeline) cancelRecording(silent bool) {
 	}
 
 	stream := p.stream
-	p.stream = nil
+	p.stream, p.selection = nil, ""
 	wavPath, err := p.audioRecorder.Stop()
 	p.audioRecorder.ClearChunkCallback()
 	stream.close(true)
@@ -527,7 +579,7 @@ func joinSpans(spans []span) string {
 	return strings.Join(parts, " ")
 }
 
-func (p *Pipeline) processRecording(stream *streamSession, inApp bool) {
+func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection string) {
 	processingStartTime := time.Now()
 
 	stopAndWavStart := time.Now()
@@ -597,6 +649,11 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool) {
 	if rawText == "" {
 		p.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
 		p.resetToIdle()
+		return
+	}
+
+	if selection != "" {
+		p.applyEdit(selection, rawText, time.Since(processingStartTime))
 		return
 	}
 
@@ -679,6 +736,49 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool) {
 			"llm":        d.llmTime.Seconds(),
 			"wav_mb":     float64(wavBytes) / (1024.0 * 1024.0),
 		},
+	})
+}
+
+// applyEdit rewrites selection by the spoken instruction and pastes the
+// result over it. On failure the selection is left untouched.
+func (p *Pipeline) applyEdit(selection, instruction string, elapsed time.Duration) {
+	provider := p.config.GetLLMProvider()
+	p.emit(events.StateChanged, "Refining")
+	llmStart := time.Now()
+	text, err := p.refiner().RetryWithInstruction(selection, instruction, p.llmModel())
+	llmTime := time.Since(llmStart)
+	text = strings.TrimSpace(text)
+	switch {
+	case err != nil:
+		logger.Warnf("[Pipeline] %s edit failed: %v", provider, err)
+		p.emitToast("Couldn't edit the selection: "+truncate(err.Error(), maxToastDetail), "error")
+		p.resetToIdle()
+		return
+	case text == "":
+		p.emitToast("The AI returned nothing — the selection was left as it was", "warning")
+		p.resetToIdle()
+		return
+	}
+	// Whole-line selections end in a newline the rewrite must keep.
+	body := strings.TrimSpace(selection)
+	if i := strings.Index(selection, body); body != "" {
+		text = selection[:i] + text + selection[i+len(body):]
+	}
+	logger.Infof("[Pipeline] Edit applied in %.2fs (%s): %d → %d chars", llmTime.Seconds(), provider, len(selection), len(text))
+
+	target := p.Target()
+	method := p.handOff(text, p.config.InjectMethodFor(target.BundleID))
+
+	p.setState(hotkey.StateIdle)
+	p.emit(events.ProcessingComplete, map[string]interface{}{
+		"polished":   text,
+		"raw":        instruction,
+		"used_raw":   false,
+		"elapsed":    (elapsed + llmTime).Milliseconds(),
+		"target_app": target.Name,
+		"method":     method,
+		"edit":       true,
+		"details":    map[string]float64{"llm": llmTime.Seconds()},
 	})
 }
 

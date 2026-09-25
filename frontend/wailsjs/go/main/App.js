@@ -178,6 +178,10 @@ export function SetAppRule(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetAppRule'](arg1, arg2, arg3);
 }
 
+export function SetEditHotkey(arg1) {
+  return window['go']['main']['App']['SetEditHotkey'](arg1);
+}
+
 export function SetHandsFreeHotkey(arg1) {
   return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
 }

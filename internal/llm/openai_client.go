@@ -396,18 +396,11 @@ func (c *OpenAIClient) RetryWithInstruction(text, instruction, model string) (st
 	if c.missingKey() {
 		return "", ErrNoAPIKey
 	}
-	prompt := fmt.Sprintf(`Apply the following instruction to the text:
-Instruction: %s
-
-Text:
-%s
-
-Return ONLY the modified text, nothing else.`, instruction, text)
-
 	req := chatRequest{
 		Model: model,
 		Messages: []chatMessage{
-			{Role: "user", Content: prompt},
+			{Role: "system", Content: instructionPrompt},
+			{Role: "user", Content: "<instruction>\n" + instruction + "\n</instruction>\n\n<text>\n" + text + "\n</text>"},
 		},
 		Temperature:     0.3,
 		Reasoning:       c.reasoning(),

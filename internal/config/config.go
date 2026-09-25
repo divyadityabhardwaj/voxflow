@@ -25,6 +25,7 @@ type Config struct {
 	HandsFreeHotkey  string `json:"hands_free_hotkey"`   // e.g., "cmd+shift+space"
 	PushToTalkHotkey string `json:"push_to_talk_hotkey"` // e.g., "cmd+shift+p"
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
+	EditHotkey       string `json:"edit_hotkey"`         // rewrites the selected text by a spoken instruction
 	WhisperModel     string `json:"whisper_model"`
 	WhisperLanguage  string `json:"whisper_language"` // fixed language for transcription (en)
 	WhisperThreads   int    `json:"whisper_threads"`  // 0 = whisper default
@@ -164,6 +165,9 @@ func (c *Config) applyDefaults() {
 	if c.PushToTalkHotkey == "" {
 		c.PushToTalkHotkey = "cmd+shift+p"
 	}
+	if c.EditHotkey == "" {
+		c.EditHotkey = DefaultEditHotkey
+	}
 	if c.WhisperModel == "" {
 		c.WhisperModel = "small.en"
 	}
@@ -251,6 +255,23 @@ func (c *Config) SetPushToTalkHotkey(hotkey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.PushToTalkHotkey = hotkey
+}
+
+const DefaultEditHotkey = "ctrl+shift+e"
+
+func (c *Config) GetEditHotkey() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.EditHotkey == "" {
+		return DefaultEditHotkey
+	}
+	return c.EditHotkey
+}
+
+func (c *Config) SetEditHotkey(hotkey string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.EditHotkey = hotkey
 }
 
 func (c *Config) GetHotkey() string {

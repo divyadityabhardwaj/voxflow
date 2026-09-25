@@ -140,6 +140,11 @@ export default function MainView() {
               <Keycap>Esc</Keycap> to cancel
             </p>
           )}
+          {status === "Idle" && shortcuts?.edit && (
+            <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px] text-secondary mt-1.5">
+              Select text anywhere and press <Keycap>{shortcuts.edit}</Keycap> to rewrite it by voice
+            </p>
+          )}
           {recording && (
             <p className="flex flex-wrap items-center justify-center gap-1.5 text-[13px] text-secondary mt-3">
               {shortcuts ? (

@@ -82,9 +82,9 @@ static int keyCodeFor(CFDataRef layoutData, UniChar want) {
     return -1;
 }
 
-// keyCodeForV returns the keycode that types v on a keyboard layout ("" for
-// the current one), or -1 if there is none.
-static int keyCodeForV(_GoString_ layoutID) {
+// keyCodeForChar returns the keycode that types want on a keyboard layout (""
+// for the current one), or -1 if there is none.
+static int keyCodeForChar(_GoString_ layoutID, UniChar want) {
     @autoreleasepool {
         NSString *wanted = [[NSString alloc] initWithBytes:_GoStringPtr(layoutID) length:_GoStringLen(layoutID) encoding:NSUTF8StringEncoding];
         __block int code = -1;
@@ -100,7 +100,7 @@ static int keyCodeForV(_GoString_ layoutID) {
                 }
                 if (!src) return;
                 CFDataRef data = TISGetInputSourceProperty(src, kTISPropertyUnicodeKeyLayoutData);
-                if (data) code = keyCodeFor(data, 'v');
+                if (data) code = keyCodeFor(data, want);
                 CFRelease(src);
             }
         };
@@ -132,6 +132,7 @@ import (
 )
 
 const (
+	keyC      = 8
 	keyV      = 9
 	keyReturn = 36
 )
@@ -144,13 +145,22 @@ func cgEventErr(ret C.int) error {
 // layout), so ⌘V still pastes on Dvorak and the like. Looking it up per paste
 // costs microseconds and follows input-source switches with no observer.
 func pasteKeyCode(layoutID string) int {
-	if code := int(C.keyCodeForV(layoutID)); code >= 0 {
+	if code := int(C.keyCodeForChar(layoutID, 'v')); code >= 0 {
 		return code
 	}
 	return keyV
 }
 
-func simulatePaste(key int) error {
+func copyKeyCode(layoutID string) int {
+	if code := int(C.keyCodeForChar(layoutID, 'c')); code >= 0 {
+		return code
+	}
+	return keyC
+}
+
+// pressCommand presses key with ⌘ alone, whatever modifiers the user is
+// still holding from VoxFlow's shortcut.
+func pressCommand(key int) error {
 	if ret := C.pressKey(C.CGKeyCode(key), C.kCGEventFlagMaskCommand); ret != 0 {
 		return cgEventErr(ret)
 	}

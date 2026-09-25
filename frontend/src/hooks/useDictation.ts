@@ -20,12 +20,14 @@ export interface ProcessingResult {
   words_per_second?: number;
   target_app?: string;
   method?: "paste" | "type" | "clipboard" | "none";
+  edit?: boolean; // raw is the spoken instruction, polished the rewritten selection
   details?: { audio?: number };
 }
 
 // Where the text ended up, for the pill and the result card.
-export function deliveryLabel(r: Pick<ProcessingResult, "method" | "target_app">) {
+export function deliveryLabel(r: Pick<ProcessingResult, "method" | "target_app" | "edit">) {
   const app = r.target_app || "your app";
+  if (r.edit && (r.method === "paste" || r.method === "type")) return `Edited in ${app}`;
   switch (r.method) {
     case "paste":
       return `Pasted into ${app}`;
@@ -92,6 +94,7 @@ const HOLD_KEY_LABELS: Record<string, string> = {
 export interface Shortcuts {
   hold: string;
   toggle: string;
+  edit: string;
 }
 
 // The keys that actually work right now. Without Accessibility a single
@@ -102,6 +105,7 @@ export async function loadShortcuts(): Promise<Shortcuts> {
   return {
     hold: ptt.active ? HOLD_KEY_LABELS[ptt.key] ?? chord : chord,
     toggle: formatShortcut(cfg.hands_free_hotkey || cfg.hotkey || ""),
+    edit: formatShortcut(cfg.edit_hotkey || ""),
   };
 }
 

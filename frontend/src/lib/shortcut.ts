@@ -104,7 +104,7 @@ export function formatShortcut(s: string): string {
   return mods.map((m) => GLYPHS[m]).join("") + label;
 }
 
-export function validateShortcut(s: string, otherShortcut = ""): string | null {
+export function validateShortcut(s: string, otherShortcuts: string[] = []): string | null {
   const { mods, key } = split(s);
   if (!key) return "Now press a letter, number, Space, Return, Esc or Tab.";
   if (!SUPPORTED_KEYS.has(key)) {
@@ -112,8 +112,8 @@ export function validateShortcut(s: string, otherShortcut = ""): string | null {
   }
   if (mods.length === 0) return "Add at least one of ⌃ ⌥ ⇧ ⌘.";
   const normalized = normalizeShortcut(s);
-  if (otherShortcut && normalized === normalizeShortcut(otherShortcut)) {
-    return "That's already your other dictation shortcut.";
+  if (otherShortcuts.some((o) => o && normalized === normalizeShortcut(o))) {
+    return "That's already one of your other VoxFlow shortcuts.";
   }
   if (RESERVED.has(normalized)) {
     return `${formatShortcut(s)} is a macOS system shortcut. Pick another.`;

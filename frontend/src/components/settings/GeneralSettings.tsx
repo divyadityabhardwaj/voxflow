@@ -6,6 +6,7 @@ import {
   GetPushToTalkKey,
   OpenPrivacySettings,
   RequestMicrophoneAccess,
+  SetEditHotkey,
   SetHandsFreeHotkey,
   SetInputDevice,
   SetMuteSystemAudio,
@@ -27,7 +28,13 @@ const HOLD_KEYS = [
   { id: "chord", label: "Key combination" },
 ];
 
-type ShortcutField = "ptt" | "handsFree";
+type ShortcutField = "ptt" | "handsFree" | "edit";
+
+const SHORTCUT_FIELDS = {
+  ptt: { key: "push_to_talk_hotkey", save: SetPushToTalkHotkey },
+  handsFree: { key: "hands_free_hotkey", save: SetHandsFreeHotkey },
+  edit: { key: "edit_hotkey", save: SetEditHotkey },
+} as const;
 
 export default function GeneralSettings() {
   const { showToast } = useToast();
@@ -103,9 +110,10 @@ export default function GeneralSettings() {
 
   // Throws a user-facing error so the recorder stays open and shows it inline.
   const saveShortcut = async (value: string) => {
-    const isPtt = recording === "ptt";
+    if (!recording) return;
+    const field = SHORTCUT_FIELDS[recording];
     try {
-      await (isPtt ? SetPushToTalkHotkey : SetHandsFreeHotkey)(value);
+      await field.save(value);
     } catch (err) {
       const msg = String(err);
       throw new Error(
@@ -114,7 +122,7 @@ export default function GeneralSettings() {
           : `Couldn't save that shortcut: ${msg}`,
       );
     }
-    update(isPtt ? { push_to_talk_hotkey: value } : { hands_free_hotkey: value });
+    update({ [field.key]: value });
   };
 
   const holdKey = ptt?.key ?? "chord";
@@ -161,6 +169,12 @@ export default function GeneralSettings() {
           description="Press once to start, again to finish."
           value={config.hands_free_hotkey}
           onChange={() => setRecording("handsFree")}
+        />
+        <ShortcutRow
+          label="Edit selected text"
+          description="Select text in any app, press, say what to change (“make it shorter”, “bullet points”), press again. Needs AI clean-up."
+          value={config.edit_hotkey}
+          onChange={() => setRecording("edit")}
         />
       </SettingsSection>
 
@@ -292,12 +306,10 @@ export default function GeneralSettings() {
         isOpen={recording !== null}
         onClose={() => setRecording(null)}
         onSave={saveShortcut}
-        initialValue={
-          recording === "ptt" ? config.push_to_talk_hotkey : config.hands_free_hotkey
-        }
-        otherHotkey={
-          recording === "ptt" ? config.hands_free_hotkey : config.push_to_talk_hotkey
-        }
+        initialValue={recording ? config[SHORTCUT_FIELDS[recording].key] : ""}
+        otherHotkeys={(Object.keys(SHORTCUT_FIELDS) as ShortcutField[])
+          .filter((f) => f !== recording)
+          .map((f) => config[SHORTCUT_FIELDS[f].key])}
       />
     </div>
   );

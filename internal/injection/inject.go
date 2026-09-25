@@ -48,7 +48,7 @@ func (s *Service) Inject(text string) error {
 
 	time.Sleep(30 * time.Millisecond)
 
-	err := simulatePaste(key) // Accessibility on this process, not osascript
+	err := pressCommand(key) // Accessibility on this process, not osascript
 	if err == nil {
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -75,7 +75,14 @@ func (s *Service) writeTransient(text string) int {
 func (s *Service) restore(gen int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if gen != s.gen || !s.restorePending {
+	if gen == s.gen {
+		s.restoreNow()
+	}
+}
+
+// restoreNow puts the user's clipboard back if a paste left ours on it. Callers hold mu.
+func (s *Service) restoreNow() {
+	if !s.restorePending {
 		return
 	}
 	if changeCount(s.pasteboard) == s.ourChange {
@@ -84,6 +91,37 @@ func (s *Service) restore(gen int) {
 	}
 	s.restorePending, s.saved = false, nil
 }
+
+// CopySelection copies the frontmost app's selection with ⌘C and returns its
+// plain text, then puts the clipboard back. "" means nothing was selected.
+func (s *Service) CopySelection() (string, error) {
+	if !IsAccessibilityGranted() {
+		return "", ErrNoAccessibility
+	}
+	key := copyKeyCode("")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.restoreNow()
+	saved := readItems(s.pasteboard)
+	before := changeCount(s.pasteboard)
+
+	if err := pressCommand(key); err != nil {
+		return "", err
+	}
+	// Apps copy on their own run loop; Electron apps can take a few hundred ms.
+	for deadline := time.Now().Add(copyTimeout); changeCount(s.pasteboard) == before; {
+		if time.Now().After(deadline) {
+			return "", nil
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	text := plainText(readItems(s.pasteboard))
+	writeItems(s.pasteboard, saved, concealed(saved))
+	return text, nil
+}
+
+const copyTimeout = 600 * time.Millisecond
 
 // CopyToClipboard leaves text on the clipboard as an ordinary copy, so
 // clipboard managers record it.

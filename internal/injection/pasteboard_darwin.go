@@ -129,6 +129,17 @@ func textItem(text string, transient bool) pbItem {
 	return item
 }
 
+func plainText(items []pbItem) string {
+	for _, it := range items {
+		for _, e := range it {
+			if e.typ == utiPlainText {
+				return string(e.data)
+			}
+		}
+	}
+	return ""
+}
+
 func concealed(items []pbItem) bool {
 	for _, it := range items {
 		for _, e := range it {

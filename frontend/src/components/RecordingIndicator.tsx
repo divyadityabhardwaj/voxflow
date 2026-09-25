@@ -79,6 +79,7 @@ export default function RecordingIndicator() {
   const seconds = useRecordingSeconds(status);
   const [hovered, setHovered] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const { toasts, dismissToast, clearToasts } = useToastList();
   const activeToast = toasts.length > 0 ? toasts[toasts.length - 1] : null;
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,6 +95,7 @@ export default function RecordingIndicator() {
           setDone(null);
         }
       }),
+      EventsOn(Events.RecordingStarted, (d: { edit?: boolean }) => setEditing(!!d?.edit)),
       EventsOn(Events.ProcessingComplete, (r: ProcessingResult) => {
         if (r.method === "none") return;
         setDone(deliveryLabel(r));
@@ -183,7 +185,8 @@ export default function RecordingIndicator() {
       </div>
     );
   } else if (busy) {
-    const label = status === "Refining" ? "Cleaning up…" : "Transcribing…";
+    const label =
+      status === "Refining" ? (editing ? "Rewriting…" : "Cleaning up…") : "Transcribing…";
     body = (
       <div className="flex-1 min-w-0 flex items-center justify-center gap-1.5 px-1" role="status" style={{ color: busyFg }}>
         <span className="flex-none size-3 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true" />
@@ -210,7 +213,7 @@ export default function RecordingIndicator() {
           {formatClock(seconds)}
         </span>
         <span className="flex-1 min-w-0 text-[10px] text-center truncate opacity-70" style={{ color: fg }}>
-          Esc to cancel
+          {editing ? "Say the change" : "Esc to cancel"}
         </span>
         <button
           type="button"
