@@ -33,7 +33,7 @@ type App struct {
 	historyService   *history.Service
 	injectionService *injection.Service
 	modelReady       atomic.Bool
-	downloadCancel   context.CancelFunc
+	download         *modelDownload // the download in progress, guarded by downloadMu
 	downloadMu       sync.Mutex
 
 	warningsMu      sync.Mutex

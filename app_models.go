@@ -82,14 +82,29 @@ func (a *App) DownloadModel() error {
 	return nil
 }
 
+type modelDownload struct {
+	name   string
+	cancel context.CancelFunc
+	done   chan struct{}
+	err    error // set before done closes
+}
+
+// DownloadModelByName downloads one model at a time: another model's download
+// is cancelled, and a second request for the same model waits for the first.
 func (a *App) DownloadModelByName(modelName string) error {
 	a.downloadMu.Lock()
-	if a.downloadCancel != nil {
-		a.downloadCancel()
+	if d := a.download; d != nil {
+		if d.name == modelName {
+			a.downloadMu.Unlock()
+			<-d.done
+			return d.err
+		}
+		d.cancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a.downloadCancel = cancel
+	d := &modelDownload{name: modelName, cancel: cancel, done: make(chan struct{})}
+	a.download = d
 	a.downloadMu.Unlock()
 
 	ev := modelDownloadEvent{Model: modelName}
@@ -100,8 +115,12 @@ func (a *App) DownloadModelByName(modelName string) error {
 	})
 
 	a.downloadMu.Lock()
-	a.downloadCancel = nil
+	if a.download == d {
+		a.download = nil
+	}
 	a.downloadMu.Unlock()
+	d.err = err
+	close(d.done)
 
 	if err != nil {
 		ev.Error = err.Error()
@@ -117,10 +136,10 @@ func (a *App) CancelDownload() {
 	a.downloadMu.Lock()
 	defer a.downloadMu.Unlock()
 
-	if a.downloadCancel != nil {
+	if a.download != nil {
 		logger.Infof("[App] Cancelling download...")
-		a.downloadCancel()
-		a.downloadCancel = nil
+		a.download.cancel()
+		a.download = nil
 		runtime.EventsEmit(a.ctx, events.ModelDownloadCancelled, nil)
 	}
 }

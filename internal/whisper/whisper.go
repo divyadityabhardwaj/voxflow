@@ -72,6 +72,8 @@ type Service struct {
 	noServer       bool                        // force the whisper-cli path (tests)
 
 	lastUse atomic.Int64 // UnixNano of the latest request, for Prewarm
+
+	downloadMu sync.Mutex // one download at a time: two writers to a .tmp corrupt it
 }
 
 func NewService() *Service {
@@ -166,6 +168,8 @@ var (
 // attempt in this run (CleanupPartialDownloads clears them at launch); the SHA-256
 // check covers the stitched file.
 func (s *Service) DownloadModelWithContext(ctx context.Context, modelSize string, progress ProgressCallback) error {
+	s.downloadMu.Lock()
+	defer s.downloadMu.Unlock()
 	m, ok := findCatalogModel(modelSize)
 	if !ok {
 		return fmt.Errorf("unknown model size: %s", modelSize)
