@@ -290,6 +290,9 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 		p.emitToast(name+" isn't connected — using the default microphone", "warning")
 	}
 
+	if p.whisperService != nil {
+		p.whisperService.Prewarm()
+	}
 	p.stream = p.startStreamingTranscription()
 
 	if p.refiner != nil {
@@ -588,6 +591,8 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	// Capture is over, so give the user their sound back before transcription and refinement.
 	p.setMuted(false)
 
+	// Includes the wait for the streaming worker, which transcribes the final chunk.
+	whisperStart := time.Now()
 	p.audioRecorder.ClearChunkCallback()
 	stream.close(false)
 	stream.wg.Wait()
@@ -616,7 +621,6 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 		return
 	}
 
-	whisperStart := time.Now()
 	samples := p.audioRecorder.GetBuffer()
 	stream.mu.Lock()
 	spans := slices.Clone(stream.spans)

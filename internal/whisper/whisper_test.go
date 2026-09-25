@@ -214,3 +214,20 @@ func TestFindWhisperServerNextToBundledCLI(t *testing.T) {
 		t.Fatalf("findWhisperServer(%q) = %q, want %q", cli, got, srv)
 	}
 }
+
+func TestPrewarmOnlyAfterIdle(t *testing.T) {
+	s := NewService()
+	recent := time.Now().Add(-10 * time.Second).UnixNano()
+	s.lastUse.Store(recent)
+	s.Prewarm()
+	if s.lastUse.Load() != recent {
+		t.Fatal("prewarmed a model that was just used")
+	}
+
+	idle := time.Now().Add(-2 * prewarmAfterIdle).UnixNano()
+	s.lastUse.Store(idle)
+	s.Prewarm()
+	if s.lastUse.Load() == idle {
+		t.Fatal("didn't prewarm an idle model")
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -69,6 +70,8 @@ type Service struct {
 	startsPending  int                         // LoadModel starts in flight, so WarmUp can wait for them
 	serverRestarts []time.Time                 // crash restarts within restartWindow
 	noServer       bool                        // force the whisper-cli path (tests)
+
+	lastUse atomic.Int64 // UnixNano of the latest request, for Prewarm
 }
 
 func NewService() *Service {
@@ -429,6 +432,7 @@ func (s *Service) TranscribeWithPrompt(wavPath, prompt string) (string, error) {
 
 // Server when up; else whisper-cli (needs wavPath or temp file).
 func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, error) {
+	s.lastUse.Store(time.Now().UnixNano())
 	s.mu.RLock()
 	loaded, modelPath, language, threads, srv := s.loaded, s.modelPath, s.language, s.threads, s.server
 	s.mu.RUnlock()
@@ -625,6 +629,27 @@ func (s *Service) WarmUp() error {
 	s.awaitServer(20 * time.Second)
 	_, err := s.transcribeWAV(wavBytes(syntheticSamples(900*time.Millisecond), 16000), "", "")
 	return err
+}
+
+// After a long idle macOS has paged out the model and powered down the GPU,
+// and the next request pays seconds to bring them back (11s for medium after
+// two hours). Prewarm pays that while the user is still speaking.
+const prewarmAfterIdle = time.Minute
+
+// Prewarm runs a short inference in the background if the model has sat idle.
+func (s *Service) Prewarm() {
+	last := s.lastUse.Load()
+	if time.Since(time.Unix(0, last)) < prewarmAfterIdle || !s.lastUse.CompareAndSwap(last, time.Now().UnixNano()) {
+		return
+	}
+	go func() {
+		start := time.Now()
+		if _, err := s.transcribeWAV(wavBytes(syntheticSamples(500*time.Millisecond), 16000), "", ""); err != nil {
+			logger.Debugf("[Whisper] Prewarm failed: %v", err)
+			return
+		}
+		logger.Infof("[Whisper] Prewarmed after idle in %.2fs", time.Since(start).Seconds())
+	}()
 }
 
 // Synthetic tone so warm-up exercises the decoder without real speech.
