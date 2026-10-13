@@ -782,3 +782,35 @@ body {
 .text-tertiary {
   color: var(--text-tertiary);
 }
+
+/* ===== History ===== */
+.history-sidebar {
+  width: clamp(240px, 30%, 320px);
+}
+
+/* Shared input padding is declared after Tailwind utilities. */
+.history-search .input {
+  padding-left: 36px;
+}
+
+/* Bound the preview even when WebKit measures a button's unclamped content. */
+.history-preview {
+  line-height: 20px;
+  max-height: 40px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.history-instruction {
+  flex-basis: 180px;
+}
+
+@media (max-width: 1000px) {
+  .history-detail {
+    padding: 20px;
+  }
+
+  .history-instruction {
+    flex-basis: 100%;
+  }
+}

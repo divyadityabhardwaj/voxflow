@@ -78,14 +78,14 @@ const HistoryItem = memo(function HistoryItem({ transcript, isSelected, tabbable
       onClick={() => onSelect(transcript.id)}
       aria-current={isSelected ? "true" : undefined}
       tabIndex={tabbable ? 0 : -1}
-      className={`w-full px-4 py-2.5 text-left transition-colors border-l-2 ${
+      className={`block w-full px-4 py-2.5 text-left transition-colors border-l-2 ${
         isSelected ? "bg-accent-soft border-l-primary" : "hover:bg-secondary border-l-transparent"
       }`}
     >
       <p className="text-xs text-tertiary mb-0.5 truncate">
         {[transcript.app_name, clockTime(transcript.timestamp)].filter(Boolean).join(" · ")}
       </p>
-      <p className="text-[13px] text-text line-clamp-2">
+      <p className="history-preview text-[13px] text-text line-clamp-2">
         {highlightText(transcript.polished_text || transcript.raw_text, searchQuery)}
       </p>
     </button>
@@ -123,6 +123,7 @@ export default function HistoryView() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState<"first" | "more" | null>("first");
   // Ref + object identity so stale in-flight pages drop after query change.
   const page = useRef<PageState>(freshPage(""));
@@ -145,6 +146,7 @@ export default function HistoryView() {
     const p = page.current;
     if (p.loading || !p.hasMore) return;
     p.loading = true;
+    setLoadError(false);
     setLoading(p.cursorID === 0 ? "first" : "more");
     try {
       const res = p.query
@@ -157,6 +159,7 @@ export default function HistoryView() {
       p.cursorID = res.next_cursor_id || 0;
       p.hasMore = items.length === PAGE_SIZE;
     } catch (err) {
+      if (page.current === p) setLoadError(true);
       console.error("Failed to load history:", err);
     } finally {
       p.loading = false;
@@ -167,7 +170,9 @@ export default function HistoryView() {
   useEffect(() => {
     page.current = freshPage(searchQuery);
     setTranscripts([]);
+    setLoadError(false);
     setLoading("first");
+    listRef.current?.scrollTo(0, 0);
     const t = setTimeout(loadNextPage, 200);
     return () => clearTimeout(t);
   }, [searchQuery, loadNextPage]);
@@ -175,9 +180,11 @@ export default function HistoryView() {
   useEffect(
     () =>
       EventsOn(Events.ProcessingComplete, async () => {
-        if (page.current.query) return;
+        const p = page.current;
+        if (p.query) return;
         try {
           const res = await GetHistoryPage("", 0, PAGE_SIZE);
+          if (page.current !== p) return;
           const items: Transcript[] = res.transcripts || [];
           setTranscripts((prev) => [...withoutKnown(prev, items), ...prev]);
         } catch (err) {
@@ -189,7 +196,7 @@ export default function HistoryView() {
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.metaKey && e.key.toLowerCase() === "f") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         searchRef.current?.focus();
         searchRef.current?.select();
@@ -207,7 +214,7 @@ export default function HistoryView() {
       if (!el) return;
       observer.current = new IntersectionObserver(([entry]) => {
         if (entry.isIntersecting) loadNextPage();
-      });
+      }, { root: listRef.current, rootMargin: "120px" });
       observer.current.observe(el);
     },
     [loadNextPage],
@@ -221,6 +228,13 @@ export default function HistoryView() {
     setVersion("cleaned");
     setInstruction("");
   }, []);
+
+  useEffect(() => {
+    if (loading === "first") return;
+    if (visible.length > 0 && !visible.some((t) => t.id === selectedId)) {
+      select(visible[0].id);
+    }
+  }, [transcripts, hidden, selectedId, loading, select]);
 
   const handleListKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
@@ -243,7 +257,10 @@ export default function HistoryView() {
     const i = visible.findIndex((x) => x.id === t.id);
     const neighbour = visible[i + 1] ?? visible[i - 1];
     setHidden((prev) => new Set(prev).add(t.id));
-    if (selectedId === t.id) setSelectedId(neighbour?.id ?? null);
+    if (selectedId === t.id) {
+      if (neighbour) select(neighbour.id);
+      else setSelectedId(null);
+    }
 
     const commit = () => {
       pendingDeletes.delete(t.id);
@@ -309,8 +326,8 @@ export default function HistoryView() {
     }
   };
 
-  const hasRaw = !!selected?.raw_text && selected.raw_text !== selected.polished_text;
-  const shownText = selected ? (version === "raw" && hasRaw ? selected.raw_text : selected.polished_text) : "";
+  const hasRaw = !!selected?.raw_text && !!selected.polished_text && selected.raw_text !== selected.polished_text;
+  const shownText = selected ? (version === "raw" && hasRaw ? selected.raw_text : (selected.polished_text || selected.raw_text)) : "";
 
   const rows: JSX.Element[] = [];
   let lastGroup = "";
@@ -342,7 +359,7 @@ export default function HistoryView() {
 
   return (
     <div className="flex h-full min-h-0 animate-fade-in">
-      <div className="w-72 shrink-0 border-r border-border flex flex-col bg-surface">
+      <div className="history-sidebar shrink-0 min-h-0 border-r border-border flex flex-col bg-surface">
         <div className="p-4 pb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold text-text">History</h2>
           {visible.length > 0 && (
@@ -353,7 +370,7 @@ export default function HistoryView() {
         </div>
 
         <div className="px-4 pb-3 border-b border-border">
-          <div className="relative">
+          <div className="history-search relative">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary pointer-events-none"
               fill="none"
@@ -368,50 +385,67 @@ export default function HistoryView() {
               type="search"
               placeholder="Search your dictations"
               aria-label="Search your dictations"
-              aria-keyshortcuts="Meta+F"
+              aria-keyshortcuts="Meta+F Control+F"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setSearchQuery("");
+                }
                 if (e.key === "ArrowDown" && visible.length > 0) {
                   e.preventDefault();
-                  const id = selectedId ?? visible[0].id;
+                  const id = selected?.id ?? visible[0].id;
                   select(id);
                   listRef.current?.querySelector<HTMLElement>(`[data-id="${id}"]`)?.focus();
                 }
               }}
-              className="input w-full pl-10 !text-[13px]"
+              className="input w-full !text-[13px]"
             />
           </div>
         </div>
 
         <div
           ref={listRef}
-          className="flex-1 overflow-y-auto"
+          className="flex-1 min-h-0 overflow-y-auto"
           role="group"
           aria-label="Dictations — use the arrow keys to move"
+          aria-busy={loading !== null}
           onKeyDown={handleListKeyDown}
         >
           {loading === "first" ? (
             <div className="p-4 text-center text-[13px] text-tertiary">Loading…</div>
+          ) : loadError && visible.length === 0 ? (
+            <div className="p-6 text-center text-[13px] text-secondary" role="alert">
+              <p>Couldn't load your history.</p>
+              <button type="button" className="btn-secondary mt-3" onClick={loadNextPage}>Try again</button>
+            </div>
           ) : visible.length === 0 ? (
             <div className="p-8 text-center text-[13px] text-secondary">
-              {searchQuery ? "No dictations match that search" : "No dictations yet"}
+              <p>{searchQuery ? "No dictations match that search" : "No dictations yet"}</p>
+              {searchQuery ? (
+                <button type="button" className="btn-secondary mt-3" onClick={() => { setSearchQuery(""); searchRef.current?.focus(); }}>Clear search</button>
+              ) : <p className="mt-2 text-xs text-tertiary">Your dictations will appear here after you record.</p>}
             </div>
           ) : (
             <div>
               {rows}
               {loading === "more" && <div className="p-3 text-center text-xs text-tertiary">Loading more…</div>}
-              <div ref={sentinelRef} />
+              {loadError ? (
+                <div className="p-3 text-center text-xs text-secondary" role="alert">
+                  <p>Couldn't load more dictations.</p>
+                  <button type="button" className="btn-secondary mt-2" onClick={loadNextPage}>Try again</button>
+                </div>
+              ) : <div ref={sentinelRef} className="h-px" aria-hidden="true" />}
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col bg-background">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-background">
         {selected ? (
           <>
             <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4">
-              <p className="text-[13px] text-secondary">
+              <p className="text-[13px] text-secondary break-words min-w-0">
                 {[selected.app_name, formatFullDate(selected.timestamp)].filter(Boolean).join(" · ")}
               </p>
               <button
@@ -427,16 +461,16 @@ export default function HistoryView() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="history-detail flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
               {hasRaw && <VersionToggle value={version} onChange={setVersion} />}
 
               <div className="card p-4">
-                <p className="text-sm text-text whitespace-pre-wrap leading-relaxed select-text">
+                <p className="text-sm text-text whitespace-pre-wrap break-words leading-relaxed select-text">
                   {highlightText(shownText, searchQuery)}
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button type="button" className="btn-secondary !py-1.5 !px-3 !text-xs" onClick={() => copy(shownText)}>
                   Copy
                 </button>
@@ -446,20 +480,22 @@ export default function HistoryView() {
               </div>
 
               <form
-                className="flex gap-2 pt-2"
+                className="flex flex-wrap gap-2 pt-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   handleRewrite(selected.id, instruction.trim());
                 }}
               >
+                <label htmlFor="history-instruction" className="w-full text-xs font-medium text-secondary">Rewrite this dictation</label>
                 <input
+                  id="history-instruction"
                   type="text"
-                  placeholder="Ask for a change — e.g. “shorter” or “make it friendlier”"
+                  placeholder="e.g. Make it shorter"
                   aria-label="Ask for a change"
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
                   disabled={rewriting}
-                  className="input flex-1 min-w-0 !text-[13px]"
+                  className="input history-instruction flex-1 min-w-0 !text-[13px]"
                 />
                 <button type="submit" disabled={rewriting || !instruction.trim()} className="btn-primary shrink-0">
                   {rewriting ? "Rewriting…" : "Rewrite"}
@@ -482,7 +518,7 @@ export default function HistoryView() {
                     {selected.llm_provider && (
                       <>
                         <dt>Clean-up</dt>
-                        <dd className="text-text">
+                        <dd className="text-text min-w-0 break-words">
                           {selected.llm_provider}
                           {selected.llm_model && ` · ${selected.llm_model}`}
                         </dd>
@@ -507,7 +543,7 @@ export default function HistoryView() {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-[13px] text-secondary">
-            Select a dictation to see it here
+            {loading === "first" ? "Loading your history…" : searchQuery ? "Search results will appear on the left" : "Your saved dictations will appear here"}
           </div>
         )}
       </div>
