@@ -190,6 +190,10 @@ export function SetEditHotkey(arg1) {
   return window['go']['main']['App']['SetEditHotkey'](arg1);
 }
 
+export function SetGroqKey(arg1) {
+  return window['go']['main']['App']['SetGroqKey'](arg1);
+}
+
 export function SetHandsFreeHotkey(arg1) {
   return window['go']['main']['App']['SetHandsFreeHotkey'](arg1);
 }
@@ -232,6 +236,10 @@ export function SetPushToTalkKey(arg1) {
 
 export function SetRefinementMode(arg1) {
   return window['go']['main']['App']['SetRefinementMode'](arg1);
+}
+
+export function SetTranscription(arg1) {
+  return window['go']['main']['App']['SetTranscription'](arg1);
 }
 
 export function SetVocabulary(arg1) {

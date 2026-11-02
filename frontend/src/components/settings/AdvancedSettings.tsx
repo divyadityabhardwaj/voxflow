@@ -8,11 +8,13 @@ import {
   GetConfig,
   IsWhisperCLIReady,
   OpenLogFile,
+  SetGroqKey,
+  SetTranscription,
   SetWhisperLanguage,
   SetWhisperModel,
 } from "../../../wailsjs/go/main/App";
 import { main, whisper } from "../../../wailsjs/go/models";
-import { EventsOn } from "../../../wailsjs/runtime/runtime";
+import { BrowserOpenURL, EventsOn } from "../../../wailsjs/runtime/runtime";
 import { Events } from "../../constants/events";
 import { useToast } from "../../contexts/ToastContext";
 import { LANGUAGES } from "../../lib/languages";
@@ -202,9 +204,11 @@ export default function AdvancedSettings() {
         </div>
       )}
 
+      <TranscriptionSection config={config} setConfig={setConfig} />
+
       <SettingsSection
         title="Speech accuracy"
-        description="Bigger options are more accurate but slower and take more space."
+        description="For transcribing on this Mac. Bigger options are more accurate but slower and take more space."
       >
         {named.map(row)}
       </SettingsSection>
@@ -258,5 +262,104 @@ export default function AdvancedSettings() {
         onCancel={() => setToDelete(null)}
       />
     </div>
+  );
+}
+
+function TranscriptionSection({
+  config,
+  setConfig,
+}: {
+  config: main.ConfigResponse;
+  setConfig: (c: main.ConfigResponse) => void;
+}) {
+  const { showToast } = useToast();
+  const [key, setKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const groq = config.transcription === "groq";
+
+  const choose = (t: string) =>
+    SetTranscription(t)
+      .then(() => setConfig({ ...config, transcription: t } as main.ConfigResponse))
+      .catch((err) => showToast(`Couldn't switch transcription: ${String(err)}`, "error"));
+
+  const saveKey = async () => {
+    if (!key.trim()) return;
+    setSaving(true);
+    setKeyError(null);
+    try {
+      await SetGroqKey(key.trim());
+      setKey("");
+      setConfig({ ...config, groq_api_key_set: true } as main.ConfigResponse);
+      showToast("Groq key saved", "success");
+    } catch (err) {
+      setKeyError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const option = (value: string, label: string, description: string) => (
+    <div className="settings-row">
+      <label className="flex items-start gap-3 min-w-0">
+        <input
+          type="radio"
+          name="transcription"
+          checked={config.transcription === value}
+          onChange={() => choose(value)}
+          className="mt-0.5 w-4 h-4 shrink-0 accent-[var(--primary)]"
+        />
+        <span className="min-w-0">
+          <span className="block text-[13px] text-text">{label}</span>
+          <span className="block text-xs text-secondary">{description}</span>
+        </span>
+      </label>
+    </div>
+  );
+
+  return (
+    <SettingsSection title="Transcription">
+      {option("groq", "Groq (recommended)", "Fast and free with a Groq key. Your audio is sent to Groq.")}
+      {option("local", "On this Mac", "Private and works offline. Needs a speech model download and uses about 0.5–1 GB of memory.")}
+      {groq && (
+        <SettingRow
+          label="Groq API key"
+          htmlFor="groq-key"
+          description={
+            <>
+              {config.groq_api_key_set ? "A key is saved. Paste a new one to replace it. " : "Needed for Groq transcription. "}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onClick={() => BrowserOpenURL("https://console.groq.com/keys")}
+              >
+                Get a free key
+              </button>
+              {keyError && (
+                <span role="alert" className="block text-[var(--danger)] mt-1 break-words">
+                  {keyError}
+                </span>
+              )}
+            </>
+          }
+        >
+          <input
+            id="groq-key"
+            type="password"
+            className="input w-44"
+            placeholder={config.groq_api_key_set ? "••••••••" : "gsk_…"}
+            value={key}
+            onChange={(e) => {
+              setKey(e.target.value);
+              setKeyError(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && saveKey()}
+          />
+          <button type="button" className="btn btn-secondary" onClick={saveKey} disabled={!key.trim() || saving}>
+            {saving ? "Checking…" : "Save"}
+          </button>
+        </SettingRow>
+      )}
+    </SettingsSection>
   );
 }

@@ -12,6 +12,7 @@ import (
 	"voxflow/internal/injection"
 	"voxflow/internal/llm"
 	"voxflow/internal/macos"
+	"voxflow/internal/whisper"
 )
 
 type stubRefiner struct {
@@ -452,4 +453,20 @@ func TestEditSelection(t *testing.T) {
 			t.Fatalf("sent %v, toasts %v", rec.sent, rec.toasts)
 		}
 	})
+}
+
+func TestStartRecordingWithoutGroqKeySaysWhy(t *testing.T) {
+	rec := &recorder{}
+	p := newTestPipeline(&config.Config{}, &stubRefiner{}, rec, nil)
+	p.cloudTranscriber = func() (Transcribe, error) { return nil, whisper.ErrNoGroqKey }
+
+	if err := p.StartRecording(); err == nil {
+		t.Fatal("expected an error")
+	}
+	if p.State() != hotkey.StateIdle {
+		t.Fatalf("state = %s, want Idle", p.State())
+	}
+	if len(rec.toasts) != 1 || rec.toasts[0]["message"] != whisper.ErrNoGroqKey.Message {
+		t.Fatalf("toasts = %v, want the missing-key message", rec.toasts)
+	}
 }

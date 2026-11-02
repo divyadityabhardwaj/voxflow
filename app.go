@@ -90,18 +90,19 @@ func NewApp() *App {
 
 func (a *App) rebuildPipeline() {
 	a.pipeline = orchestrator.New(orchestrator.Config{
-		Ctx:            a.ctx,
-		AppConfig:      a.config,
-		Audio:          a.audioRecorder,
-		Whisper:        a.whisperService,
-		History:        a.historyService,
-		Injection:      a.injectionService,
-		Hotkeys:        a.hotkeyManager,
-		Windows:        a.windowMgr,
-		Refiner:        a.activeRefiner,
-		ActiveLLMModel: a.activeLLMModel,
-		ModelReady:     a.IsModelReady,
-		OnState:        func(s hotkey.State) { window.SetStatusItemState(s.String()) },
+		Ctx:              a.ctx,
+		AppConfig:        a.config,
+		Audio:            a.audioRecorder,
+		Whisper:          a.whisperService,
+		History:          a.historyService,
+		Injection:        a.injectionService,
+		Hotkeys:          a.hotkeyManager,
+		Windows:          a.windowMgr,
+		Refiner:          a.activeRefiner,
+		ActiveLLMModel:   a.activeLLMModel,
+		ModelReady:       a.IsModelReady,
+		CloudTranscriber: a.cloudTranscriber,
+		OnState:          func(s hotkey.State) { window.SetStatusItemState(s.String()) },
 	})
 }
 

@@ -27,6 +27,7 @@ type Config struct {
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
 	EditHotkey       string `json:"edit_hotkey"`         // rewrites the selected text by a spoken instruction
 	WhisperModel     string `json:"whisper_model"`
+	Transcription    string `json:"transcription"` // "groq" or "local"
 	WhisperLanguage  string `json:"whisper_language"` // fixed language for transcription (en)
 	WhisperThreads   int    `json:"whisper_threads"`  // 0 = whisper default
 	MiniModeX        int    `json:"mini_mode_x"`      // Saved X position of mini pill
@@ -174,6 +175,13 @@ func (c *Config) applyDefaults() {
 	if c.WhisperLanguage == "" {
 		c.WhisperLanguage = "en"
 	}
+	// New installs start on Groq; people who set up before it existed stay on-device.
+	if c.Transcription == "" {
+		c.Transcription = "groq"
+		if c.OnboardingCompleted {
+			c.Transcription = "local"
+		}
+	}
 	if c.WhisperThreads < 0 {
 		c.WhisperThreads = 0
 	}
@@ -292,6 +300,21 @@ func (c *Config) SetWhisperModel(model string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.WhisperModel = model
+}
+
+func (c *Config) GetTranscription() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.Transcription == "groq" {
+		return "groq"
+	}
+	return "local"
+}
+
+func (c *Config) SetTranscription(t string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Transcription = t
 }
 
 func (c *Config) GetWhisperLanguage() string {

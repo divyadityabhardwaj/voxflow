@@ -16,7 +16,9 @@ import {
   SetProvider,
   SetProviderAPIKey,
   SetPushToTalkKey,
+  SetGroqKey,
   SetRefinementMode,
+  SetTranscription,
   ShowMiniMode,
 } from "../../wailsjs/go/main/App";
 import { useModelDownload } from "../hooks/useModelDownload";
@@ -28,7 +30,7 @@ interface Props {
   onComplete: () => void;
 }
 
-const STEPS = ["welcome", "microphone", "paste", "shortcut", "try", "cleanup", "ready"] as const;
+const STEPS = ["welcome", "speech", "microphone", "paste", "shortcut", "try", "cleanup", "ready"] as const;
 type Step = (typeof STEPS)[number];
 
 const POLL_MS = 1000;
@@ -95,6 +97,11 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const [keyError, setKeyError] = useState<string | null>(null);
   const [cleanupOn, setCleanupOn] = useState(false);
 
+  const [transcription, setTranscriptionState] = useState("groq");
+  const [groqKey, setGroqKey] = useState("");
+  const [groqState, setGroqState] = useState<"idle" | "checking" | "ok">("idle");
+  const [groqError, setGroqError] = useState<string | null>(null);
+
   const stepIndex = STEPS.indexOf(step);
   const next = () => setStep(STEPS[Math.min(STEPS.length - 1, stepIndex + 1)]);
   const back = () => setStep(STEPS[Math.max(0, stepIndex - 1)]);
@@ -116,6 +123,8 @@ export default function OnboardingWizard({ onComplete }: Props) {
       .then(([list, cfg]) => {
         const cloud = list.filter((p) => !p.local);
         setProviders(cloud);
+        setTranscriptionState(cfg.transcription);
+        if (cfg.groq_api_key_set) setGroqState("ok");
         const current = cloud.find((p) => p.id === cfg.llm_provider);
         if (current) setProviderId(current.id);
         if (current?.key_set && cfg.refinement_mode !== "raw") {
@@ -162,7 +171,48 @@ export default function OnboardingWizard({ onComplete }: Props) {
   const start = async () => {
     next();
     // Overlap the download with the permission steps.
+    if (transcription === "local") startDownload();
+  };
+
+  const startDownload = async () => {
     if (!modelReady && !download.downloading && !(await IsModelDownloaded())) download.start();
+  };
+
+  const useOnDevice = async () => {
+    await SetTranscription("local");
+    setTranscriptionState("local");
+    setModelReady(await IsModelReady());
+    startDownload();
+    next();
+  };
+
+  const useGroq = async () => {
+    await SetTranscription("groq");
+    setTranscriptionState("groq");
+    setModelReady(true);
+  };
+
+  const verifyGroqKey = async () => {
+    const key = groqKey.trim();
+    if (!key) return;
+    setGroqError(null);
+    setGroqState("checking");
+    try {
+      await SetGroqKey(key);
+      setGroqState("ok");
+      // The same key can tidy text too, so clean-up needs no second key.
+      const current = providers.find((p) => p.id === provider);
+      if (keyState !== "ok" && !current?.key_set && providers.some((p) => p.id === "groq")) {
+        await SetProvider("groq");
+        setProviderId("groq");
+        setKeyState("ok");
+        setCleanupOn(true);
+      }
+    } catch (err) {
+      const msg = String(err);
+      setGroqError(msg.includes("rejected") ? "Groq didn't accept that key. Check it and try again." : msg);
+      setGroqState("idle");
+    }
   };
 
   const allowMic = async () => {
@@ -225,7 +275,6 @@ export default function OnboardingWizard({ onComplete }: Props) {
             Press a shortcut, speak naturally, and VoxFlow types clean text wherever your cursor is. Setup takes about 2
             minutes.
           </p>
-          <p className="text-xs text-tertiary">Your voice is transcribed on this Mac. It never leaves your computer.</p>
         </>
       );
       primary = (
@@ -233,6 +282,93 @@ export default function OnboardingWizard({ onComplete }: Props) {
           Get started
         </button>
       );
+      break;
+
+    case "speech":
+      content =
+        transcription === "groq" ? (
+          <>
+            <h2 className="text-lg font-semibold text-text mb-2">Turn speech into text with Groq.</h2>
+            <p className="text-sm text-secondary mb-4">
+              Groq runs Whisper, the most accurate speech model, in about half a second — free with a Groq account.
+              Your recordings are sent to Groq to be transcribed.
+            </p>
+            {groqState === "ok" ? (
+              <Check>Groq key works</Check>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="label" htmlFor="onboarding-groq-key">
+                    Groq API key
+                  </label>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline mb-1.5"
+                    onClick={() => BrowserOpenURL(KEY_URLS.groq)}
+                  >
+                    Get a free key
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    id="onboarding-groq-key"
+                    type="password"
+                    className="input flex-1 min-w-0"
+                    placeholder={KEY_PLACEHOLDERS.groq}
+                    value={groqKey}
+                    onChange={(e) => {
+                      setGroqKey(e.target.value);
+                      setGroqError(null);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && verifyGroqKey()}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary shrink-0"
+                    onClick={verifyGroqKey}
+                    disabled={!groqKey.trim() || groqState === "checking"}
+                  >
+                    {groqState === "checking" ? "Checking…" : "Verify"}
+                  </button>
+                </div>
+                {groqError && (
+                  <p role="alert" className="text-xs text-[var(--danger)] mt-2 break-words">
+                    {groqError}
+                  </p>
+                )}
+                <p className="hint">Sign in at Groq, create a key, and paste it here.</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold text-text mb-2">Speech is transcribed on this Mac.</h2>
+            <p className="text-sm text-secondary mb-4">
+              Your voice never leaves your computer. The speech engine downloads while you finish setting up.
+            </p>
+          </>
+        );
+      primary =
+        transcription === "groq" ? (
+          groqState === "ok" ? (
+            <button type="button" className="btn-primary" onClick={next}>
+              Continue
+            </button>
+          ) : (
+            <button type="button" className="btn-ghost" onClick={useOnDevice} disabled={groqState === "checking"}>
+              Use on-device instead
+            </button>
+          )
+        ) : (
+          <>
+            <button type="button" className="btn-ghost" onClick={useGroq}>
+              Use Groq instead
+            </button>
+            <button type="button" className="btn-primary" onClick={next}>
+              Continue
+            </button>
+          </>
+        );
       break;
 
     case "microphone":

@@ -113,6 +113,7 @@ export namespace main {
 	    push_to_talk_hotkey: string;
 	    edit_hotkey: string;
 	    whisper_model: string;
+	    transcription: string;
 	    whisper_language: string;
 	    whisper_threads: number;
 	    gemini_model: string;
@@ -142,6 +143,7 @@ export namespace main {
 	        this.push_to_talk_hotkey = source["push_to_talk_hotkey"];
 	        this.edit_hotkey = source["edit_hotkey"];
 	        this.whisper_model = source["whisper_model"];
+	        this.transcription = source["transcription"];
 	        this.whisper_language = source["whisper_language"];
 	        this.whisper_threads = source["whisper_threads"];
 	        this.gemini_model = source["gemini_model"];

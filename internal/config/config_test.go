@@ -83,6 +83,22 @@ func TestMissingConfigIsNotAnError(t *testing.T) {
 	}
 }
 
+func TestTranscriptionDefault(t *testing.T) {
+	for _, c := range []struct {
+		cfg  *Config
+		want string
+	}{
+		{&Config{}, "groq"},
+		{&Config{OnboardingCompleted: true}, "local"},
+		{&Config{OnboardingCompleted: true, Transcription: "groq"}, "groq"},
+	} {
+		c.cfg.applyDefaults()
+		if got := c.cfg.GetTranscription(); got != c.want {
+			t.Errorf("onboarded=%v saved=%q: got %q, want %q", c.cfg.OnboardingCompleted, c.cfg.Transcription, got, c.want)
+		}
+	}
+}
+
 func clearKeyEnv(t *testing.T) {
 	for _, k := range []string{"GEMINI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY", "CEREBRAS_API_KEY"} {
 		t.Setenv(k, "")

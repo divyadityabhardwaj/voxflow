@@ -48,10 +48,11 @@ type Pipeline struct {
 	hotkeyManager    *hotkey.Manager
 	windows          WindowController
 
-	refiner        func() llm.Refiner
-	activeLLMModel func() string
-	modelReady     func() bool
-	onState        func(hotkey.State)
+	refiner          func() llm.Refiner
+	activeLLMModel   func() string
+	modelReady       func() bool
+	cloudTranscriber func() (Transcribe, error)
+	onState          func(hotkey.State)
 
 	// Seams for tests; they default to the Wails runtime and the injection service.
 	emit          func(name string, data ...interface{})
@@ -97,8 +98,13 @@ type Config struct {
 	Refiner        func() llm.Refiner
 	ActiveLLMModel func() string
 	ModelReady     func() bool
-	OnState        func(hotkey.State)
+	// CloudTranscriber returns the cloud service to transcribe with, nil for
+	// on-device Whisper, or an error when the chosen service can't be used.
+	CloudTranscriber func() (Transcribe, error)
+	OnState          func(hotkey.State)
 }
+
+type Transcribe func(samples []int16) (string, error)
 
 func New(cfg Config) *Pipeline {
 	p := &Pipeline{
@@ -113,6 +119,7 @@ func New(cfg Config) *Pipeline {
 		refiner:          cfg.Refiner,
 		activeLLMModel:   cfg.ActiveLLMModel,
 		modelReady:       cfg.ModelReady,
+		cloudTranscriber: cfg.CloudTranscriber,
 		onState:          cfg.OnState,
 		state:            hotkey.StateIdle,
 	}
@@ -272,6 +279,14 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 		return fail(err, p.microphoneFeedback(err))
 	}
 
+	var cloud Transcribe
+	if p.cloudTranscriber != nil {
+		var err error
+		if cloud, err = p.cloudTranscriber(); err != nil {
+			return fail(err, func() { p.emitToast(err.Error(), "error") })
+		}
+	}
+
 	p.targetMu.Lock()
 	p.target = macos.AppInfo{}
 	p.targetMu.Unlock()
@@ -290,10 +305,15 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 		p.emitToast(name+" isn't connected — using the default microphone", "warning")
 	}
 
-	if p.whisperService != nil {
-		p.whisperService.Prewarm()
+	if cloud != nil {
+		// One request per recording: per-chunk requests would burn through the free tier's rate limit.
+		p.stream = &streamSession{jobs: make(chan streamJob), transcribe: cloud}
+	} else {
+		if p.whisperService != nil {
+			p.whisperService.Prewarm()
+		}
+		p.stream = p.startStreamingTranscription()
 	}
-	p.stream = p.startStreamingTranscription()
 
 	if p.refiner != nil {
 		go p.refiner().Prewarm(p.llmModel())
@@ -424,8 +444,9 @@ func recycle(job streamJob) {
 
 // streamSession transcribes one recording's chunks while it is still being recorded.
 type streamSession struct {
-	jobs chan streamJob
-	wg   sync.WaitGroup
+	jobs       chan streamJob
+	wg         sync.WaitGroup
+	transcribe Transcribe
 
 	mu        sync.Mutex
 	closed    bool
@@ -485,7 +506,7 @@ func (p *Pipeline) streamingWorker(s *streamSession) {
 			continue
 		}
 
-		text, err := p.whisperService.TranscribeSamples(job.Samples)
+		text, err := s.transcribe(job.Samples)
 		if err != nil {
 			logger.Errorf("[Pipeline] Streaming chunk transcription error: %v", err)
 		}
@@ -516,7 +537,7 @@ func (p *Pipeline) streamingWorker(s *streamSession) {
 }
 
 func (p *Pipeline) startStreamingTranscription() *streamSession {
-	s := &streamSession{jobs: make(chan streamJob, 64)}
+	s := &streamSession{jobs: make(chan streamJob, 64), transcribe: p.whisperService.TranscribeSamples}
 	s.wg.Add(1)
 	go p.streamingWorker(s)
 
@@ -630,7 +651,7 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	rawText, err := assembleTranscript(spans, len(samples), func(from, to int) (string, error) {
 		logger.Infof("[Pipeline] Transcribing %.1fs-%.1fs not covered by streaming",
 			float64(from)/audio.SampleRate, float64(to)/audio.SampleRate)
-		text, err := p.whisperService.TranscribeSamples(samples[from:to])
+		text, err := stream.transcribe(samples[from:to])
 		return cleanWhisperChunk(text, p.config.GetVocabulary(), samples[from:to]), err
 	})
 	cleanStart := time.Now()
@@ -641,7 +662,12 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	if err != nil {
 		logger.Errorf("[Pipeline] Transcription failed: %v", err)
 		if rawText == "" {
-			p.emitToast("Transcription failed: "+truncate(err.Error(), maxToastDetail), "error")
+			message := "Transcription failed: " + truncate(err.Error(), maxToastDetail)
+			var cloudErr *whisper.CloudError
+			if errors.As(err, &cloudErr) {
+				message = cloudErr.Message
+			}
+			p.emitToast(message, "error")
 			p.resetToIdle()
 			return
 		}

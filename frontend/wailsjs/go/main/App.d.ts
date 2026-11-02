@@ -100,6 +100,8 @@ export function SetAppRule(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SetEditHotkey(arg1:string):Promise<void>;
 
+export function SetGroqKey(arg1:string):Promise<void>;
+
 export function SetHandsFreeHotkey(arg1:string):Promise<void>;
 
 export function SetInputDevice(arg1:string):Promise<void>;
@@ -121,6 +123,8 @@ export function SetPushToTalkHotkey(arg1:string):Promise<void>;
 export function SetPushToTalkKey(arg1:string):Promise<main.PushToTalkKeyInfo>;
 
 export function SetRefinementMode(arg1:string):Promise<void>;
+
+export function SetTranscription(arg1:string):Promise<void>;
 
 export function SetVocabulary(arg1:string):Promise<void>;
 

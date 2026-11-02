@@ -15,6 +15,7 @@ type ConfigResponse struct {
 	PushToTalkHotkey    string `json:"push_to_talk_hotkey"`
 	EditHotkey          string `json:"edit_hotkey"`
 	WhisperModel        string `json:"whisper_model"`
+	Transcription       string `json:"transcription"`
 	WhisperLanguage     string `json:"whisper_language"`
 	WhisperThreads      int    `json:"whisper_threads"`
 	GeminiModel         string `json:"gemini_model"`
@@ -41,6 +42,7 @@ func (a *App) GetConfig() *ConfigResponse {
 		PushToTalkHotkey:    a.config.GetPushToTalkHotkey(),
 		EditHotkey:          a.config.GetEditHotkey(),
 		WhisperModel:        a.config.GetWhisperModel(),
+		Transcription:       a.config.GetTranscription(),
 		WhisperLanguage:     a.config.GetWhisperLanguage(),
 		WhisperThreads:      a.config.GetWhisperThreads(),
 		GeminiModel:         a.config.GetModel("gemini"),

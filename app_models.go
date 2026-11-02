@@ -5,11 +5,21 @@ import (
 	"fmt"
 	"voxflow/internal/events"
 	"voxflow/internal/logger"
+	"voxflow/internal/orchestrator"
+	"voxflow/internal/whisper"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func (a *App) checkModelStatus() {
+	if a.config.GetTranscription() == "groq" {
+		// Groq does the transcribing, so don't keep the local model in memory.
+		a.whisperService.Close()
+		a.modelReady.Store(false)
+		runtime.EventsEmit(a.ctx, events.ModelStatus, map[string]interface{}{"downloaded": true, "loaded": true})
+		return
+	}
+
 	modelSize := a.config.GetWhisperModel()
 	downloaded, _ := a.whisperService.IsModelDownloaded(modelSize)
 
@@ -49,8 +59,44 @@ func (a *App) optimizeWhisperRuntime() {
 	}
 }
 
+// IsModelReady is always true with Groq: a missing key is reported when a recording starts.
 func (a *App) IsModelReady() bool {
-	return a.modelReady.Load()
+	return a.config.GetTranscription() == "groq" || a.modelReady.Load()
+}
+
+func (a *App) cloudTranscriber() (orchestrator.Transcribe, error) {
+	if a.config.GetTranscription() != "groq" {
+		return nil, nil
+	}
+	key := a.config.GetAPIKey("groq")
+	if key == "" {
+		return nil, whisper.ErrNoGroqKey
+	}
+	language, prompt := a.config.GetWhisperLanguage(), a.config.GetVocabulary()
+	return func(samples []int16) (string, error) {
+		return whisper.TranscribeGroq(key, samples, language, prompt)
+	}, nil
+}
+
+// SetTranscription switches between "groq" and on-device ("local") transcription.
+func (a *App) SetTranscription(t string) error {
+	if t != "groq" && t != "local" {
+		return fmt.Errorf("unknown transcription %q", t)
+	}
+	a.config.SetTranscription(t)
+	if err := a.config.Save(); err != nil {
+		return err
+	}
+	go a.checkModelStatus()
+	return nil
+}
+
+// SetGroqKey saves key for transcription and Groq clean-up once Groq accepts it.
+func (a *App) SetGroqKey(key string) error {
+	if err := whisper.CheckGroqKey(key); err != nil {
+		return err
+	}
+	return a.SetProviderAPIKey("groq", key)
 }
 
 func (a *App) IsModelDownloaded() bool {
