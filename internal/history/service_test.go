@@ -40,7 +40,7 @@ func TestHistoryService(t *testing.T) {
 	tps := 45.5
 	wps := 8.2
 
-	t1, err := s.Save("TestApp", raw, polished, provider, model, timeMs, tps, wps)
+	t1, err := s.Save("TestApp", raw, polished, provider, model, timeMs, tps, wps, "groq", "whisper-large-v3-turbo")
 	if err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -56,6 +56,9 @@ func TestHistoryService(t *testing.T) {
 	}
 	if t1.LLMProvider != provider {
 		t.Errorf("expected provider %q, got %q", provider, t1.LLMProvider)
+	}
+	if t1.SpeechProvider != "groq" || t1.SpeechModel != "whisper-large-v3-turbo" {
+		t.Errorf("expected speech groq/whisper-large-v3-turbo, got %q/%q", t1.SpeechProvider, t1.SpeechModel)
 	}
 
 	count, _ = s.GetCount()
@@ -124,7 +127,7 @@ func TestSearchEscapesWildcards(t *testing.T) {
 	}
 	defer s.Close()
 	for _, txt := range []string{"snake_case", "snakeXcase", "100% done"} {
-		if _, err := s.Save("", txt, txt, "p", "m", 0, 0, 0); err != nil {
+		if _, err := s.Save("", txt, txt, "p", "m", 0, 0, 0, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -148,7 +151,7 @@ func TestPagingDoesNotRepeatRowsWithEqualTimestamps(t *testing.T) {
 	}
 	defer s.Close()
 	for i := 0; i < 5; i++ { // all within the same second
-		if _, err := s.Save("", fmt.Sprintf("row %d", i), "", "p", "m", 0, 0, 0); err != nil {
+		if _, err := s.Save("", fmt.Sprintf("row %d", i), "", "p", "m", 0, 0, 0, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -186,7 +189,7 @@ func TestFilesArePrivateAndDeleteAllScrubsText(t *testing.T) {
 
 	const secret = "zebra-secret-7731"
 	for i := 0; i < 20; i++ {
-		if err := s.SaveAsync("App", secret, secret, "p", "m", 0, 0, 0); err != nil {
+		if err := s.SaveAsync("App", secret, secret, "p", "m", 0, 0, 0, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}

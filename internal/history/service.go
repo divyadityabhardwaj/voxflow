@@ -22,6 +22,8 @@ type Transcript struct {
 	Mode              string    `json:"mode"`
 	LLMProvider       string    `json:"llm_provider"`
 	LLMModel          string    `json:"llm_model"`
+	SpeechProvider    string    `json:"speech_provider"`
+	SpeechModel       string    `json:"speech_model"`
 	TranslationTimeMs int64     `json:"translation_time_ms"`
 	TokensPerSecond   float64   `json:"tokens_per_second"`
 	WordsPerSecond    float64   `json:"words_per_second"`
@@ -95,7 +97,9 @@ func (s *Service) initDB() error {
 		llm_model TEXT,
 		translation_time_ms INTEGER,
 		tokens_per_second REAL,
-		words_per_second REAL
+		words_per_second REAL,
+		speech_provider TEXT,
+		speech_model TEXT
 	);
 	CREATE INDEX IF NOT EXISTS idx_timestamp ON transcripts(timestamp DESC);
 	-- Full-column B-tree indexes cannot serve LIKE '%q%' and doubled the DB size.
@@ -113,6 +117,8 @@ func (s *Service) initDB() error {
 		"ALTER TABLE transcripts ADD COLUMN translation_time_ms INTEGER;",
 		"ALTER TABLE transcripts ADD COLUMN tokens_per_second REAL;",
 		"ALTER TABLE transcripts ADD COLUMN words_per_second REAL;",
+		"ALTER TABLE transcripts ADD COLUMN speech_provider TEXT;",
+		"ALTER TABLE transcripts ADD COLUMN speech_model TEXT;",
 	}
 
 	for _, m := range migrations {
@@ -126,10 +132,10 @@ func (s *Service) initDB() error {
 	return nil
 }
 
-func (s *Service) Save(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) (*Transcript, error) {
+func (s *Service) Save(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64, speechProvider, speechModel string) (*Transcript, error) {
 	result, err := s.db.Exec(
-		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		appName, rawText, polishedText, "", provider, model, timeMs, tps, wps,
+		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		appName, rawText, polishedText, "", provider, model, timeMs, tps, wps, speechProvider, speechModel,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save transcript: %w", err)
@@ -144,10 +150,10 @@ func (s *Service) Save(appName, rawText, polishedText, provider, model string, t
 }
 
 // SaveAsync skips the GetByID round-trip (hot path when the row is not needed).
-func (s *Service) SaveAsync(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64) error {
+func (s *Service) SaveAsync(appName, rawText, polishedText, provider, model string, timeMs int64, tps, wps float64, speechProvider, speechModel string) error {
 	_, err := s.db.Exec(
-		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		appName, rawText, polishedText, "", provider, model, timeMs, tps, wps,
+		"INSERT INTO transcripts (timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model) VALUES (datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		appName, rawText, polishedText, "", provider, model, timeMs, tps, wps, speechProvider, speechModel,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save transcript: %w", err)
@@ -157,17 +163,17 @@ func (s *Service) SaveAsync(appName, rawText, polishedText, provider, model stri
 
 func (s *Service) GetByID(id int64) (*Transcript, error) {
 	row := s.db.QueryRow(
-		"SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE id = ?",
+		"SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model FROM transcripts WHERE id = ?",
 		id,
 	)
 
 	t := &Transcript{}
-	var appName, polishedText, mode, provider, model sql.NullString
+	var appName, polishedText, mode, provider, model, speechProvider, speechModel sql.NullString
 	var timeMs sql.NullInt64
 	var tps sql.NullFloat64
 	var wps sql.NullFloat64
 
-	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps)
+	err := row.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps, &speechProvider, &speechModel)
 	if err != nil {
 		var timestamp string
 		err = s.db.QueryRow("SELECT timestamp FROM transcripts WHERE id = ?", id).Scan(&timestamp)
@@ -186,6 +192,8 @@ func (s *Service) GetByID(id int64) (*Transcript, error) {
 	t.TranslationTimeMs = timeMs.Int64
 	t.TokensPerSecond = tps.Float64
 	t.WordsPerSecond = wps.Float64
+	t.SpeechProvider = speechProvider.String
+	t.SpeechModel = speechModel.String
 
 	return t, nil
 }
@@ -195,7 +203,7 @@ func (s *Service) GetAll(limit int) ([]*Transcript, error) {
 		limit = MaxHistoryLimit
 	}
 
-	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts ORDER BY timestamp DESC LIMIT ?"
+	query := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model FROM transcripts ORDER BY timestamp DESC LIMIT ?"
 
 	rows, err := s.db.Query(query, limit)
 	if err != nil {
@@ -224,7 +232,7 @@ func likePattern(query string) string {
 func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 	searchQuery := likePattern(query)
 	sqlQuery := `
-		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second
+		SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model
 		FROM transcripts
 		WHERE raw_text LIKE ? ESCAPE '\' OR polished_text LIKE ? ESCAPE '\'
 		ORDER BY timestamp DESC
@@ -255,12 +263,12 @@ func (s *Service) Search(query string, limit int) ([]*Transcript, error) {
 
 func (s *Service) scanTranscript(rows *sql.Rows) (*Transcript, error) {
 	t := &Transcript{}
-	var appName, polishedText, mode, provider, model sql.NullString
+	var appName, polishedText, mode, provider, model, speechProvider, speechModel sql.NullString
 	var timeMs sql.NullInt64
 	var tps sql.NullFloat64
 	var wps sql.NullFloat64
 
-	if err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps); err != nil {
+	if err := rows.Scan(&t.ID, &t.Timestamp, &appName, &t.RawText, &polishedText, &mode, &provider, &model, &timeMs, &tps, &wps, &speechProvider, &speechModel); err != nil {
 		return nil, err
 	}
 
@@ -272,6 +280,8 @@ func (s *Service) scanTranscript(rows *sql.Rows) (*Transcript, error) {
 	t.TranslationTimeMs = timeMs.Int64
 	t.TokensPerSecond = tps.Float64
 	t.WordsPerSecond = wps.Float64
+	t.SpeechProvider = speechProvider.String
+	t.SpeechModel = speechModel.String
 
 	return t, nil
 }
@@ -289,7 +299,7 @@ func (s *Service) GetPage(cursorTS time.Time, cursorID int64, limit int) ([]*Tra
 	var rows *sql.Rows
 	var err error
 
-	base := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts"
+	base := "SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model FROM transcripts"
 
 	if cursorTS.IsZero() {
 		query := base + " ORDER BY timestamp DESC, id DESC LIMIT ?"
@@ -326,7 +336,7 @@ func (s *Service) SearchPage(q string, cursorTS time.Time, cursorID int64, limit
 	}
 
 	searchQuery := likePattern(q)
-	base := `SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second FROM transcripts WHERE (raw_text LIKE ? ESCAPE '\' OR polished_text LIKE ? ESCAPE '\')`
+	base := `SELECT id, timestamp, app_name, raw_text, polished_text, mode, llm_provider, llm_model, translation_time_ms, tokens_per_second, words_per_second, speech_provider, speech_model FROM transcripts WHERE (raw_text LIKE ? ESCAPE '\' OR polished_text LIKE ? ESCAPE '\')`
 
 	var rows *sql.Rows
 	var err error

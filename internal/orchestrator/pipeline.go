@@ -307,7 +307,7 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 
 	if cloud != nil {
 		// One request per recording: per-chunk requests would burn through the free tier's rate limit.
-		p.stream = &streamSession{jobs: make(chan streamJob), transcribe: cloud}
+		p.stream = &streamSession{jobs: make(chan streamJob), transcribe: cloud, speechProvider: "groq", speechModel: whisper.GroqModel}
 	} else {
 		if p.whisperService != nil {
 			p.whisperService.Prewarm()
@@ -447,6 +447,8 @@ type streamSession struct {
 	jobs       chan streamJob
 	wg         sync.WaitGroup
 	transcribe Transcribe
+	// speechProvider is "groq" or "local"; history records it with speechModel.
+	speechProvider, speechModel string
 
 	mu        sync.Mutex
 	closed    bool
@@ -537,7 +539,7 @@ func (p *Pipeline) streamingWorker(s *streamSession) {
 }
 
 func (p *Pipeline) startStreamingTranscription() *streamSession {
-	s := &streamSession{jobs: make(chan streamJob, 64), transcribe: p.whisperService.TranscribeSamples}
+	s := &streamSession{jobs: make(chan streamJob, 64), transcribe: p.whisperService.TranscribeSamples, speechProvider: "local", speechModel: p.config.GetWhisperModel()}
 	s.wg.Add(1)
 	go p.streamingWorker(s)
 
@@ -692,6 +694,9 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 
 	target := p.Target()
 	d := p.deliver(rawText, target.BundleID, inApp)
+	if d.usedRaw {
+		llmProvider, llmModel = "", ""
+	}
 	if d.method == "none" {
 		target = macos.AppInfo{Name: "VoxFlow"}
 	}
@@ -714,7 +719,7 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 
 	if p.historyService != nil {
 		go func() {
-			if err := p.historyService.SaveAsync(target.Name, rawText, d.text, llmProvider, llmModel, timeMs, tps, effectiveWPS); err != nil {
+			if err := p.historyService.SaveAsync(target.Name, rawText, d.text, llmProvider, llmModel, timeMs, tps, effectiveWPS, stream.speechProvider, stream.speechModel); err != nil {
 				logger.Errorf("Failed to save to history: %v", err)
 			}
 		}()

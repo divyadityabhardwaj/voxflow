@@ -24,6 +24,8 @@ interface Transcript {
   mode: string;
   llm_provider?: string;
   llm_model?: string;
+  speech_provider?: string;
+  speech_model?: string;
   translation_time_ms?: number;
   tokens_per_second?: number;
   words_per_second?: number;
@@ -511,10 +513,19 @@ export default function HistoryView() {
                 </button>
               </form>
 
-              {(selected.llm_provider || !!selected.words_per_second) && (
+              {(selected.speech_provider || selected.llm_provider || !!selected.words_per_second) && (
                 <details className="text-xs text-secondary">
                   <summary className="cursor-pointer select-none">Details</summary>
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                    {selected.speech_provider && (
+                      <>
+                        <dt>Speech to text</dt>
+                        <dd className="text-text min-w-0 break-words">
+                          {selected.speech_provider === "groq" ? "Groq (cloud)" : "On this Mac"}
+                          {selected.speech_model && ` · ${selected.speech_model}`}
+                        </dd>
+                      </>
+                    )}
                     {selected.llm_provider && (
                       <>
                         <dt>Clean-up</dt>

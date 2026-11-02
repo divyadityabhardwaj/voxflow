@@ -29,6 +29,8 @@ export namespace history {
 	    mode: string;
 	    llm_provider: string;
 	    llm_model: string;
+	    speech_provider: string;
+	    speech_model: string;
 	    translation_time_ms: number;
 	    tokens_per_second: number;
 	    words_per_second: number;
@@ -47,6 +49,8 @@ export namespace history {
 	        this.mode = source["mode"];
 	        this.llm_provider = source["llm_provider"];
 	        this.llm_model = source["llm_model"];
+	        this.speech_provider = source["speech_provider"];
+	        this.speech_model = source["speech_model"];
 	        this.translation_time_ms = source["translation_time_ms"];
 	        this.tokens_per_second = source["tokens_per_second"];
 	        this.words_per_second = source["words_per_second"];
