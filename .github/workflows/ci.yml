@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    # Tags point at commits main's run already checked.
+    branches: ["**"]
   pull_request:
 
 jobs:
