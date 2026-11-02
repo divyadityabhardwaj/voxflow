@@ -34,7 +34,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          # CI's cache holds cgo objects linked against Homebrew's portaudio; Go reuses
+          # them regardless of PKG_CONFIG_PATH, so a release must build from scratch.
+          cache: false
 
       - name: Setup Node
         uses: actions/setup-node@v4

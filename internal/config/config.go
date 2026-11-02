@@ -27,7 +27,7 @@ type Config struct {
 	Hotkey           string `json:"hotkey,omitempty"`    // Legacy field, kept for migration
 	EditHotkey       string `json:"edit_hotkey"`         // rewrites the selected text by a spoken instruction
 	WhisperModel     string `json:"whisper_model"`
-	Transcription    string `json:"transcription"` // "groq" or "local"
+	Transcription    string `json:"transcription"`    // "groq" or "local"
 	WhisperLanguage  string `json:"whisper_language"` // fixed language for transcription (en)
 	WhisperThreads   int    `json:"whisper_threads"`  // 0 = whisper default
 	MiniModeX        int    `json:"mini_mode_x"`      // Saved X position of mini pill
