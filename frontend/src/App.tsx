@@ -11,12 +11,15 @@ import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 import {
   GetOnboardingCompleted,
+  GetUpdateInfo,
+  HideMiniMode,
   IsMiniMode,
   IsModelReady,
   ShowMiniMode,
 } from "../wailsjs/go/main/App";
 import OnboardingWizard from "./components/OnboardingWizard";
 import { Events } from "./constants/events";
+import type { update } from "../wailsjs/go/models";
 
 type View = "main" | "history" | "settings";
 
@@ -123,6 +126,24 @@ function AppContent() {
       setCurrentView("settings");
     });
     const unsubHome = EventsOn(Events.OpenHome, () => setCurrentView("main"));
+    let notifiedVersion = "";
+    const notifyUpdate = (info: update.Info) => {
+      if (!info.available || info.latest === notifiedVersion) return;
+      notifiedVersion = info.latest;
+      showToastRef.current(`VoxFlow v${info.latest} is available.`, "info", {
+        ttl: null,
+        action: {
+          label: "See what's new",
+          onClick: () => {
+            setSettingsTab("about");
+            setCurrentView("settings");
+            void HideMiniMode();
+          },
+        },
+      });
+    };
+    const unsubUpdate = EventsOn(Events.UpdateAvailable, notifyUpdate);
+    GetUpdateInfo().then(notifyUpdate).catch(() => {});
     const unsub3 = EventsOn(Events.MiniMode, (isMini: boolean) => {
       setIsMiniMode(isMini);
     });
@@ -158,6 +179,7 @@ function AppContent() {
       unsub5();
       unsubError();
       unsubHome();
+      unsubUpdate();
     };
   }, []);
 

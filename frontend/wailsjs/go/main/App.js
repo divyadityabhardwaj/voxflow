@@ -10,6 +10,10 @@ export function CancelRecording() {
   return window['go']['main']['App']['CancelRecording']();
 }
 
+export function CheckForUpdates() {
+  return window['go']['main']['App']['CheckForUpdates']();
+}
+
 export function CheckProviderModel(arg1, arg2) {
   return window['go']['main']['App']['CheckProviderModel'](arg1, arg2);
 }
@@ -252,4 +256,8 @@ export function SuspendHotkeys(arg1) {
 
 export function ToggleRecording() {
   return window['go']['main']['App']['ToggleRecording']();
+}
+
+export function UpdateAndRestart() {
+  return window['go']['main']['App']['UpdateAndRestart']();
 }

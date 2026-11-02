@@ -28,4 +28,5 @@ export const Events = {
   OpenHome: "open-home",
 
   UpdateAvailable: "update-available",
+  UpdateChanged: "update-changed",
 } as const;

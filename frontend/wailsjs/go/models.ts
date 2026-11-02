@@ -291,6 +291,13 @@ export namespace update {
 	    latest: string;
 	    url: string;
 	    available: boolean;
+	    summary: string[];
+	    can_install: boolean;
+	    reason: string;
+	    state: string;
+	    downloaded: number;
+	    total: number;
+	    error: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Info(source);
@@ -302,6 +309,13 @@ export namespace update {
 	        this.latest = source["latest"];
 	        this.url = source["url"];
 	        this.available = source["available"];
+	        this.summary = source["summary"];
+	        this.can_install = source["can_install"];
+	        this.reason = source["reason"];
+	        this.state = source["state"];
+	        this.downloaded = source["downloaded"];
+	        this.total = source["total"];
+	        this.error = source["error"];
 	    }
 	}
 

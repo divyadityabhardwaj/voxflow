@@ -15,6 +15,7 @@ import (
 	"voxflow/internal/logger"
 	"voxflow/internal/macos"
 	"voxflow/internal/orchestrator"
+	"voxflow/internal/update"
 	"voxflow/internal/whisper"
 	"voxflow/internal/window"
 
@@ -35,6 +36,9 @@ type App struct {
 	modelReady       atomic.Bool
 	download         *modelDownload // the download in progress, guarded by downloadMu
 	downloadMu       sync.Mutex
+	updateMu         sync.Mutex
+	updateInfo       update.Info
+	updateBusy       bool
 
 	warningsMu      sync.Mutex
 	domReady        bool
@@ -49,6 +53,7 @@ func NewApp() *App {
 		audioRecorder:  audio.NewRecorder(),
 		whisperService: whisper.NewService(),
 		llmClients:     map[string]*llm.OpenAIClient{},
+		updateInfo:     update.Info{Current: version, State: "idle", Summary: []string{}},
 	}
 	for _, p := range llm.Providers {
 		app.llmClients[p.ID] = llm.NewClient(p, cfg.GetAPIKey(p.ID))
@@ -156,6 +161,11 @@ func (a *App) startup(ctx context.Context) {
 
 	if w := a.config.LoadWarning(); w != "" {
 		a.warn(w)
+	}
+	if dir, err := config.GetConfigDir(); err == nil {
+		if message := update.ConsumeInstallError(dir); message != "" {
+			a.warn(message)
+		}
 	}
 
 	if err := whisper.CleanupPartialDownloads(); err != nil {
