@@ -1,8 +1,9 @@
 #!/bin/bash
-# Copies the whisper binaries into a built app, ad-hoc signs it, and fails if
+# Copies the whisper binaries into a built app, signs it, and fails if
 # anything still links a Homebrew library (the app must run without Homebrew).
 #
 # Usage: scripts/bundle.sh <path/to/voxflow.app> <deps prefix>
+# SIGN_IDENTITY picks the certificate; unset means ad-hoc (local builds).
 set -euo pipefail
 
 APP="${1:?usage: $0 <app> <deps prefix>}"
@@ -19,7 +20,7 @@ case "$ARCH" in
   *) echo "Unsupported updater architecture: $ARCH" >&2; exit 1 ;;
 esac
 CGO_ENABLED=0 GOOS=darwin GOARCH="$ARCH" go build -trimpath -o "$MACOS/voxflow-updater" ./cmd/voxflow-updater
-codesign --force --deep --sign - "$APP"
+codesign --force --deep --sign "${SIGN_IDENTITY:--}" "$APP"
 codesign --verify --deep --strict "$APP"
 
 status=0
