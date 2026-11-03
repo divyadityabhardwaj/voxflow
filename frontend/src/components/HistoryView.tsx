@@ -360,7 +360,7 @@ export default function HistoryView() {
   }
 
   return (
-    <div className="flex h-full min-h-0 animate-fade-in">
+    <div className="flex h-full min-h-0">
       <div className="history-sidebar shrink-0 min-h-0 border-r border-border flex flex-col bg-surface">
         <div className="p-4 pb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold text-text">History</h2>

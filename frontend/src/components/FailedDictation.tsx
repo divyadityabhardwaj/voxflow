@@ -25,11 +25,10 @@ export default function FailedDictation({ busy }: { busy: boolean }) {
   };
   return (
     <section className="w-full card p-4 border-danger/30" aria-label="Recover dictation">
-      <h2 className="text-sm font-semibold text-text">Retry without repeating yourself</h2>
+      <h2 className="text-sm font-semibold text-text">Dictation failed</h2>
       <p className="text-[13px] text-secondary mt-1" role="alert">{error || failed.message}</p>
       <p className="text-xs text-secondary mt-2">
-        Audio stays in memory for {formatClock(seconds)} more. Starting a new recording or quitting discards it.
-        The retry result will appear here for you to copy or paste.
+        Audio kept for {formatClock(seconds)}. A new recording or quitting discards it. Retried text appears here.
       </p>
       <div className="flex justify-end gap-2 mt-3">
         <button type="button" className="btn-secondary" disabled={working} onClick={() => act(DiscardFailedRecording)}>Discard</button>

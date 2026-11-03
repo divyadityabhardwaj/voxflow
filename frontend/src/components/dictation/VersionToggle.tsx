@@ -3,8 +3,8 @@ import { onRadioGroupKeyDown } from "../../lib/radioGroup";
 export type Version = "cleaned" | "raw";
 
 const OPTIONS: [Version, string][] = [
-  ["cleaned", "Cleaned up"],
-  ["raw", "As you said it"],
+  ["cleaned", "Cleaned"],
+  ["raw", "Original"],
 ];
 const VALUES = OPTIONS.map(([v]) => v);
 

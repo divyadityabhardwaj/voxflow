@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>VoxFlow</title>
+    <script>
+      try {
+        const preference = localStorage.getItem("voxflow-theme");
+        const theme = ["light", "dark", "midnight"].includes(preference)
+          ? preference : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.classList.add(theme);
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

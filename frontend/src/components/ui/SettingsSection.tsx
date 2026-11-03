@@ -7,7 +7,7 @@ interface SettingsSectionProps {
   className?: string;
 }
 
-// A titled, rounded group of rows, like a System Settings pane.
+// A shared section keeps spacing and controls consistent across settings.
 export default function SettingsSection({
   title,
   description,
@@ -17,11 +17,11 @@ export default function SettingsSection({
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className={className}>
-      <h3 id={titleId} className="text-[13px] font-semibold text-text mb-1 px-1">
+      <h3 id={titleId} className="text-[13px] font-semibold text-text mb-2">
         {title}
       </h3>
       {description && (
-        <p className="text-[13px] text-secondary mb-2 px-1 leading-relaxed max-w-prose">
+        <p className="text-[13px] text-secondary mb-3 leading-relaxed max-w-prose">
           {description}
         </p>
       )}

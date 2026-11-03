@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
-import { GetHistory, OpenHistoryWindow, ToggleRecording } from "../../wailsjs/go/main/App";
+import { CancelRecording, GetHistory, OpenHistoryWindow, ToggleRecording } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
 import { useDictationReadiness } from "../hooks/useDictationReadiness";
 import { useRecordingState, isBusy } from "../hooks/useRecordingState";
@@ -123,84 +123,55 @@ export default function MainView() {
   const resultWords = result ? countWords(result.polished) : 0;
   const spokenSec = result?.details?.audio;
 
-  const micLabel = recording ? "Stop" : busy ? TITLES[status] : canRecord ? "Try it here" : readiness.checking ? "Checking setup…" : "Fix setup to start";
-
   return (
-    <div className="h-full min-h-0 overflow-y-auto animate-fade-in">
-      <div className="max-w-xl mx-auto px-6 py-8 flex flex-col items-center gap-6">
+    <div className="h-full min-h-0 overflow-y-auto">
+      <div className="home-content">
+        <header className="page-header">
+          <h1>Dictate</h1>
+          {readiness.setup && (
+            <span className="text-xs text-secondary text-right">
+              Speech: {readiness.setup.speech} · Clean-up: {readiness.setup.cleanup}
+            </span>
+          )}
+        </header>
         <SetupChecklist readiness={readiness} busy={recording || busy} />
 
-        <section className="w-full text-center flex flex-col items-center">
-          <h1 aria-live="polite" className="text-xl font-semibold tracking-tight text-text">
-            {status === "Idle" ? readiness.checking ? "Checking setup…" : canRecord ? "Ready to dictate" : "Finish setting up" : TITLES[status]}
-          </h1>
-
-          {readiness.setup && (
-            <p className="text-xs text-secondary mt-2">
-              Speech: {readiness.setup.speech} · Clean-up: {readiness.setup.cleanup}
-            </p>
-          )}
-
-          {status === "Idle" && canRecord && shortcuts && (
-            <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px] text-secondary mt-3">
-              Hold <Keycap>{shortcuts.hold}</Keycap> to talk
-              <span aria-hidden="true" className="text-tertiary px-0.5">·</span>
-              <Keycap>{shortcuts.toggle}</Keycap> to start/stop
-              <span aria-hidden="true" className="text-tertiary px-0.5">·</span>
-              <Keycap>Esc</Keycap> to cancel
-            </p>
-          )}
-          {status === "Idle" && canRecord && shortcuts?.edit && (
-            <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px] text-secondary mt-1.5">
-              Select text anywhere and press <Keycap>{shortcuts.edit}</Keycap> to rewrite it by voice
-            </p>
-          )}
-          {recording && (
-            <p className="flex flex-wrap items-center justify-center gap-1.5 text-[13px] text-secondary mt-3">
-              {shortcuts ? (
-                <>
-                  Release the keys, or press <Keycap>{shortcuts.toggle}</Keycap> again to finish ·
-                  <Keycap>Esc</Keycap> to cancel
-                </>
-              ) : (
-                "Press Esc to cancel"
+        <section className="dictation-workspace" aria-label="Dictation">
+          <div className="flex items-center gap-4">
+            <button type="button" onClick={toggle}
+              disabled={busy || (!recording && !canRecord)}
+              aria-describedby={!canRecord && !readiness.checking ? "setup-problem" : undefined}
+              aria-label={recording ? "Stop dictation" : "Start dictation"}
+              title={recording ? "Stop dictation" : "Start dictation"}
+              className={`mic-button ${recording ? "recording" : busy ? "processing" : ""}`}>
+              {recording ? <span className="size-3 rounded-sm bg-current" />
+                : busy ? <span className="size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                : <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d={MIC_PATH} /></svg>}
+            </button>
+            <div className="flex-1 min-w-0">
+              <h2 aria-live="polite" className="text-[15px] font-medium tracking-tight text-text">
+                {status === "Idle" ? readiness.checking ? "Checking setup…" : canRecord ? "Ready to dictate" : "Finish setting up" : TITLES[status]}
+              </h2>
+              {status === "Idle" && canRecord && shortcuts && (
+                <p className="flex flex-wrap items-center gap-1.5 text-xs text-secondary mt-2">
+                  Hold <Keycap>{shortcuts.hold}</Keycap>
+                  <span aria-hidden="true" className="px-1 text-tertiary">·</span>
+                  Toggle <Keycap>{shortcuts.toggle}</Keycap>
+                </p>
               )}
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={toggle}
-            disabled={busy || (!recording && !canRecord)}
-            aria-describedby={!canRecord && !readiness.checking ? "setup-problem" : undefined}
-            aria-label={recording ? "Stop dictation" : "Try it here — start dictating"}
-            className={`mt-6 size-12 rounded-full flex items-center justify-center shadow-soft-md transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
-              recording
-                ? "bg-recording text-white"
-                : busy
-                  ? "bg-processing text-[#1c1917]"
-                  : "bg-primary text-[var(--primary-foreground)] hover:scale-105"
-            }`}
-          >
-            {recording ? (
-              <span className="size-3.5 rounded-[3px] bg-white" />
-            ) : busy ? (
-              <span className="size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-            ) : (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path d={MIC_PATH} />
-              </svg>
+              {(recording || busy) && (
+                <div className="flex items-center gap-2 text-xs text-secondary mt-2">
+                  {recording && <><LevelBars level={level} maxHeight={12} color="var(--recording)" /><span className="tabular-nums">{formatClock(seconds)}</span><span aria-hidden="true">·</span></>}
+                  <Keycap>Esc</Keycap> to cancel
+                </div>
+              )}
+            </div>
+            {(recording || busy) && (
+              <button type="button" className="btn-ghost" aria-label="Cancel dictation" title="Cancel (Esc)" onClick={() => CancelRecording()}>Cancel</button>
             )}
-          </button>
-          <div className="mt-2 h-5 flex items-center gap-2 text-[13px] text-secondary">
-            {recording && <LevelBars level={level} maxHeight={14} color="var(--recording)" />}
-            <span className={recording ? "tabular-nums" : ""}>
-              {recording ? `${micLabel} · ${formatClock(seconds)}` : status === "Idle" ? micLabel : ""}
-            </span>
           </div>
-
           {(recording || busy) && partialText && (
-            <p className="mt-4 w-full text-left text-sm text-secondary leading-relaxed whitespace-pre-wrap max-h-24 overflow-y-auto card p-3">
+            <p className="mt-4 pt-4 border-t border-border text-sm text-secondary leading-relaxed whitespace-pre-wrap max-h-24 overflow-y-auto">
               {partialText}
             </p>
           )}
@@ -218,7 +189,7 @@ export default function MainView() {
           <section className="w-full card p-4 animate-fade-in" aria-label="Last dictation">
             <div className="flex items-center gap-2 mb-2">
               <h2 className="text-[13px] font-semibold text-text">
-                {result.method === "none" ? "Here's what you said" : deliveryLabel(result)}
+                {result.method === "none" ? "Transcript" : deliveryLabel(result)}
               </h2>
               <span className="text-xs text-tertiary tabular-nums">
                 {resultWords} {resultWords === 1 ? "word" : "words"}
@@ -251,10 +222,9 @@ export default function MainView() {
         )}
 
         {stats.words > 0 && (
-          <p className="text-[13px] text-secondary text-center">
-            This week: <span className="text-text font-medium">{stats.words.toLocaleString()} words</span>
+          <p className="text-xs text-tertiary">
+            <span>{stats.words.toLocaleString()} words this week</span>
             {stats.minutesSaved > 0 && <> · ~{stats.minutesSaved} min saved</>}
-            {stats.streakDays > 1 && <> · {stats.streakDays}-day streak</>}
           </p>
         )}
 
@@ -265,18 +235,13 @@ export default function MainView() {
             </h2>
             {recents.length > 0 && (
               <button type="button" className="text-xs text-secondary hover:text-text" onClick={() => OpenHistoryWindow()}>
-                View all history →
+                View all
               </button>
             )}
           </div>
           {recents.length === 0 ? (
             <div className="card p-6 text-center text-[13px] text-secondary">
-              Your dictations will show up here.
-              {shortcuts && (
-                <span className="block mt-1">
-                  Try it: press <Keycap>{shortcuts.toggle}</Keycap>, say something, press it again.
-                </span>
-              )}
+              No dictations yet.
             </div>
           ) : (
             <ul className="card overflow-hidden divide-y divide-border/50">

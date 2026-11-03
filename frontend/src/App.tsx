@@ -200,35 +200,41 @@ function AppContent() {
       className="sidebar-item no-drag"
     >
       {icon}
-      {label}
+      <span>{label}</span>
     </button>
   );
 
   return (
     <div className="h-full min-h-0 flex app-shell">
-      <RecordingPill />
+      {currentView !== "main" && <RecordingPill />}
 
       <aside className="sidebar">
         <div className="sidebar-titlebar" style={DRAG} />
+        <div className="sidebar-brand" style={DRAG}>
+          <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
+          VoxFlow
+        </div>
         <nav aria-label="VoxFlow" className="flex flex-col gap-0.5">
-          {navItem("main", "Home", <MicIcon />)}
+          {navItem("main", "Dictate", <MicIcon />)}
           {navItem("history", "History", <HistoryIcon />)}
-          {navItem("settings", "Settings", <SettingsIcon />)}
         </nav>
         <div className="flex-1" style={DRAG} />
-        <button
-          type="button"
-          onClick={() => ShowMiniMode()}
-          className="sidebar-item no-drag text-secondary"
-        >
-          <MinimizeIcon />
-          Collapse to pill
-        </button>
+        <div className="sidebar-footer">
+          {navItem("settings", "Settings", <SettingsIcon />)}
+          <button
+            type="button"
+            onClick={() => ShowMiniMode()}
+            className="sidebar-item no-drag text-secondary"
+          >
+            <MinimizeIcon />
+            Mini mode
+          </button>
+        </div>
       </aside>
 
       <main className="flex-1 min-w-0 overflow-hidden relative">
         <div className="absolute inset-x-0 top-0 h-3 z-10" style={DRAG} />
-        <div className="view-enter h-full">
+        <div className="h-full">
           {currentView === "main" && <MainView />}
           {currentView === "history" && <HistoryView />}
           {currentView === "settings" && <SettingsView initialTab={settingsTab} />}

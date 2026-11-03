@@ -153,20 +153,20 @@ export default function RecordingIndicator() {
     }
   };
 
-  const fg = isDark ? "rgba(255,255,255,0.88)" : "rgba(17,24,39,0.8)";
-  const recordingFg = isDark ? "#fca5a5" : "#b91c1c";
-  const busyFg = isDark ? "#fcd34d" : "#b45309";
-  const doneFg = isDark ? "#6ee7b7" : "#047857";
+  const fg = "var(--text-secondary)";
+  const recordingFg = "var(--recording)";
+  const busyFg = "var(--processing)";
+  const doneFg = "var(--success)";
 
   const pillStyle = {
     // Near-opaque so the pill reads over any desktop content.
-    background: isDark ? "rgba(30,30,32,0.94)" : "rgba(255,255,255,0.96)",
+    background: "var(--pill-bg)",
     border: recording
       ? "1.5px solid var(--recording)"
       : busy
         ? "1.5px solid var(--processing)"
-        : `1.5px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`,
-    boxShadow: isDark ? "0 3px 12px rgba(0,0,0,0.35)" : "0 3px 12px rgba(0,0,0,0.12)",
+        : "1px solid var(--border-hover)",
+    boxShadow: "var(--shadow-md)",
     "--wails-draggable": "drag",
   } as unknown as CSSProperties;
 

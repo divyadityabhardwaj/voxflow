@@ -11,7 +11,7 @@ import AboutSettings from "./settings/AboutSettings";
 const TABS: { id: string; label: string; Panel: ComponentType }[] = [
   { id: "general", label: "General", Panel: GeneralSettings },
   { id: "speech", label: "Speech", Panel: SpeechSettings },
-  { id: "cleanup", label: "Clean-up (AI)", Panel: CleanupSettings },
+  { id: "cleanup", label: "Clean-up", Panel: CleanupSettings },
   { id: "dictionary", label: "Dictionary", Panel: DictionarySettings },
   { id: "apps", label: "Apps", Panel: AppRulesSettings },
   { id: "appearance", label: "Appearance", Panel: AppearanceSettings },
@@ -41,8 +41,8 @@ export default function SettingsView({ initialTab }: { initialTab?: string }) {
 
   return (
     <div className="settings-page">
-      <header className="shrink-0 px-6 pt-6 pb-3">
-        <h2 className="text-xl font-semibold text-text">Settings</h2>
+      <header className="page-header shrink-0 px-7 pt-7 pb-4">
+        <h2>Settings</h2>
       </header>
 
       <div
@@ -74,7 +74,7 @@ export default function SettingsView({ initialTab }: { initialTab?: string }) {
         id="settings-panel"
         role="tabpanel"
         aria-labelledby={`settings-tab-${tab}`}
-        className="settings-scroll px-6 py-5"
+        className="settings-scroll px-7 py-6"
       >
         <div className="max-w-2xl mx-auto pb-8">
           <Panel key={tab} />

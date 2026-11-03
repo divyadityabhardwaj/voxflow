@@ -67,8 +67,8 @@ const ICONS: Record<Toast["type"], string> = {
 const TONE: Record<Toast["type"], string> = {
   error: "bg-red-500/10 border-red-500/30",
   warning: "bg-amber-500/10 border-amber-500/30",
-  success: "bg-emerald-500/10 border-emerald-500/30",
-  info: "bg-blue-500/10 border-blue-500/30",
+  success: "bg-surface border-border",
+  info: "bg-surface border-border",
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -148,17 +148,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"
+          className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"
         >
           {toasts.map((toast) => (
             <div
               key={toast.id}
               role={toast.type === "error" ? "alert" : undefined}
-              className={`pointer-events-auto max-w-sm p-4 rounded-xl shadow-soft-md animate-scale-in border text-text ${TONE[toast.type]}`}
+              className={`pointer-events-auto max-w-sm px-3 py-2.5 rounded-lg shadow-soft-md animate-scale-in border text-text ${TONE[toast.type]}`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-2">
                 <svg
-                  className="w-5 h-5 flex-shrink-0"
+                  className="w-4 h-4 mt-0.5 flex-shrink-0"
+                  style={{ color: toast.type === "success" ? "var(--success)" : undefined }}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"

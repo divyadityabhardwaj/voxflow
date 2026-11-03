@@ -69,7 +69,7 @@ func main() {
 
 	// ⌘H is Hide on macOS, so views use ⌘1/⌘2 and ⌘, like other Mac apps.
 	viewMenu := appMenu.AddSubmenu("View")
-	viewMenu.AddText("Home", keys.CmdOrCtrl("1"), func(cd *menu.CallbackData) {
+	viewMenu.AddText("Dictate", keys.CmdOrCtrl("1"), func(cd *menu.CallbackData) {
 		app.showMainWindow()
 		runtime.EventsEmit(app.ctx, events.OpenHome, nil)
 	})

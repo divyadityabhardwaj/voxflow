@@ -158,7 +158,7 @@ export default function GeneralSettings() {
         />
         <ShortcutRow
           label="Edit selected text"
-          description="Select text in any app, press, say what to change (“make it shorter”, “bullet points”), press again. Needs AI clean-up."
+          description="Select text and record an instruction to rewrite it. Requires AI clean-up."
           value={config.edit_hotkey}
           onChange={() => setRecording("edit")}
         />
