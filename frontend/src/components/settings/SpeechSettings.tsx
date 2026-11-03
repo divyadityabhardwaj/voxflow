@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   CancelDownload,
   DeleteModelByName,
@@ -7,17 +7,19 @@ import {
   GetAllModels,
   GetConfig,
   IsWhisperCLIReady,
-  OpenLogFile,
+  GetInputDevices,
+  SetInputDevice,
   SetGroqKey,
   SetTranscription,
   SetWhisperLanguage,
   SetWhisperModel,
 } from "../../../wailsjs/go/main/App";
-import { main, whisper } from "../../../wailsjs/go/models";
+import { audio, main, whisper } from "../../../wailsjs/go/models";
 import { BrowserOpenURL, EventsOn } from "../../../wailsjs/runtime/runtime";
 import { Events } from "../../constants/events";
 import { useToast } from "../../contexts/ToastContext";
 import { LANGUAGES } from "../../lib/languages";
+import { useRecordingState } from "../../hooks/useRecordingState";
 import ConfirmModal from "../ConfirmModal";
 import SettingsSection, { Disclosure, SettingRow } from "../ui/SettingsSection";
 
@@ -34,13 +36,16 @@ const formatSize = (bytes: number) =>
     ? `${(bytes / 1024 ** 3).toFixed(1)} GB`
     : `${Math.round(bytes / 1024 ** 2)} MB`;
 
-export default function AdvancedSettings() {
+export default function SpeechSettings() {
   const { showToast } = useToast();
+  const status = useRecordingState();
   const fail = (what: string) => (err: unknown) =>
     showToast(`${what}: ${String(err)}`, "error");
 
   const [config, setConfig] = useState<main.ConfigResponse | null>(null);
   const [models, setModels] = useState<whisper.ModelInfo[] | null>(null);
+  const [devices, setDevices] = useState<audio.InputDevice[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [engineReady, setEngineReady] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -52,7 +57,10 @@ export default function AdvancedSettings() {
       .catch(fail("Couldn't load speech models"));
 
   useEffect(() => {
-    GetConfig().then(setConfig).catch(fail("Couldn't load settings"));
+    GetConfig().then(setConfig).catch((err) => setLoadError(String(err)));
+    const refreshDevices = () => GetInputDevices().then((d) => setDevices(d ?? [])).catch(fail("Couldn't list microphones"));
+    refreshDevices();
+    window.addEventListener("focus", refreshDevices);
     loadModels();
     IsWhisperCLIReady().then(setEngineReady).catch(() => {});
     // The download runs in the backend and outlives this tab; pick it back up.
@@ -81,22 +89,30 @@ export default function AdvancedSettings() {
       EventsOn(Events.ModelDownloadError, stop),
       EventsOn(Events.ModelDownloadCancelled, stop),
     ];
-    return () => offs.forEach((off) => off());
+    return () => { offs.forEach((off) => off()); window.removeEventListener("focus", refreshDevices); };
   }, []);
 
-  if (!config || !models) {
+  if (loadError) return <p role="alert" className="text-sm text-danger">Couldn't load speech settings. Reopen this tab to try again.</p>;
+
+  if (!config) {
     return <p className="text-sm text-tertiary">Loading…</p>;
   }
 
   const selectModel = (name: string) =>
     SetWhisperModel(name)
-      .then(() => setConfig({ ...config, whisper_model: name } as main.ConfigResponse))
+      .then(() => setConfig((current) => current ? ({ ...current, whisper_model: name } as main.ConfigResponse) : current))
       .catch(fail("Couldn't switch speech models"));
 
   const download = (name: string) => {
     setDownloading(name);
     setProgress(0);
-    DownloadModelByName(name).catch((err) => {
+    DownloadModelByName(name).then(async () => {
+      const current = await GetConfig();
+      if (current.transcription === "local" && current.whisper_model === name) {
+        await SetWhisperModel(name);
+      }
+      loadModels();
+    }).catch((err) => {
       setDownloading(null);
       fail("Couldn't download the model")(err);
     });
@@ -110,7 +126,7 @@ export default function AdvancedSettings() {
 
   const changeLanguage = (lang: string) =>
     SetWhisperLanguage(lang)
-      .then(() => setConfig({ ...config, whisper_language: lang } as main.ConfigResponse))
+      .then(() => setConfig((current) => current ? ({ ...current, whisper_language: lang } as main.ConfigResponse) : current))
       .catch(fail("Couldn't save the language"));
 
   const row = (m: whisper.ModelInfo) => {
@@ -190,26 +206,46 @@ export default function AdvancedSettings() {
   };
 
   const named = Object.keys(NAMED_MODELS)
-    .map((n) => models.find((m) => m.name === n))
+    .map((n) => (models ?? []).find((m) => m.name === n))
     .filter((m): m is whisper.ModelInfo => !!m);
-  const others = models.filter((m) => !NAMED_MODELS[m.name]);
+  const others = (models ?? []).filter((m) => !NAMED_MODELS[m.name]);
+
+  const local = config.transcription !== "groq";
+  const defaultDevice = devices.find((d) => d.default)?.name;
+  const savedMissing = config.input_device && !devices.some((d) => d.name === config.input_device);
+  const changeDevice = (name: string) => SetInputDevice(name)
+    .then(() => setConfig((current) => current ? ({ ...current, input_device: name } as main.ConfigResponse) : current))
+    .catch(fail("Couldn't switch microphones"));
 
   return (
-    <div className="space-y-6">
-      {!engineReady && (
+    <fieldset disabled={status !== "Idle"} className="space-y-6 min-w-0">
+      {status !== "Idle" && <p role="status" className="text-sm text-secondary">Finish or cancel your dictation to change speech settings.</p>}
+      <TranscriptionSection config={config} setConfig={setConfig} />
+
+      <SettingsSection title="Microphone">
+        <SettingRow label="Input" htmlFor="input-device">
+          <select id="input-device" className="select w-56" value={config.input_device ?? ""} onChange={(e) => changeDevice(e.target.value)}>
+            <option value="">System default{defaultDevice ? ` (${defaultDevice})` : ""}</option>
+            {devices.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+            {savedMissing && <option value={config.input_device}>{config.input_device} (not connected)</option>}
+          </select>
+        </SettingRow>
+      </SettingsSection>
+
+      {local && !engineReady && (
         <div className="alert alert-warning" role="alert">
           The speech engine is missing, so VoxFlow can't turn your voice into
-          text yet. Open Terminal, run <code>brew install whisper-cpp</code>,
-          then restart VoxFlow.
+          text on this Mac yet. Reinstall VoxFlow to restore the speech engine,
+          or choose Groq above.
         </div>
       )}
 
-      <TranscriptionSection config={config} setConfig={setConfig} />
-
+      {local && <>
       <SettingsSection
         title="Speech accuracy"
         description="For transcribing on this Mac. Bigger options are more accurate but slower and take more space."
       >
+        {!models && <p className="settings-pad text-sm text-secondary">Loading speech models…</p>}
         {named.map(row)}
       </SettingsSection>
 
@@ -219,11 +255,13 @@ export default function AdvancedSettings() {
         </Disclosure>
       )}
 
+      </>}
+
       <SettingsSection title="Language">
         <SettingRow
           label="Language you speak"
           htmlFor="whisper-language"
-          description="English models only understand English. Auto-detect needs a multilingual model and is a little slower."
+          description={local ? "Choose a multilingual model for languages other than English or auto-detect." : "Choose the language you speak, or let Groq detect it."}
         >
           <select
             id="whisper-language"
@@ -240,18 +278,6 @@ export default function AdvancedSettings() {
         </SettingRow>
       </SettingsSection>
 
-      <SettingsSection title="Troubleshooting">
-        <SettingRow label="Log file" description="Useful when reporting a problem.">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => OpenLogFile().catch(fail("Couldn't open the log"))}
-          >
-            Open Log
-          </button>
-        </SettingRow>
-      </SettingsSection>
-
       <ConfirmModal
         isOpen={!!toDelete}
         title="Delete this speech model?"
@@ -261,7 +287,7 @@ export default function AdvancedSettings() {
         onConfirm={confirmDelete}
         onCancel={() => setToDelete(null)}
       />
-    </div>
+    </fieldset>
   );
 }
 
@@ -270,18 +296,22 @@ function TranscriptionSection({
   setConfig,
 }: {
   config: main.ConfigResponse;
-  setConfig: (c: main.ConfigResponse) => void;
+  setConfig: Dispatch<SetStateAction<main.ConfigResponse | null>>;
 }) {
   const { showToast } = useToast();
   const [key, setKey] = useState("");
+  const [switching, setSwitching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
   const groq = config.transcription === "groq";
 
-  const choose = (t: string) =>
+  const choose = (t: string) => {
+    setSwitching(true);
     SetTranscription(t)
-      .then(() => setConfig({ ...config, transcription: t } as main.ConfigResponse))
-      .catch((err) => showToast(`Couldn't switch transcription: ${String(err)}`, "error"));
+      .then(() => setConfig((current) => current ? ({ ...current, transcription: t } as main.ConfigResponse) : current))
+      .catch((err) => showToast(`Couldn't switch transcription: ${String(err)}`, "error"))
+      .finally(() => setSwitching(false));
+  };
 
   const saveKey = async () => {
     if (!key.trim()) return;
@@ -290,7 +320,7 @@ function TranscriptionSection({
     try {
       await SetGroqKey(key.trim());
       setKey("");
-      setConfig({ ...config, groq_api_key_set: true } as main.ConfigResponse);
+      setConfig((current) => current ? ({ ...current, groq_api_key_set: true } as main.ConfigResponse) : current);
       showToast("Groq key saved", "success");
     } catch (err) {
       setKeyError(String(err));
@@ -305,6 +335,7 @@ function TranscriptionSection({
         <input
           type="radio"
           name="transcription"
+          disabled={switching}
           checked={config.transcription === value}
           onChange={() => choose(value)}
           className="mt-0.5 w-4 h-4 shrink-0 accent-[var(--primary)]"
@@ -318,9 +349,9 @@ function TranscriptionSection({
   );
 
   return (
-    <SettingsSection title="Transcription">
-      {option("groq", "Groq (recommended)", "Fast and free with a Groq key. Your audio is sent to Groq.")}
-      {option("local", "On this Mac", "Private and works offline. Needs a speech model download and uses about 0.5–1 GB of memory.")}
+    <SettingsSection title="Transcription" description="This controls where your audio is transcribed. AI clean-up has separate settings and may send text to its provider.">
+      {option("groq", "Groq (recommended)", "Your audio is sent to Groq for transcription. Requires internet and a Groq API key.")}
+      {option("local", "On this Mac", "Audio stays on your Mac and transcription works offline. Requires a speech model download.")}
       {groq && (
         <SettingRow
           label="Groq API key"

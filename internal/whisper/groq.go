@@ -30,7 +30,7 @@ type CloudError struct {
 func (e *CloudError) Error() string { return e.Message }
 func (e *CloudError) Unwrap() error { return e.Cause }
 
-var ErrNoGroqKey = &CloudError{Message: "Add your free Groq API key in Settings › Advanced to start dictating"}
+var ErrNoGroqKey = &CloudError{Message: "Add your free Groq API key in Settings › Speech to start dictating"}
 
 // TranscribeGroq sends one recording to Groq's hosted Whisper.
 func TranscribeGroq(apiKey string, samples []int16, language, prompt string) (string, error) {
@@ -126,9 +126,9 @@ func groqError(status int, retryAfter string, body []byte) error {
 		} else {
 			msg += " for now"
 		}
-		msg += ". Try again then, or switch to on-device transcription in Settings › Advanced."
+		msg += ". Try again then, or switch to on-device transcription in Settings › Speech."
 	case status == http.StatusUnauthorized:
-		msg = "Groq rejected your API key — check it in Settings › Advanced"
+		msg = "Groq rejected your API key — check it in Settings › Speech"
 	case status == http.StatusRequestEntityTooLarge:
 		msg = "This recording is too long for Groq — keep dictations under about 10 minutes"
 	case status >= 500:

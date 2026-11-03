@@ -12,6 +12,7 @@ import (
 )
 
 func (a *App) checkModelStatus() {
+	a.modelReady.Store(false)
 	if a.config.GetTranscription() == "groq" {
 		// Groq does the transcribing, so don't keep the local model in memory.
 		a.whisperService.Close()
@@ -87,6 +88,7 @@ func (a *App) SetTranscription(t string) error {
 	if err := a.config.Save(); err != nil {
 		return err
 	}
+	a.modelReady.Store(false)
 	go a.checkModelStatus()
 	return nil
 }

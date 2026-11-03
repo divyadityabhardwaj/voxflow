@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckForUpdates, GetUpdateInfo, UpdateAndRestart } from "../../../wailsjs/go/main/App";
+import { CheckForUpdates, GetUpdateInfo, UpdateAndRestart, OpenLogFile } from "../../../wailsjs/go/main/App";
 import { update } from "../../../wailsjs/go/models";
 import { BrowserOpenURL, EventsOn } from "../../../wailsjs/runtime/runtime";
 import { Events } from "../../constants/events";
@@ -96,6 +96,9 @@ export default function AboutSettings() {
           )}
         </div>
       )}
+      <SettingRow label="Troubleshooting" description="Open the log file when reporting a problem.">
+        <button type="button" className="btn-secondary" onClick={() => OpenLogFile().catch((err) => setError(String(err)))}>Open Log</button>
+      </SettingRow>
       {(error || info?.error) && (
         <p role="alert" className="settings-pad text-[13px] text-danger">{error || info?.error}</p>
       )}

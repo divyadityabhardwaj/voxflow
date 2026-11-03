@@ -1,20 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import {
   GetConfig,
-  GetInputDevices,
   GetPermissions,
   GetPushToTalkKey,
   OpenPrivacySettings,
   RequestMicrophoneAccess,
   SetEditHotkey,
   SetHandsFreeHotkey,
-  SetInputDevice,
   SetMuteSystemAudio,
   SetPushToTalkHotkey,
   SetPushToTalkKey,
   SetRefinementMode,
 } from "../../../wailsjs/go/main/App";
-import { audio, main } from "../../../wailsjs/go/models";
+import { main } from "../../../wailsjs/go/models";
 import { useToast } from "../../contexts/ToastContext";
 import { formatShortcut } from "../../lib/shortcut";
 import { MODES } from "../../lib/modes";
@@ -43,7 +41,6 @@ export default function GeneralSettings() {
 
   const [config, setConfig] = useState<main.ConfigResponse | null>(null);
   const [ptt, setPtt] = useState<main.PushToTalkKeyInfo | null>(null);
-  const [devices, setDevices] = useState<audio.InputDevice[]>([]);
   const [perms, setPerms] = useState<main.Permissions | null>(null);
   const [recording, setRecording] = useState<ShortcutField | null>(null);
   const pttRef = useRef(ptt);
@@ -52,9 +49,6 @@ export default function GeneralSettings() {
   useEffect(() => {
     GetConfig().then(setConfig).catch(fail("Couldn't load settings"));
     GetPushToTalkKey().then(setPtt).catch(fail("Couldn't read the hold-to-talk key"));
-    GetInputDevices()
-      .then((d) => setDevices(d ?? []))
-      .catch(fail("Couldn't list microphones"));
   }, []);
 
   // Permissions change in System Settings, so poll while this tab is open.
@@ -93,11 +87,6 @@ export default function GeneralSettings() {
       .then(setPtt)
       .catch(fail("Couldn't change the hold-to-talk key"));
 
-  const changeDevice = (name: string) =>
-    SetInputDevice(name)
-      .then(() => update({ input_device: name }))
-      .catch(fail("Couldn't switch microphones"));
-
   const changeMode = (mode: string) =>
     SetRefinementMode(mode)
       .then(() => update({ refinement_mode: mode }))
@@ -134,9 +123,6 @@ export default function GeneralSettings() {
         ? "In System Settings › Keyboard, set “Press 🌐 key to” to “Do Nothing”, or it also opens the emoji picker."
         : "Hold while you speak; let go to paste.";
 
-  const defaultDevice = devices.find((d) => d.default)?.name;
-  const savedMissing =
-    config.input_device && !devices.some((d) => d.name === config.input_device);
   const mode = config.refinement_mode || "refine";
 
   return (
@@ -176,31 +162,6 @@ export default function GeneralSettings() {
           value={config.edit_hotkey}
           onChange={() => setRecording("edit")}
         />
-      </SettingsSection>
-
-      <SettingsSection title="Microphone">
-        <SettingRow label="Input" htmlFor="input-device">
-          <select
-            id="input-device"
-            className="select w-56"
-            value={config.input_device ?? ""}
-            onChange={(e) => changeDevice(e.target.value)}
-          >
-            <option value="">
-              System default{defaultDevice ? ` (${defaultDevice})` : ""}
-            </option>
-            {devices.map((d) => (
-              <option key={d.name} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-            {savedMissing && (
-              <option value={config.input_device}>
-                {config.input_device} (not connected)
-              </option>
-            )}
-          </select>
-        </SettingRow>
       </SettingsSection>
 
       <SettingsSection title="After you speak">

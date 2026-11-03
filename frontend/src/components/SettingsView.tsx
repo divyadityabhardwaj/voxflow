@@ -5,22 +5,23 @@ import CleanupSettings from "./settings/CleanupSettings";
 import DictionarySettings from "./settings/DictionarySettings";
 import AppRulesSettings from "./settings/AppRulesSettings";
 import AppearanceSettings from "./ui/AppearanceSettings";
-import AdvancedSettings from "./settings/AdvancedSettings";
+import SpeechSettings from "./settings/SpeechSettings";
 import AboutSettings from "./settings/AboutSettings";
 
 const TABS: { id: string; label: string; Panel: ComponentType }[] = [
   { id: "general", label: "General", Panel: GeneralSettings },
+  { id: "speech", label: "Speech", Panel: SpeechSettings },
   { id: "cleanup", label: "Clean-up (AI)", Panel: CleanupSettings },
   { id: "dictionary", label: "Dictionary", Panel: DictionarySettings },
   { id: "apps", label: "Apps", Panel: AppRulesSettings },
   { id: "appearance", label: "Appearance", Panel: AppearanceSettings },
-  { id: "advanced", label: "Advanced", Panel: AdvancedSettings },
   { id: "about", label: "About", Panel: AboutSettings },
 ];
 
 // Deep links from toasts and the backend name a permission, not a tab.
 const ALIASES: Record<string, string> = {
   microphone: "general",
+  advanced: "speech",
   accessibility: "general",
 };
 

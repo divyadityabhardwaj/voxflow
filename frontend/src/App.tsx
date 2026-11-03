@@ -3,7 +3,6 @@ import "./style.css";
 import MainView from "./components/MainView";
 import HistoryView from "./components/HistoryView";
 import SettingsView from "./components/SettingsView";
-import ModelDownloader from "./components/ModelDownloader";
 import RecordingIndicator from "./components/RecordingIndicator";
 import RecordingPill from "./components/RecordingPill";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -14,7 +13,6 @@ import {
   GetUpdateInfo,
   HideMiniMode,
   IsMiniMode,
-  IsModelReady,
   ShowMiniMode,
 } from "../wailsjs/go/main/App";
 import OnboardingWizard from "./components/OnboardingWizard";
@@ -89,7 +87,6 @@ const MinimizeIcon = () => (
 function AppContent() {
   const [currentView, setCurrentView] = useState<View>("main");
   const [settingsTab, setSettingsTab] = useState<string | undefined>();
-  const [modelReady, setModelReady] = useState<boolean>(false);
   const [isMiniMode, setIsMiniMode] = useState<boolean>(true);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
@@ -117,8 +114,6 @@ function AppContent() {
       setIsMiniMode(isMini);
     });
     GetOnboardingCompleted().then(setOnboardingDone);
-    // The startup ModelStatus event can fire before this listener exists.
-    IsModelReady().then((ready) => ready && setModelReady(true));
 
     const unsub1 = EventsOn(Events.OpenHistory, () => setCurrentView("history"));
     const unsub2 = EventsOn(Events.OpenSettings, (tab?: string) => {
@@ -165,8 +160,6 @@ function AppContent() {
     const unsub5 = EventsOn(
       Events.ModelStatus,
       (status: { downloaded: boolean; loaded?: boolean; error?: string }) => {
-        if (status.downloaded && status.loaded) setModelReady(true);
-        else if (!status.downloaded) setModelReady(false);
         if (status.error) showToastRef.current(status.error, "error");
       },
     );
@@ -197,10 +190,6 @@ function AppContent() {
 
   if (isMiniMode) {
     return <RecordingIndicator />;
-  }
-
-  if (!modelReady) {
-    return <ModelDownloader onDownloadComplete={() => setModelReady(true)} />;
   }
 
   const navItem = (view: View, label: string, icon: JSX.Element) => (
