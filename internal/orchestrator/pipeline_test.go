@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -468,5 +469,71 @@ func TestStartRecordingWithoutGroqKeySaysWhy(t *testing.T) {
 	}
 	if len(rec.toasts) != 1 || rec.toasts[0]["message"] != whisper.ErrNoGroqKey.Message {
 		t.Fatalf("toasts = %v, want the missing-key message", rec.toasts)
+	}
+}
+
+func (r *stubRefiner) RefineTextContext(ctx context.Context, raw, model string) (string, int, bool, error) {
+	return r.RefineText(raw, model)
+}
+func (r *stubRefiner) RetryWithInstructionContext(ctx context.Context, text, instruction, model string) (string, error) {
+	return r.RetryWithInstruction(text, instruction, model)
+}
+
+type delayedRefiner struct {
+	stubRefiner
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *delayedRefiner) RefineTextContext(ctx context.Context, raw, model string) (string, int, bool, error) {
+	close(r.started)
+	<-r.release // Simulate a response arriving after cancellation.
+	return "Late result", 1, false, nil
+}
+func (r *delayedRefiner) RetryWithInstructionContext(ctx context.Context, text, instruction, model string) (string, error) {
+	close(r.started)
+	<-r.release
+	return "Late edit", nil
+}
+
+func TestCancelProcessingPreventsLateDelivery(t *testing.T) {
+	for _, edit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("edit=%v", edit), func(t *testing.T) {
+			ref := &delayedRefiner{started: make(chan struct{}), release: make(chan struct{})}
+			rec := &recorder{}
+			p := newTestPipeline(&config.Config{GeminiAPIKey: "key"}, ref, rec, nil)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			stream := &streamSession{ctx: ctx, cancel: cancel, jobs: make(chan streamJob)}
+			p.stream, p.state = stream, hotkey.StateProcessing
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				defer p.finishProcessing(stream)
+				if edit {
+					p.applyEditContext(ctx, "selection", "rewrite", 0)
+				} else {
+					p.deliverContext(ctx, "hello", "", false)
+				}
+			}()
+			<-ref.started
+			p.CancelRecording()
+			if ctx.Err() != context.Canceled {
+				t.Fatal("request context was not cancelled")
+			}
+			close(ref.release)
+			<-done
+			if len(rec.sent) != 0 {
+				t.Fatalf("cancelled result delivered: %v", rec.sent)
+			}
+			for _, e := range rec.events {
+				if e == events.ProcessingComplete {
+					t.Fatal("cancelled edit emitted a result")
+				}
+			}
+			if p.State() != hotkey.StateIdle || p.stream != nil {
+				t.Fatal("pipeline did not return to idle")
+			}
+		})
 	}
 }

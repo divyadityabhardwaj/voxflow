@@ -436,6 +436,13 @@ func (s *Service) TranscribeWithPrompt(wavPath, prompt string) (string, error) {
 
 // Server when up; else whisper-cli (needs wavPath or temp file).
 func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, error) {
+	return s.transcribeWAVContext(context.Background(), wav, wavPath, prompt)
+}
+
+func (s *Service) transcribeWAVContext(ctx context.Context, wav []byte, wavPath, prompt string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	s.lastUse.Store(time.Now().UnixNano())
 	s.mu.RLock()
 	loaded, modelPath, language, threads, srv := s.loaded, s.modelPath, s.language, s.threads, s.server
@@ -446,9 +453,12 @@ func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, err
 	}
 
 	if srv != nil {
-		text, err := srv.transcribe(wav, language, prompt)
+		text, err := srv.transcribeContext(ctx, wav, language, prompt)
 		if err == nil {
 			return text, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
 		}
 		logger.Warnf("[Whisper] whisper-server request failed, falling back to whisper-cli: %v", err)
 	}
@@ -464,7 +474,7 @@ func (s *Service) transcribeWAV(wav []byte, wavPath, prompt string) (string, err
 		}
 		defer os.Remove(wavPath)
 	}
-	return s.transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language, threads)
+	return s.transcribeWithCLIContext(ctx, whisperBin, modelPath, wavPath, prompt, language, threads)
 }
 
 func (s *Service) SetLanguage(language string) {
@@ -547,6 +557,10 @@ func whisperCLICandidates() []string {
 }
 
 func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, language string, threads int) (string, error) {
+	return s.transcribeWithCLIContext(context.Background(), whisperBin, modelPath, wavPath, prompt, language, threads)
+}
+
+func (s *Service) transcribeWithCLIContext(ctx context.Context, whisperBin, modelPath, wavPath, prompt, language string, threads int) (string, error) {
 	outputPath := wavPath + ".txt"
 	defer os.Remove(outputPath)
 
@@ -570,7 +584,7 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 		args = append(args, "--prompt", prompt)
 	}
 
-	cmd := exec.Command(whisperBin, args...)
+	cmd := exec.CommandContext(ctx, whisperBin, args...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -586,13 +600,17 @@ func (s *Service) transcribeWithCLI(whisperBin, modelPath, wavPath, prompt, lang
 }
 
 func (s *Service) TranscribeSamples(samples []int16) (string, error) {
+	return s.TranscribeSamplesContext(context.Background(), samples)
+}
+
+func (s *Service) TranscribeSamplesContext(ctx context.Context, samples []int16) (string, error) {
 	if len(samples) == 0 {
 		return "", fmt.Errorf("no samples")
 	}
 	s.mu.RLock()
 	prompt := s.prompt
 	s.mu.RUnlock()
-	return s.transcribeWAV(wavBytes(samples, 16000), "", prompt)
+	return s.transcribeWAVContext(ctx, wavBytes(samples, 16000), "", prompt)
 }
 
 func wavBytes(samples []int16, sampleRate int) []byte {

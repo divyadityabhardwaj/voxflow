@@ -196,6 +196,10 @@ func (w *whisperServer) stop() {
 
 // Send every decoding field each request: server only resets params after success, else they leak.
 func (w *whisperServer) transcribe(wav []byte, language, prompt string) (string, error) {
+	return w.transcribeContext(context.Background(), wav, language, prompt)
+}
+
+func (w *whisperServer) transcribeContext(parent context.Context, wav []byte, language, prompt string) (string, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	part, err := mw.CreateFormFile("file", "audio.wav")
@@ -213,7 +217,7 @@ func (w *whisperServer) transcribe(wav []byte, language, prompt string) (string,
 	mw.Close()
 
 	timeout := inferenceTimeout(len(wav))
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.url+"/inference", &body)
 	if err != nil {

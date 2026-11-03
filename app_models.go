@@ -73,8 +73,8 @@ func (a *App) cloudTranscriber() (orchestrator.Transcribe, error) {
 		return nil, whisper.ErrNoGroqKey
 	}
 	language, prompt := a.config.GetWhisperLanguage(), a.config.GetVocabulary()
-	return func(samples []int16) (string, error) {
-		return whisper.TranscribeGroq(key, samples, language, prompt)
+	return func(ctx context.Context, samples []int16) (string, error) {
+		return whisper.TranscribeGroqContext(ctx, key, samples, language, prompt)
 	}, nil
 }
 

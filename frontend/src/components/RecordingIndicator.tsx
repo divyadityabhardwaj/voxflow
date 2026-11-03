@@ -195,7 +195,12 @@ export default function RecordingIndicator() {
     body = (
       <div className="flex-1 min-w-0 flex items-center justify-center gap-1.5 px-1" role="status" style={{ color: busyFg }}>
         <span className="flex-none size-3 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true" />
-        <span className="text-[11px] font-semibold truncate">{label}</span>
+        <span className="text-[11px] font-semibold truncate flex-1">{label}</span>
+        <button type="button" className={`flex-none size-5 flex items-center justify-center rounded-full no-drag ${hoverBg}`}
+          style={NO_DRAG} onClick={(e) => { stop(e); CancelRecording(); }}
+          title="Cancel — Esc" aria-label="Cancel processing">
+          <Icon d={CLOSE_ICON} />
+        </button>
       </div>
     );
   } else if (recording) {

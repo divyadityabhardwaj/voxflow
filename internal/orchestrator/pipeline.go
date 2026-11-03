@@ -104,7 +104,7 @@ type Config struct {
 	OnState          func(hotkey.State)
 }
 
-type Transcribe func(samples []int16) (string, error)
+type Transcribe func(ctx context.Context, samples []int16) (string, error)
 
 func New(cfg Config) *Pipeline {
 	p := &Pipeline{
@@ -305,14 +305,15 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 		p.emitToast(name+" isn't connected — using the default microphone", "warning")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	if cloud != nil {
 		// One request per recording: per-chunk requests would burn through the free tier's rate limit.
-		p.stream = &streamSession{jobs: make(chan streamJob), transcribe: cloud, speechProvider: "groq", speechModel: whisper.GroqModel}
+		p.stream = &streamSession{ctx: ctx, cancel: cancel, jobs: make(chan streamJob), transcribe: cloud, speechProvider: "groq", speechModel: whisper.GroqModel}
 	} else {
 		if p.whisperService != nil {
 			p.whisperService.Prewarm()
 		}
-		p.stream = p.startStreamingTranscription()
+		p.stream = p.startStreamingTranscription(ctx, cancel)
 	}
 
 	if p.refiner != nil {
@@ -392,7 +393,7 @@ func (p *Pipeline) StopRecording() {
 	// Decided now: clicking VoxFlow while it processes must not swallow text meant for another app.
 	inApp := p.inApp != nil && p.inApp()
 	stream, selection := p.stream, p.selection
-	p.stream, p.selection = nil, ""
+	p.selection = ""
 	go p.processRecording(stream, inApp, selection)
 }
 
@@ -410,11 +411,19 @@ func (p *Pipeline) DiscardRecording() {
 func (p *Pipeline) cancelRecording(silent bool) {
 	p.lifecycleMu.Lock()
 	defer p.lifecycleMu.Unlock()
+	if p.State() == hotkey.StateProcessing {
+		if !silent && p.stream != nil {
+			p.stream.cancel()
+			p.stream.close(true)
+		}
+		return
+	}
 	if p.State() != hotkey.StateRecording {
 		return
 	}
 
 	stream := p.stream
+	stream.cancel()
 	p.stream, p.selection = nil, ""
 	wavPath, err := p.audioRecorder.Stop()
 	p.audioRecorder.ClearChunkCallback()
@@ -444,6 +453,8 @@ func recycle(job streamJob) {
 
 // streamSession transcribes one recording's chunks while it is still being recorded.
 type streamSession struct {
+	ctx        context.Context
+	cancel     context.CancelFunc
 	jobs       chan streamJob
 	wg         sync.WaitGroup
 	transcribe Transcribe
@@ -508,7 +519,7 @@ func (p *Pipeline) streamingWorker(s *streamSession) {
 			continue
 		}
 
-		text, err := s.transcribe(job.Samples)
+		text, err := s.transcribe(s.ctx, job.Samples)
 		if err != nil {
 			logger.Errorf("[Pipeline] Streaming chunk transcription error: %v", err)
 		}
@@ -538,8 +549,8 @@ func (p *Pipeline) streamingWorker(s *streamSession) {
 	}
 }
 
-func (p *Pipeline) startStreamingTranscription() *streamSession {
-	s := &streamSession{jobs: make(chan streamJob, 64), transcribe: p.whisperService.TranscribeSamples, speechProvider: "local", speechModel: p.config.GetWhisperModel()}
+func (p *Pipeline) startStreamingTranscription(ctx context.Context, cancel context.CancelFunc) *streamSession {
+	s := &streamSession{ctx: ctx, cancel: cancel, jobs: make(chan streamJob, 64), transcribe: p.whisperService.TranscribeSamplesContext, speechProvider: "local", speechModel: p.config.GetWhisperModel()}
 	s.wg.Add(1)
 	go p.streamingWorker(s)
 
@@ -606,6 +617,8 @@ func joinSpans(spans []span) string {
 }
 
 func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection string) {
+	ctx := stream.ctx
+	defer p.finishProcessing(stream)
 	processingStartTime := time.Now()
 
 	stopAndWavStart := time.Now()
@@ -619,10 +632,15 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	p.audioRecorder.ClearChunkCallback()
 	stream.close(false)
 	stream.wg.Wait()
+	if ctx.Err() != nil {
+		if wavPath != "" {
+			os.Remove(wavPath)
+		}
+		return
+	}
 
 	if err != nil {
 		p.emitToast("Failed to stop recording: "+err.Error(), "error")
-		p.resetToIdle()
 		return
 	}
 	var wavBytes int64
@@ -635,12 +653,10 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 
 	if p.audioRecorder.AllSilent() {
 		p.emitSettingsToast(errMicrophoneDenied.Error(), "warning", "microphone")
-		p.resetToIdle()
 		return
 	}
 	if !p.audioRecorder.HasAudioActivity() {
 		p.emitToast("No speech detected. Please try speaking louder or check your microphone.", "warning")
-		p.resetToIdle()
 		return
 	}
 
@@ -653,7 +669,7 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	rawText, err := assembleTranscript(spans, len(samples), func(from, to int) (string, error) {
 		logger.Infof("[Pipeline] Transcribing %.1fs-%.1fs not covered by streaming",
 			float64(from)/audio.SampleRate, float64(to)/audio.SampleRate)
-		text, err := stream.transcribe(samples[from:to])
+		text, err := stream.transcribe(ctx, samples[from:to])
 		return cleanWhisperChunk(text, p.config.GetVocabulary(), samples[from:to]), err
 	})
 	cleanStart := time.Now()
@@ -661,6 +677,9 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	cleanTextDuration := time.Since(cleanStart)
 	whisperDuration := time.Since(whisperStart)
 
+	if ctx.Err() != nil {
+		return
+	}
 	if err != nil {
 		logger.Errorf("[Pipeline] Transcription failed: %v", err)
 		if rawText == "" {
@@ -670,7 +689,6 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 				message = cloudErr.Message
 			}
 			p.emitToast(message, "error")
-			p.resetToIdle()
 			return
 		}
 		p.emitToast("Part of the recording couldn't be transcribed", "warning")
@@ -680,12 +698,11 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 
 	if rawText == "" {
 		p.emitToast("No audio was captured. Please try speaking louder or check your microphone.", "warning")
-		p.resetToIdle()
 		return
 	}
 
 	if selection != "" {
-		p.applyEdit(selection, rawText, time.Since(processingStartTime))
+		p.applyEditContext(ctx, selection, rawText, time.Since(processingStartTime))
 		return
 	}
 
@@ -693,7 +710,15 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	llmModel := p.llmModel()
 
 	target := p.Target()
-	d := p.deliver(rawText, target.BundleID, inApp)
+	d := p.deliverContext(ctx, rawText, target.BundleID, inApp)
+	if ctx.Err() != nil {
+		return
+	}
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
 	if d.usedRaw {
 		llmProvider, llmModel = "", ""
 	}
@@ -754,7 +779,6 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	)
 	logger.Infof("%s", output)
 
-	p.setState(hotkey.StateIdle)
 	p.emit(events.ProcessingComplete, map[string]interface{}{
 		"polished":         d.text,
 		"raw":              rawText,
@@ -777,21 +801,26 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 // applyEdit rewrites selection by the spoken instruction and pastes the
 // result over it. On failure the selection is left untouched.
 func (p *Pipeline) applyEdit(selection, instruction string, elapsed time.Duration) {
+	p.applyEditContext(context.Background(), selection, instruction, elapsed)
+}
+
+func (p *Pipeline) applyEditContext(ctx context.Context, selection, instruction string, elapsed time.Duration) {
 	provider := p.config.GetLLMProvider()
 	p.emit(events.StateChanged, "Refining")
 	llmStart := time.Now()
-	text, err := p.refiner().RetryWithInstruction(selection, instruction, p.llmModel())
+	text, err := p.refiner().RetryWithInstructionContext(ctx, selection, instruction, p.llmModel())
+	if ctx.Err() != nil {
+		return
+	}
 	llmTime := time.Since(llmStart)
 	text = strings.TrimSpace(text)
 	switch {
 	case err != nil:
 		logger.Warnf("[Pipeline] %s edit failed: %v", provider, err)
 		p.emitToast("Couldn't edit the selection: "+truncate(err.Error(), maxToastDetail), "error")
-		p.resetToIdle()
 		return
 	case text == "":
 		p.emitToast("The AI returned nothing — the selection was left as it was", "warning")
-		p.resetToIdle()
 		return
 	}
 	// Whole-line selections end in a newline the rewrite must keep.
@@ -802,9 +831,13 @@ func (p *Pipeline) applyEdit(selection, instruction string, elapsed time.Duratio
 	logger.Infof("[Pipeline] Edit applied in %.2fs (%s): %d → %d chars", llmTime.Seconds(), provider, len(selection), len(text))
 
 	target := p.Target()
-	method := p.handOff(text, p.config.InjectMethodFor(target.BundleID))
+	method := p.handOffContext(ctx, text, p.config.InjectMethodFor(target.BundleID))
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
 
-	p.setState(hotkey.StateIdle)
 	p.emit(events.ProcessingComplete, map[string]interface{}{
 		"polished":   text,
 		"raw":        instruction,
@@ -829,6 +862,10 @@ type delivery struct {
 // target app, or keeps it in VoxFlow's window when inApp. A refinement failure
 // always falls back to rawText.
 func (p *Pipeline) deliver(rawText, bundleID string, inApp bool) delivery {
+	return p.deliverContext(context.Background(), rawText, bundleID, inApp)
+}
+
+func (p *Pipeline) deliverContext(ctx context.Context, rawText, bundleID string, inApp bool) delivery {
 	if inApp {
 		bundleID = "" // the previous app's rule doesn't apply to VoxFlow's own window
 	}
@@ -845,7 +882,10 @@ func (p *Pipeline) deliver(rawText, bundleID string, inApp bool) delivery {
 	default:
 		p.emit(events.StateChanged, "Refining")
 		llmStart := time.Now()
-		text, tokens, okToGo, err := p.refiner().RefineText(rawText, p.llmModel())
+		text, tokens, okToGo, err := p.refiner().RefineTextContext(ctx, rawText, p.llmModel())
+		if ctx.Err() != nil {
+			return d
+		}
 		d.llmTime = time.Since(llmStart)
 
 		switch {
@@ -876,8 +916,33 @@ func (p *Pipeline) deliver(rawText, bundleID string, inApp bool) delivery {
 		d.method = "clipboard"
 	}
 
-	d.method = p.handOff(d.text, d.method)
+	d.method = p.handOffContext(ctx, d.text, d.method)
 	return d
+}
+
+// Serialize the final hand-off with cancellation: a cancelled request cannot paste.
+func (p *Pipeline) handOffContext(ctx context.Context, text, method string) string {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if ctx.Err() != nil {
+		return "none"
+	}
+	return p.handOff(text, method)
+}
+
+func (p *Pipeline) finishProcessing(stream *streamSession) {
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if p.stream != stream {
+		return
+	}
+	cancelled := stream.ctx.Err() != nil
+	stream.cancel()
+	p.stream = nil
+	p.resetToIdle()
+	if cancelled {
+		p.emitToast("Cancelled", "info")
+	}
 }
 
 // handOff delivers text by method and returns how it actually arrived:

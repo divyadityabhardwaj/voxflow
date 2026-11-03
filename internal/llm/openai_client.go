@@ -338,6 +338,10 @@ func refineMessages(rawText string) []chatMessage {
 }
 
 func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, error) {
+	return c.RefineTextContext(context.Background(), rawText, model)
+}
+
+func (c *OpenAIClient) RefineTextContext(parent context.Context, rawText, model string) (string, int, bool, error) {
 	if c.missingKey() {
 		return "", 0, false, ErrNoAPIKey
 	}
@@ -360,7 +364,7 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 	if c.RefineTimeout > 0 {
 		budget = c.RefineTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
@@ -393,6 +397,10 @@ func (c *OpenAIClient) RefineText(rawText, model string) (string, int, bool, err
 }
 
 func (c *OpenAIClient) RetryWithInstruction(text, instruction, model string) (string, error) {
+	return c.RetryWithInstructionContext(context.Background(), text, instruction, model)
+}
+
+func (c *OpenAIClient) RetryWithInstructionContext(ctx context.Context, text, instruction, model string) (string, error) {
 	if c.missingKey() {
 		return "", ErrNoAPIKey
 	}
@@ -413,7 +421,7 @@ func (c *OpenAIClient) RetryWithInstruction(text, instruction, model string) (st
 	}
 
 	url := fmt.Sprintf("%s/chat/completions", c.BaseURL)
-	respBody, statusCode, err := c.doPost(context.Background(), retryMaxAttempts, reqBody, url)
+	respBody, statusCode, err := c.doPost(ctx, retryMaxAttempts, reqBody, url)
 	if err != nil {
 		return "", err
 	}

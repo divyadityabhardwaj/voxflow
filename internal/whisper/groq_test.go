@@ -1,7 +1,9 @@
 package whisper
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,4 +85,31 @@ func mustDuration(t *testing.T, s string) (d time.Duration) {
 		t.Fatal(err)
 	}
 	return d
+}
+
+func TestGroqCancellationStopsRequest(t *testing.T) {
+	started := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	old := groqBaseURL
+	groqBaseURL = srv.URL
+	defer func() { groqBaseURL = old }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := TranscribeGroqContext(ctx, "key", make([]int16, 1600), "en", ""); done <- err }()
+	<-started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("request did not cancel")
+	}
 }

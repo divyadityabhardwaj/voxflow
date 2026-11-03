@@ -90,7 +90,7 @@ type Manager struct {
 	hold         holdTracker
 	holdStarted  bool // this hold started a recording that isn't confirmed yet
 	tapRetrying  bool
-	escapeHK     *hotkey.Hotkey // only while recording, when there is no event tap
+	escapeHK     *hotkey.Hotkey // while recording or processing, when there is no event tap
 
 	requests chan request
 	// One channel for every key event, so a down queued behind a slow callback
@@ -566,7 +566,7 @@ func (m *Manager) confirmHold() {
 // recording alone: the hold key was merely used as a modifier during it.
 func (m *Manager) cancel(silent, pushToTalkOnly bool) {
 	m.mu.RLock()
-	ok := m.running && m.state == StateRecording && (!pushToTalkOnly || m.activeTrigger == TriggerPushToTalk)
+	ok := m.running && m.state != StateIdle && (!pushToTalkOnly || (m.state == StateRecording && m.activeTrigger == TriggerPushToTalk))
 	onCancel := m.OnCancel
 	m.mu.RUnlock()
 	if ok && onCancel != nil {
@@ -574,10 +574,10 @@ func (m *Manager) cancel(silent, pushToTalkOnly bool) {
 	}
 }
 
-// syncEscapeHotkey claims Esc through Carbon only while recording, when the
+// syncEscapeHotkey claims Esc through Carbon while recording or processing, when the
 // event tap isn't there to do it; Esc must reach other apps otherwise.
 func (m *Manager) syncEscapeHotkey() {
-	want := m.GetState() == StateRecording && !isTapRunning()
+	want := m.GetState() != StateIdle && !isTapRunning()
 	switch {
 	case want && m.escapeHK == nil:
 		hk := hotkey.New(nil, hotkey.KeyEscape)
@@ -616,7 +616,7 @@ func (m *Manager) SetState(state State) {
 	if state == StateIdle {
 		m.activeTrigger = TriggerNone
 	}
-	setSwallowEscape(state == StateRecording)
+	setSwallowEscape(state != StateIdle)
 	select {
 	case m.keyEvents <- escapeSync:
 	default: // the loop isn't running

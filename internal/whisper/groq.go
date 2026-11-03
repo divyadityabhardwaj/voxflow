@@ -2,6 +2,7 @@ package whisper
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,6 +34,10 @@ var ErrNoGroqKey = &CloudError{Message: "Add your free Groq API key in Settings 
 
 // TranscribeGroq sends one recording to Groq's hosted Whisper.
 func TranscribeGroq(apiKey string, samples []int16, language, prompt string) (string, error) {
+	return TranscribeGroqContext(context.Background(), apiKey, samples, language, prompt)
+}
+
+func TranscribeGroqContext(ctx context.Context, apiKey string, samples []int16, language, prompt string) (string, error) {
 	if apiKey == "" {
 		return "", ErrNoGroqKey
 	}
@@ -54,7 +59,7 @@ func TranscribeGroq(apiKey string, samples []int16, language, prompt string) (st
 	}
 	form.Close()
 
-	req, err := http.NewRequest(http.MethodPost, groqBaseURL+"/audio/transcriptions", &body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, groqBaseURL+"/audio/transcriptions", &body)
 	if err != nil {
 		return "", err
 	}

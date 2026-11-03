@@ -1,5 +1,5 @@
 import { CancelRecording, ToggleRecording } from "../../wailsjs/go/main/App";
-import { useRecordingState } from "../hooks/useRecordingState";
+import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 import { formatClock, useAudioLevel, useRecordingSeconds } from "../hooks/useDictation";
 import LevelBars from "./dictation/LevelBars";
 
@@ -10,14 +10,14 @@ export default function RecordingPill() {
   const level = useAudioLevel(recording);
   const seconds = useRecordingSeconds(status);
 
-  if (!recording) return null;
+  if (!recording && !isBusy(status)) return null;
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50" role="status">
       <div className="flex items-center gap-3 pl-4 pr-2 py-1.5 bg-surface border border-border rounded-full shadow-soft-md">
         <LevelBars level={level} maxHeight={16} color="var(--recording)" />
         <span className="text-[13px] font-semibold text-text tabular-nums">
-          {formatClock(seconds)}
+          {recording ? formatClock(seconds) : status === "Refining" ? "Cleaning up…" : "Transcribing…"}
         </span>
         <span className="text-xs text-tertiary">Esc to cancel</span>
         <button
@@ -28,7 +28,7 @@ export default function RecordingPill() {
         >
           Cancel
         </button>
-        <button
+        {recording && <button
           type="button"
           onClick={() => ToggleRecording()}
           className="size-7 rounded-full bg-recording text-white flex items-center justify-center hover:opacity-90"
@@ -36,7 +36,7 @@ export default function RecordingPill() {
           title="Stop dictation"
         >
           <span className="size-2.5 rounded-[2px] bg-white" />
-        </button>
+        </button>}
       </div>
     </div>
   );
