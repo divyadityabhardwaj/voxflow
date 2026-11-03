@@ -76,14 +76,18 @@ jobs:
             -ldflags "-X main.version=${TAG#v}"
 
       # macOS keys Microphone/Accessibility grants to the signing identity. Ad-hoc
-      # signatures change every build, so every update made users grant them again;
-      # one fixed certificate keeps the identity stable across releases.
-      - name: Import signing certificate
+      # signatures change every build. A configured certificate keeps the identity
+      # stable; without one, retain the ad-hoc signing used by earlier releases.
+      - name: Configure signing
         env:
           P12: ${{ secrets.MACOS_SIGNING_P12 }}
           P12_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
         run: |
-          [ -n "$P12" ] || { echo "MACOS_SIGNING_P12 secret is missing"; exit 1; }
+          if [ -z "$P12" ]; then
+            echo "::notice::No signing certificate configured; using ad-hoc signing."
+            echo "SIGN_IDENTITY=-" >> "$GITHUB_ENV"
+            exit 0
+          fi
           KC="$RUNNER_TEMP/signing.keychain-db"
           KC_PASSWORD="$(openssl rand -hex 16)"
           security create-keychain -p "$KC_PASSWORD" "$KC"
@@ -94,13 +98,14 @@ jobs:
           rm "$RUNNER_TEMP/signing.p12"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASSWORD" "$KC" > /dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          echo "SIGN_IDENTITY=VoxFlow Self-Signed" >> "$GITHUB_ENV"
 
       - name: Bundle whisper, sign, check linkage
-        env:
-          SIGN_IDENTITY: VoxFlow Self-Signed
         run: |
           scripts/bundle.sh build/bin/voxflow.app "$RUNNER_TEMP/deps"
-          codesign -d -r- build/bin/voxflow.app 2>&1 | grep "certificate leaf"
+          if [ "$SIGN_IDENTITY" != "-" ]; then
+            codesign -d -r- build/bin/voxflow.app 2>&1 | grep "certificate leaf"
+          fi
 
       - name: Smoke-test bundled whisper-cli
         run: build/bin/voxflow.app/Contents/MacOS/whisper-cli --help > /dev/null
