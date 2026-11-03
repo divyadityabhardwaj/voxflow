@@ -2,6 +2,7 @@ export const Events = {
   StateChanged: "state-changed",
   RecordingStarted: "recording-started",
   RecordingStopped: "recording-stopped",
+  FailedRecordingChanged: "failed-recording-changed",
   ProcessingComplete: "processing-complete",
   PartialTranscript: "partial-transcript",
   AudioLevel: "audio-level",

@@ -290,6 +290,27 @@ export namespace main {
 
 }
 
+export namespace orchestrator {
+
+	export class FailedRecordingInfo {
+	    available: boolean;
+	    message: string;
+	    expires_at: number;
+
+	    static createFrom(source: any = {}) {
+	        return new FailedRecordingInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.message = source["message"];
+	        this.expires_at = source["expires_at"];
+	    }
+	}
+
+}
+
 export namespace update {
 	
 	export class Info {

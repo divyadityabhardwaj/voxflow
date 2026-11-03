@@ -1,13 +1,14 @@
 package events
 
 const (
-	StateChanged       = "state-changed"
-	RecordingStarted   = "recording-started"
-	RecordingStopped   = "recording-stopped"
-	ProcessingComplete = "processing-complete"
-	ResetToIdle        = "reset-to-idle"
-	PartialTranscript  = "partial-transcript"
-	AudioLevel         = "audio-level"
+	StateChanged           = "state-changed"
+	RecordingStarted       = "recording-started"
+	RecordingStopped       = "recording-stopped"
+	FailedRecordingChanged = "failed-recording-changed"
+	ProcessingComplete     = "processing-complete"
+	ResetToIdle            = "reset-to-idle"
+	PartialTranscript      = "partial-transcript"
+	AudioLevel             = "audio-level"
 
 	MiniMode = "mini-mode"
 

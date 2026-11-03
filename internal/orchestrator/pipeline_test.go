@@ -511,7 +511,7 @@ func TestCancelProcessingPreventsLateDelivery(t *testing.T) {
 				defer close(done)
 				defer p.finishProcessing(stream)
 				if edit {
-					p.applyEditContext(ctx, "selection", "rewrite", 0)
+					p.applyEditContext(ctx, "selection", "rewrite", 0, false)
 				} else {
 					p.deliverContext(ctx, "hello", "", false)
 				}

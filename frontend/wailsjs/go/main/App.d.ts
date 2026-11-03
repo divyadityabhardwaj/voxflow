@@ -3,6 +3,7 @@
 import {update} from '../models';
 import {main} from '../models';
 import {whisper} from '../models';
+import {orchestrator} from '../models';
 import {history} from '../models';
 import {audio} from '../models';
 
@@ -24,6 +25,8 @@ export function DeleteModelByName(arg1:string):Promise<void>;
 
 export function DeleteTranscript(arg1:number):Promise<void>;
 
+export function DiscardFailedRecording():Promise<void>;
+
 export function DownloadModel():Promise<void>;
 
 export function DownloadModelByName(arg1:string):Promise<void>;
@@ -35,6 +38,8 @@ export function GetAllModels():Promise<Array<whisper.ModelInfo>>;
 export function GetAppRules():Promise<Array<main.AppRuleDTO>>;
 
 export function GetConfig():Promise<main.ConfigResponse>;
+
+export function GetFailedRecording():Promise<orchestrator.FailedRecordingInfo>;
 
 export function GetFrontmostApp():Promise<main.FrontmostAppInfo>;
 
@@ -91,6 +96,8 @@ export function RemoveAppRule(arg1:string):Promise<void>;
 export function RequestMicrophoneAccess():Promise<boolean>;
 
 export function ResetWindowPosition():Promise<void>;
+
+export function RetryFailedRecording():Promise<void>;
 
 export function RetryRefinement(arg1:number,arg2:string):Promise<string>;
 

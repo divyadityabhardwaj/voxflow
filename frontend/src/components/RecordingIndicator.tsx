@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type CSSProperties, type MouseEvent } from "react";
-import { EventsOn } from "../../wailsjs/runtime/runtime";
+import { EventsEmit, EventsOn } from "../../wailsjs/runtime/runtime";
 import {
   CancelRecording,
   HideMiniMode,
@@ -7,6 +7,7 @@ import {
   SetMiniModeExpanded,
   ToggleRecording,
 } from "../../wailsjs/go/main/App";
+import { useFailedRecording } from "../hooks/useFailedRecording";
 import { useTheme } from "../contexts/ThemeContext";
 import { useToastList, type Toast } from "../contexts/ToastContext";
 import { Events } from "../constants/events";
@@ -78,6 +79,7 @@ const stop = (e: MouseEvent) => {
 
 export default function RecordingIndicator() {
   const status = useRecordingState();
+  const failed = useFailedRecording();
   const busy = isBusy(status);
   const recording = status === "Recording";
   const level = useAudioLevel(recording);
@@ -114,8 +116,8 @@ export default function RecordingIndicator() {
     };
   }, [clearToasts]);
 
-  const uiExpanded = hovered || status !== "Idle" || done !== null || activeToast !== null;
-  const targetHeight = activeToast ? PILL_WITH_CHIP_H : PILL_H;
+  const uiExpanded = hovered || status !== "Idle" || done !== null || activeToast !== null || failed !== null;
+  const targetHeight = activeToast || failed ? PILL_WITH_CHIP_H : PILL_H;
 
   useEffect(() => {
     const timer = setTimeout(() => SetMiniModeExpanded(uiExpanded, targetHeight), 50);
@@ -296,7 +298,13 @@ export default function RecordingIndicator() {
       onMouseEnter={handlePointerEnter}
       onMouseLeave={handlePointerLeave}
     >
-      {activeToast && (
+      {failed && status === "Idle" && (
+        <button type="button" className="w-full text-xs font-semibold py-2 px-2 mb-1 rounded-lg pointer-events-auto no-drag bg-surface text-text border border-border"
+          style={NO_DRAG} onClick={() => { EventsEmit(Events.OpenHome); HideMiniMode(); }}>
+          Dictation failed · Retry or discard →
+        </button>
+      )}
+      {activeToast && !failed && (
         <div
           role={activeToast.type === "error" ? "alert" : "status"}
           className="w-full min-h-[26px] py-0.5 flex items-center px-1.5 mb-1 rounded-lg pointer-events-auto animate-scale-in"

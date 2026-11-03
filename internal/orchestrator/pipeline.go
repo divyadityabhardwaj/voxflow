@@ -70,7 +70,8 @@ type Pipeline struct {
 	lifecycleMu sync.Mutex
 	stateMu     sync.Mutex
 	state       hotkey.State
-	stream      *streamSession // guarded by lifecycleMu
+	stream      *streamSession   // guarded by lifecycleMu
+	failed      *failedRecording // guarded by lifecycleMu
 	// heldFeedback reports a failed hold-to-talk start once ConfirmHold shows
 	// the press was meant as a dictation; guarded by lifecycleMu.
 	heldFeedback func()
@@ -305,6 +306,7 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 		p.emitToast(name+" isn't connected — using the default microphone", "warning")
 	}
 
+	p.clearFailedLocked()
 	ctx, cancel := context.WithCancel(context.Background())
 	if cloud != nil {
 		// One request per recording: per-chunk requests would burn through the free tier's rate limit.
@@ -426,6 +428,7 @@ func (p *Pipeline) cancelRecording(silent bool) {
 	stream.cancel()
 	p.stream, p.selection = nil, ""
 	wavPath, err := p.audioRecorder.Stop()
+	p.audioRecorder.ClearBuffer()
 	p.audioRecorder.ClearChunkCallback()
 	stream.close(true)
 	if err == nil {
@@ -619,7 +622,7 @@ func joinSpans(spans []span) string {
 func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection string) {
 	ctx := stream.ctx
 	defer p.finishProcessing(stream)
-	processingStartTime := time.Now()
+	defer p.audioRecorder.ClearBuffer()
 
 	stopAndWavStart := time.Now()
 	wavPath, err := p.audioRecorder.Stop()
@@ -660,7 +663,18 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 		return
 	}
 
-	samples := p.audioRecorder.GetBuffer()
+	p.processAudio(stream, &recordedAudio{
+		samples: p.audioRecorder.GetBuffer(), duration: audioDuration,
+		wavBytes: wavBytes, stopDuration: stopAndWavDuration, selection: selection,
+	}, inApp, whisperStart)
+}
+
+func (p *Pipeline) processAudio(stream *streamSession, recording *recordedAudio, inApp bool, whisperStart time.Time) {
+	ctx := stream.ctx
+	processingStartTime := whisperStart.Add(-recording.stopDuration)
+	samples, audioDuration := recording.samples, recording.duration
+	wavBytes, stopAndWavDuration := recording.wavBytes, recording.stopDuration
+	selection := recording.selection
 	stream.mu.Lock()
 	spans := slices.Clone(stream.spans)
 	stream.mu.Unlock()
@@ -688,6 +702,7 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 			if errors.As(err, &cloudErr) {
 				message = cloudErr.Message
 			}
+			p.keepFailed(stream, recording, message)
 			p.emitToast(message, "error")
 			return
 		}
@@ -702,7 +717,7 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 	}
 
 	if selection != "" {
-		p.applyEditContext(ctx, selection, rawText, time.Since(processingStartTime))
+		p.applyEditContext(ctx, selection, rawText, time.Since(processingStartTime), inApp)
 		return
 	}
 
@@ -801,10 +816,10 @@ func (p *Pipeline) processRecording(stream *streamSession, inApp bool, selection
 // applyEdit rewrites selection by the spoken instruction and pastes the
 // result over it. On failure the selection is left untouched.
 func (p *Pipeline) applyEdit(selection, instruction string, elapsed time.Duration) {
-	p.applyEditContext(context.Background(), selection, instruction, elapsed)
+	p.applyEditContext(context.Background(), selection, instruction, elapsed, false)
 }
 
-func (p *Pipeline) applyEditContext(ctx context.Context, selection, instruction string, elapsed time.Duration) {
+func (p *Pipeline) applyEditContext(ctx context.Context, selection, instruction string, elapsed time.Duration, inApp bool) {
 	provider := p.config.GetLLMProvider()
 	p.emit(events.StateChanged, "Refining")
 	llmStart := time.Now()
@@ -831,7 +846,10 @@ func (p *Pipeline) applyEditContext(ctx context.Context, selection, instruction 
 	logger.Infof("[Pipeline] Edit applied in %.2fs (%s): %d → %d chars", llmTime.Seconds(), provider, len(selection), len(text))
 
 	target := p.Target()
-	method := p.handOffContext(ctx, text, p.config.InjectMethodFor(target.BundleID))
+	method := "none"
+	if !inApp {
+		method = p.handOffContext(ctx, text, p.config.InjectMethodFor(target.BundleID))
+	}
 	p.lifecycleMu.Lock()
 	defer p.lifecycleMu.Unlock()
 	if ctx.Err() != nil {
@@ -941,6 +959,7 @@ func (p *Pipeline) finishProcessing(stream *streamSession) {
 	p.stream = nil
 	p.resetToIdle()
 	if cancelled {
+		p.clearFailedLocked()
 		p.emitToast("Cancelled", "info")
 	}
 }

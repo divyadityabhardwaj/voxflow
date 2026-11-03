@@ -1,6 +1,9 @@
 package main
 
-import "voxflow/internal/hotkey"
+import (
+	"voxflow/internal/hotkey"
+	"voxflow/internal/orchestrator"
+)
 
 func (a *App) onHotkeyPressed(state hotkey.State) {
 	a.pipeline.HandleHotkeyState(state)
@@ -22,3 +25,9 @@ func (a *App) ToggleRecording() string {
 func (a *App) CancelRecording() {
 	a.pipeline.CancelRecording()
 }
+
+func (a *App) GetFailedRecording() orchestrator.FailedRecordingInfo {
+	return a.pipeline.GetFailedRecording()
+}
+func (a *App) RetryFailedRecording() error { return a.pipeline.RetryFailedRecording() }
+func (a *App) DiscardFailedRecording()     { a.pipeline.DiscardFailedRecording() }

@@ -38,6 +38,10 @@ export function DeleteTranscript(arg1) {
   return window['go']['main']['App']['DeleteTranscript'](arg1);
 }
 
+export function DiscardFailedRecording() {
+  return window['go']['main']['App']['DiscardFailedRecording']();
+}
+
 export function DownloadModel() {
   return window['go']['main']['App']['DownloadModel']();
 }
@@ -60,6 +64,10 @@ export function GetAppRules() {
 
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
+}
+
+export function GetFailedRecording() {
+  return window['go']['main']['App']['GetFailedRecording']();
 }
 
 export function GetFrontmostApp() {
@@ -172,6 +180,10 @@ export function RequestMicrophoneAccess() {
 
 export function ResetWindowPosition() {
   return window['go']['main']['App']['ResetWindowPosition']();
+}
+
+export function RetryFailedRecording() {
+  return window['go']['main']['App']['RetryFailedRecording']();
 }
 
 export function RetryRefinement(arg1, arg2) {

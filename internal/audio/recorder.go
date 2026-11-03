@@ -480,3 +480,10 @@ func (r *Recorder) GetBuffer() []int16 {
 	copy(buf, r.buffer)
 	return buf
 }
+
+// ClearBuffer releases captured audio after processing or cancellation.
+func (r *Recorder) ClearBuffer() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.buffer = nil
+}

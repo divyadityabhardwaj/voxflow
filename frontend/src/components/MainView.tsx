@@ -18,6 +18,7 @@ import Keycap from "./dictation/Keycap";
 import LevelBars from "./dictation/LevelBars";
 import VersionToggle, { type Version } from "./dictation/VersionToggle";
 import { relativeTime } from "./dictation/time";
+import FailedDictation from "./FailedDictation";
 import SetupChecklist from "./home/SetupChecklist";
 import { computeStats, countWords } from "./home/stats";
 
@@ -194,6 +195,8 @@ export default function MainView() {
             </p>
           )}
         </section>
+
+        <FailedDictation busy={recording || busy} />
 
         {error && (
           <div role="alert" className="w-full p-3 rounded-lg border border-danger/30 bg-danger/10 text-[13px] text-text">
