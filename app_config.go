@@ -123,6 +123,8 @@ func (a *App) SetEditHotkey(hotkeyStr string) error {
 }
 
 func (a *App) SetWhisperModel(model string) error {
+	a.modelMu.Lock()
+	defer a.modelMu.Unlock()
 	a.config.SetWhisperModel(model)
 	err := a.config.Save()
 	if err != nil {

@@ -12,6 +12,8 @@ import (
 )
 
 func (a *App) checkModelStatus() {
+	a.modelMu.Lock()
+	defer a.modelMu.Unlock()
 	a.modelReady.Store(false)
 	if a.config.GetTranscription() == "groq" {
 		// Groq does the transcribing, so don't keep the local model in memory.
@@ -81,6 +83,8 @@ func (a *App) cloudTranscriber() (orchestrator.Transcribe, error) {
 
 // SetTranscription switches between "groq" and on-device ("local") transcription.
 func (a *App) SetTranscription(t string) error {
+	a.modelMu.Lock()
+	defer a.modelMu.Unlock()
 	if t != "groq" && t != "local" {
 		return fmt.Errorf("unknown transcription %q", t)
 	}

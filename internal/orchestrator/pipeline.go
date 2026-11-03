@@ -272,7 +272,7 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 	}
 
 	if p.modelReady != nil && !p.modelReady() {
-		err := fmt.Errorf("model not ready")
+		err := fmt.Errorf("The speech model isn't ready — check Settings › Speech")
 		return fail(err, func() { p.emit(events.Error, err.Error()) })
 	}
 

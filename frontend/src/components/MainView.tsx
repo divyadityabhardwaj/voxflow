@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetHistory, OpenHistoryWindow, ToggleRecording } from "../../wailsjs/go/main/App";
 import { Events } from "../constants/events";
+import { useDictationReadiness } from "../hooks/useDictationReadiness";
 import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 import {
   deliveryLabel,
@@ -60,6 +61,8 @@ const TITLES = {
 
 export default function MainView() {
   const status = useRecordingState();
+  const readiness = useDictationReadiness();
+  const canRecord = !!readiness.setup?.canRecord;
   const busy = isBusy(status);
   const recording = status === "Recording";
   const level = useAudioLevel(recording);
@@ -120,19 +123,25 @@ export default function MainView() {
   const resultWords = result ? countWords(result.polished) : 0;
   const spokenSec = result?.details?.audio;
 
-  const micLabel = recording ? "Stop" : busy ? TITLES[status] : "Try it here";
+  const micLabel = recording ? "Stop" : busy ? TITLES[status] : canRecord ? "Try it here" : readiness.checking ? "Checking setup…" : "Fix setup to start";
 
   return (
     <div className="h-full min-h-0 overflow-y-auto animate-fade-in">
       <div className="max-w-xl mx-auto px-6 py-8 flex flex-col items-center gap-6">
-        <SetupChecklist />
+        <SetupChecklist readiness={readiness} busy={recording || busy} />
 
         <section className="w-full text-center flex flex-col items-center">
           <h1 aria-live="polite" className="text-xl font-semibold tracking-tight text-text">
-            {TITLES[status]}
+            {status === "Idle" ? readiness.checking ? "Checking setup…" : canRecord ? "Ready to dictate" : "Finish setting up" : TITLES[status]}
           </h1>
 
-          {status === "Idle" && shortcuts && (
+          {readiness.setup && (
+            <p className="text-xs text-secondary mt-2">
+              Speech: {readiness.setup.speech} · Clean-up: {readiness.setup.cleanup}
+            </p>
+          )}
+
+          {status === "Idle" && canRecord && shortcuts && (
             <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px] text-secondary mt-3">
               Hold <Keycap>{shortcuts.hold}</Keycap> to talk
               <span aria-hidden="true" className="text-tertiary px-0.5">·</span>
@@ -141,7 +150,7 @@ export default function MainView() {
               <Keycap>Esc</Keycap> to cancel
             </p>
           )}
-          {status === "Idle" && shortcuts?.edit && (
+          {status === "Idle" && canRecord && shortcuts?.edit && (
             <p className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[13px] text-secondary mt-1.5">
               Select text anywhere and press <Keycap>{shortcuts.edit}</Keycap> to rewrite it by voice
             </p>
@@ -162,9 +171,10 @@ export default function MainView() {
           <button
             type="button"
             onClick={toggle}
-            disabled={busy}
+            disabled={busy || (!recording && !canRecord)}
+            aria-describedby={!canRecord && !readiness.checking ? "setup-problem" : undefined}
             aria-label={recording ? "Stop dictation" : "Try it here — start dictating"}
-            className={`mt-6 size-12 rounded-full flex items-center justify-center shadow-soft-md transition-transform active:scale-95 disabled:cursor-not-allowed ${
+            className={`mt-6 size-12 rounded-full flex items-center justify-center shadow-soft-md transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 ${
               recording
                 ? "bg-recording text-white"
                 : busy

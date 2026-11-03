@@ -7,9 +7,10 @@ import {
   SetMiniModeExpanded,
   ToggleRecording,
 } from "../../wailsjs/go/main/App";
+import { useDictationReadiness } from "../hooks/useDictationReadiness";
 import { useFailedRecording } from "../hooks/useFailedRecording";
 import { useTheme } from "../contexts/ThemeContext";
-import { useToastList, type Toast } from "../contexts/ToastContext";
+import { useToast, useToastList, type Toast } from "../contexts/ToastContext";
 import { Events } from "../constants/events";
 import { useRecordingState, isBusy } from "../hooks/useRecordingState";
 import {
@@ -55,7 +56,7 @@ const PILL_LABELS: [string[], string][] = [
   [["groq couldn't transcribe", "groq's transcription service", "too long for groq"], "Groq couldn't transcribe — click for details"],
   [["transcription failed", "couldn't be transcribed"], "Transcription failed — try again"],
   [["failed to stop recording", "audio stream", "initialize audio"], "Recording failed — try again"],
-  [["model not ready"], "Speech engine isn't ready yet"],
+  [["model not ready", "speech model isn't ready"], "Speech engine isn't ready yet"],
   [["model download", "model load"], "Speech engine problem"],
 ];
 
@@ -80,6 +81,7 @@ const stop = (e: MouseEvent) => {
 export default function RecordingIndicator() {
   const status = useRecordingState();
   const failed = useFailedRecording();
+  const readiness = useDictationReadiness();
   const busy = isBusy(status);
   const recording = status === "Recording";
   const level = useAudioLevel(recording);
@@ -87,6 +89,7 @@ export default function RecordingIndicator() {
   const [hovered, setHovered] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const { showToast } = useToast();
   const { toasts, dismissToast, clearToasts } = useToastList();
   const activeToast = toasts.length > 0 ? toasts[toasts.length - 1] : null;
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,8 +119,9 @@ export default function RecordingIndicator() {
     };
   }, [clearToasts]);
 
-  const uiExpanded = hovered || status !== "Idle" || done !== null || activeToast !== null || failed !== null;
-  const targetHeight = activeToast || failed ? PILL_WITH_CHIP_H : PILL_H;
+  const showSetup = status === "Idle" && !failed && (readiness.error || (!!readiness.setup?.issue && !readiness.setup.canRecord));
+  const uiExpanded = hovered || status !== "Idle" || done !== null || activeToast !== null || failed !== null || showSetup;
+  const targetHeight = activeToast || failed || showSetup ? PILL_WITH_CHIP_H : PILL_H;
 
   useEffect(() => {
     const timer = setTimeout(() => SetMiniModeExpanded(uiExpanded, targetHeight), 50);
@@ -181,7 +185,11 @@ export default function RecordingIndicator() {
       };
 
   const hoverBg = isDark ? "hover:bg-white/10" : "hover:bg-black/5";
-  const recordLabel = recording ? "Stop and paste" : "Start dictation";
+  const recordLabel = recording ? "Stop and paste" : readiness.checking ? "Checking setup…" : readiness.setup?.canRecord ? "Start dictation" : "Fix dictation setup";
+  const fixSetup = async () => {
+    try { await HideMiniMode(); await readiness.fix(); }
+    catch (err) { showToast(`Couldn't open setup: ${String(err)}`, "error"); }
+  };
 
   let body;
   if (done && status === "Idle") {
@@ -253,8 +261,10 @@ export default function RecordingIndicator() {
           style={NO_DRAG}
           onClick={(e) => {
             stop(e);
-            ToggleRecording();
+            if (readiness.setup?.canRecord) ToggleRecording();
+            else if (!readiness.checking) fixSetup();
           }}
+          disabled={readiness.checking}
           title={recordLabel}
           aria-label={recordLabel}
         >
@@ -304,7 +314,13 @@ export default function RecordingIndicator() {
           Dictation failed · Retry or discard →
         </button>
       )}
-      {activeToast && !failed && (
+      {showSetup && (
+        <button type="button" className="w-full text-[11px] font-semibold py-1.5 px-2 mb-1 rounded-lg pointer-events-auto no-drag bg-surface text-text border border-border"
+          style={NO_DRAG} onClick={fixSetup}>
+          {readiness.error ? "Couldn't check setup · Try again" : `${readiness.setup?.issue?.title} · Fix →`}
+        </button>
+      )}
+      {activeToast && !failed && !showSetup && (
         <div
           role={activeToast.type === "error" ? "alert" : "status"}
           className="w-full min-h-[26px] py-0.5 flex items-center px-1.5 mb-1 rounded-lg pointer-events-auto animate-scale-in"

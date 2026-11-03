@@ -32,6 +32,10 @@ jobs:
         working-directory: frontend
         run: npm ci && npm run build
 
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
       - name: gofmt
         run: |
           unformatted=$(gofmt -l $(git ls-files '*.go'))

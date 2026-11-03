@@ -34,6 +34,7 @@ type App struct {
 	historyService   *history.Service
 	injectionService *injection.Service
 	modelReady       atomic.Bool
+	modelMu          sync.Mutex     // serializes speech model changes and readiness checks
 	download         *modelDownload // the download in progress, guarded by downloadMu
 	downloadMu       sync.Mutex
 	updateMu         sync.Mutex
