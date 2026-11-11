@@ -27,7 +27,6 @@ import (
 )
 
 type WindowController interface {
-	ShowMini()
 	UserExplicitlyMaximized() bool
 }
 
@@ -103,6 +102,8 @@ type Config struct {
 	// on-device Whisper, or an error when the chosen service can't be used.
 	CloudTranscriber func() (Transcribe, error)
 	OnState          func(hotkey.State)
+	// OnEvent also delivers feedback to the native overlay, even with the webview hidden.
+	OnEvent func(string, ...interface{})
 }
 
 type Transcribe func(ctx context.Context, samples []int16) (string, error)
@@ -125,6 +126,9 @@ func New(cfg Config) *Pipeline {
 		state:            hotkey.StateIdle,
 	}
 	p.emit = func(name string, data ...interface{}) {
+		if cfg.OnEvent != nil {
+			cfg.OnEvent(name, data...)
+		}
 		runtime.EventsEmit(p.ctx, name, data...)
 	}
 	if s := cfg.Injection; s != nil {
@@ -169,10 +173,6 @@ func (p *Pipeline) HandleHotkeyState(state hotkey.State) {
 		_ = p.StartRecording()
 	case hotkey.StateProcessing:
 		p.StopRecording()
-	case hotkey.StateIdle:
-		if p.windows != nil && !p.windows.UserExplicitlyMaximized() {
-			p.windows.ShowMini()
-		}
 	}
 }
 
@@ -292,9 +292,6 @@ func (p *Pipeline) startRecordingLocked(held bool) error {
 	p.target = macos.AppInfo{}
 	p.targetMu.Unlock()
 	p.captureTarget()
-	if p.windows != nil && !p.windows.UserExplicitlyMaximized() {
-		p.windows.ShowMini()
-	}
 
 	if err := p.audioRecorder.Start(); err != nil {
 		if !p.audioRecorder.IsRecording() {

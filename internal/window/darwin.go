@@ -8,28 +8,6 @@ package window
 
 #import <Cocoa/Cocoa.h>
 
-void makeWindowFloatEverywhere() {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        Class wailsWindow = NSClassFromString(@"WailsWindow");
-        for (NSWindow *window in [NSApp windows]) {
-            if (![window isKindOfClass:wailsWindow]) {
-                continue;
-            }
-            [window setCollectionBehavior:NSWindowCollectionBehaviorCanJoinAllSpaces |
-                                          NSWindowCollectionBehaviorStationary |
-                                          NSWindowCollectionBehaviorFullScreenAuxiliary];
-            [window setLevel:NSPopUpMenuWindowLevel];
-            [window setAnimationBehavior:NSWindowAnimationBehaviorNone];
-            [window setHasShadow:NO];
-            // A new collection behaviour only takes effect in the current Space
-            // (e.g. another app's full screen) once the window is ordered in again.
-            if ([window isVisible]) {
-                [window orderFrontRegardless];
-            }
-        }
-    });
-}
-
 void resetWindowBehavior() {
     dispatch_async(dispatch_get_main_queue(), ^{
         Class wailsWindow = NSClassFromString(@"WailsWindow");
@@ -97,8 +75,8 @@ extern void voxWindowCloseClicked(void);
 
 static VoxCloseTarget *closeTarget;
 
-// The pill and the full window are the same NSWindow. Full mode gets traffic
-// lights, native resizing and a Dock icon; the pill gets none of them.
+// Only the workspace is a WailsWindow. The native overlay remains independent
+// of workspace chrome, activation policy and visibility.
 void setWindowChrome(bool full) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!closeTarget) {
@@ -115,9 +93,9 @@ void setWindowChrome(bool full) {
             for (NSNumber *kind in @[@(NSWindowCloseButton), @(NSWindowZoomButton)]) {
                 [[window standardWindowButton:(NSWindowButton)[kind integerValue]] setHidden:!full];
             }
-            // A minimised window gets no pill, so recording would have no feedback.
+            // Background mode replaces minimizing to the Dock.
             [[window standardWindowButton:NSWindowMiniaturizeButton] setHidden:YES];
-            // Red collapses to the pill; quitting would kill the hotkeys.
+            // Red hides the workspace; quitting would kill the hotkeys.
             NSButton *close = [window standardWindowButton:NSWindowCloseButton];
             [close setTarget:closeTarget];
             [close setAction:@selector(collapse:)];
@@ -160,11 +138,6 @@ var observedManager atomic.Pointer[Manager]
 func observeWindowFrame(m *Manager) {
 	observedManager.Store(m)
 	C.observeWindowFrame()
-}
-
-// All spaces + above fullscreen apps.
-func FloatEverywhere() {
-	C.makeWindowFloatEverywhere()
 }
 
 func ResetBehavior() {

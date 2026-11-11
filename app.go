@@ -104,6 +104,7 @@ func (a *App) rebuildPipeline() {
 		ModelReady:       a.IsModelReady,
 		CloudTranscriber: a.cloudTranscriber,
 		OnState:          func(s hotkey.State) { window.SetStatusItemState(s.String()) },
+		OnEvent:          window.HandleOverlayEvent,
 	})
 }
 
@@ -126,7 +127,6 @@ func (a *App) startup(ctx context.Context) {
 	a.pipeline.SetContext(ctx)
 	a.pipeline.RestoreAudio()
 
-	window.FloatEverywhere()
 	a.windowMgr.WatchFrame()
 
 	window.InstallStatusItem(window.StatusItemCallbacks{
@@ -137,6 +137,7 @@ func (a *App) startup(ctx context.Context) {
 		Quit:            a.Quit,
 		OpenUpdate:      a.openUpdate,
 	})
+	window.InstallOverlay()
 
 	if !a.config.GetOnboardingCompleted() {
 		a.windowMgr.HideMini()

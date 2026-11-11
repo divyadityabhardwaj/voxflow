@@ -19,9 +19,6 @@ type Manager struct {
 	isMiniMode              bool
 	userExplicitlyMaximized bool
 	frameSaveTimer          *time.Timer
-
-	miniResizeMu     sync.Mutex
-	miniResizeCancel context.CancelFunc
 }
 
 func NewManager(ctx context.Context, cfg *config.Config) *Manager {
@@ -71,176 +68,64 @@ func (m *Manager) frameChanged() {
 	})
 }
 
-// saveFrameLocked records the current frame for the current mode. The mini
-// position is stored as its collapsed baseline, since the pill grows upward.
+// The workspace and native overlay have independent lifetimes and geometry.
 func (m *Manager) saveFrameLocked() {
-	x, y := runtime.WindowGetPosition(m.ctx)
-	w, h := runtime.WindowGetSize(m.ctx)
 	if m.isMiniMode {
-		if h > 0 {
-			y += h - MiniModeCollapsedH
-		}
-		m.config.SetMiniModePosition(x, y)
 		return
 	}
+	x, y := runtime.WindowGetPosition(m.ctx)
+	w, h := runtime.WindowGetSize(m.ctx)
 	m.config.SetMaximizedWindowPosition(x, y)
 	m.config.SetMaximizedWindowSize(w, h)
 }
 
 func (m *Manager) StartupMiniMode() {
-	x, y := m.config.GetMiniModePosition()
-
-	runtime.WindowSetMinSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
-	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
-	runtime.WindowSetSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
 	setChrome(false)
-	FloatEverywhere()
-
-	if x != 0 || y != 0 {
-		runtime.WindowSetPosition(m.ctx, x, y)
-	} else {
-		runtime.WindowCenter(m.ctx)
-	}
-	ConstrainWindow()
+	runtime.WindowHide(m.ctx)
 }
 
 func (m *Manager) ShowMini() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.isMiniMode {
-		FloatEverywhere() // bring it into the current Space if it was left behind
 		return
 	}
 	m.saveFrameLocked()
+	m.config.Save()
 	m.isMiniMode = true
 	m.userExplicitlyMaximized = false
-
+	runtime.WindowHide(m.ctx)
 	setChrome(false)
-	FloatEverywhere()
-
-	runtime.WindowSetMinSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
-	runtime.WindowSetMaxSize(m.ctx, MiniModeExpandedW, MiniModeExpandedH)
-	runtime.WindowSetSize(m.ctx, MiniModeCollapsedW, MiniModeCollapsedH)
-
-	x, y := m.config.GetMiniModePosition()
-	if x != 0 || y != 0 {
-		runtime.WindowSetPosition(m.ctx, x, y)
-	} else {
-		runtime.WindowCenter(m.ctx)
-	}
-	ConstrainWindow()
-
-	// Not runtime.WindowSetAlwaysOnTop: it drops the level FloatEverywhere set to NSFloatingWindowLevel.
 	runtime.EventsEmit(m.ctx, events.MiniMode, true)
-
-	logger.Infof("[Window] Switched to mini mode")
+	logger.Infof("[Window] Workspace hidden; running in menu bar")
 }
 
 func (m *Manager) HideMini() {
-	m.cancelMiniResize()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.isMiniMode {
-		return
+	if m.isMiniMode {
+		m.isMiniMode = false
+		m.userExplicitlyMaximized = true
+		savedX, savedY := m.config.GetMaximizedWindowPosition()
+		savedW, savedH := m.config.GetMaximizedWindowSize()
+		runtime.WindowSetMinSize(m.ctx, 640, 480)
+		runtime.WindowSetMaxSize(m.ctx, 0, 0)
+		if savedW >= 640 && savedH >= 480 {
+			runtime.WindowSetSize(m.ctx, savedW, savedH)
+		} else {
+			runtime.WindowSetSize(m.ctx, 900, 600)
+		}
+		if savedX != 0 || savedY != 0 {
+			runtime.WindowSetPosition(m.ctx, savedX, savedY)
+		} else {
+			runtime.WindowCenter(m.ctx)
+		}
+		runtime.EventsEmit(m.ctx, events.MiniMode, false)
 	}
-
-	m.saveFrameLocked()
-	m.config.Save()
-
-	m.isMiniMode = false
-	m.userExplicitlyMaximized = true
-
 	ResetBehavior()
 	setChrome(true)
-
-	savedX, savedY := m.config.GetMaximizedWindowPosition()
-	savedW, savedH := m.config.GetMaximizedWindowSize()
-
-	runtime.WindowSetMinSize(m.ctx, 800, 600)
-	runtime.WindowSetMaxSize(m.ctx, 0, 0)
-
-	if savedW > 0 && savedH > 0 {
-		runtime.WindowSetSize(m.ctx, savedW, savedH)
-	} else {
-		runtime.WindowSetSize(m.ctx, 900, 600)
-	}
-
-	if savedX != 0 || savedY != 0 {
-		runtime.WindowSetPosition(m.ctx, savedX, savedY)
-	} else {
-		runtime.WindowCenter(m.ctx)
-	}
-
-	runtime.WindowSetAlwaysOnTop(m.ctx, false)
-	runtime.EventsEmit(m.ctx, events.MiniMode, false)
-
-	logger.Infof("[Window] Restored normal mode")
-}
-
-func (m *Manager) SetMiniExpanded(expanded bool, height int) {
-	if !m.IsMiniMode() {
-		return
-	}
-
-	targetW := MiniModeCollapsedW
-	if expanded {
-		targetW = MiniModeExpandedW
-	}
-
-	targetH := height
-	if targetH <= 0 {
-		targetH = MiniModeCollapsedH
-	}
-
-	startW, startH := runtime.WindowGetSize(m.ctx)
-	if startH <= 0 {
-		startH = targetH
-	}
-	if startW == targetW && startH == targetH {
-		return
-	}
-
-	m.miniResizeMu.Lock()
-	if m.miniResizeCancel != nil {
-		m.miniResizeCancel()
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.miniResizeCancel = cancel
-	m.miniResizeMu.Unlock()
-
-	startX, startY := runtime.WindowGetPosition(m.ctx)
-
-	go func(startW, targetW, startH, targetH, startX, startY int, ctx context.Context) {
-		const steps = 10
-		const stepDelay = 12 * time.Millisecond
-
-		for i := 1; i <= steps; i++ {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			t := float64(i) / float64(steps)
-			w := int(float64(startW) + (float64(targetW-startW) * t))
-			h := int(float64(startH) + (float64(targetH-startH) * t))
-			diffH := h - startH
-			y := startY - diffH
-
-			runtime.WindowSetSize(m.ctx, w, h)
-			runtime.WindowSetPosition(m.ctx, startX, y)
-			time.Sleep(stepDelay)
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			diffH := targetH - startH
-			runtime.WindowSetSize(m.ctx, targetW, targetH)
-			runtime.WindowSetPosition(m.ctx, startX, startY-diffH)
-		}
-	}(startW, targetW, startH, targetH, startX, startY, ctx)
+	runtime.WindowShow(m.ctx)
+	ConstrainWindow()
 }
 
 func (m *Manager) Shutdown() {
@@ -253,7 +138,6 @@ func (m *Manager) Shutdown() {
 }
 
 func (m *Manager) ResetPosition() {
-	m.cancelMiniResize()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.config.SetMiniModePosition(0, 0)
@@ -261,7 +145,7 @@ func (m *Manager) ResetPosition() {
 	m.config.SetMaximizedWindowSize(900, 600)
 	m.config.Save()
 
-	runtime.WindowSetMinSize(m.ctx, 800, 600)
+	runtime.WindowSetMinSize(m.ctx, 640, 480)
 	runtime.WindowSetMaxSize(m.ctx, 0, 0)
 	runtime.WindowSetSize(m.ctx, 900, 600)
 	runtime.WindowCenter(m.ctx)
@@ -272,16 +156,6 @@ func (m *Manager) ResetPosition() {
 	setChrome(true)
 	runtime.WindowSetAlwaysOnTop(m.ctx, false)
 	runtime.EventsEmit(m.ctx, events.MiniMode, false)
+	runtime.WindowShow(m.ctx)
 	logger.Infof("[Window] Reset window position to center")
-}
-
-// cancelMiniResize stops an in-flight pill resize animation so it can't
-// resize the window after a mode switch.
-func (m *Manager) cancelMiniResize() {
-	m.miniResizeMu.Lock()
-	defer m.miniResizeMu.Unlock()
-	if m.miniResizeCancel != nil {
-		m.miniResizeCancel()
-		m.miniResizeCancel = nil
-	}
 }

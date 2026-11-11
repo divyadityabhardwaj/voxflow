@@ -115,8 +115,6 @@ export function SetInputDevice(arg1:string):Promise<void>;
 
 export function SetLocalURL(arg1:string):Promise<void>;
 
-export function SetMiniModeExpanded(arg1:boolean,arg2:number):Promise<void>;
-
 export function SetMuteSystemAudio(arg1:boolean):Promise<void>;
 
 export function SetProvider(arg1:string):Promise<void>;

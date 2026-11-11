@@ -17,7 +17,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"voxflow/internal/window"
 )
 
 //go:embed all:frontend/dist
@@ -84,14 +83,14 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:     "VoxFlow",
-		Width:     window.MiniModeCollapsedW,
-		Height:    window.MiniModeCollapsedH,
-		MinWidth:  window.MiniModeCollapsedW,
-		MinHeight: window.MiniModeCollapsedH,
+		Width:     900,
+		Height:    600,
+		MinWidth:  640,
+		MinHeight: 480,
 		// Native resizing is switched on for the full window only (window.setChrome).
 		DisableResize:     true,
-		AlwaysOnTop:       true,
-		StartHidden:       false,
+		AlwaysOnTop:       false,
+		StartHidden:       true,
 		HideWindowOnClose: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,

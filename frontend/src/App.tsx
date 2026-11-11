@@ -3,8 +3,6 @@ import "./style.css";
 import MainView from "./components/MainView";
 import HistoryView from "./components/HistoryView";
 import SettingsView from "./components/SettingsView";
-import RecordingIndicator from "./components/RecordingIndicator";
-import RecordingPill from "./components/RecordingPill";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { EventsOn } from "../wailsjs/runtime/runtime";
@@ -189,7 +187,8 @@ function AppContent() {
   }
 
   if (isMiniMode) {
-    return <RecordingIndicator />;
+    // Dictation feedback lives in a native nonactivating panel across Spaces.
+    return null;
   }
 
   const navItem = (view: View, label: string, icon: JSX.Element) => (
@@ -197,6 +196,8 @@ function AppContent() {
       type="button"
       onClick={() => setCurrentView(view)}
       aria-current={currentView === view ? "page" : undefined}
+      aria-label={label}
+      title={label}
       className="sidebar-item no-drag"
     >
       {icon}
@@ -206,13 +207,11 @@ function AppContent() {
 
   return (
     <div className="h-full min-h-0 flex app-shell">
-      {currentView !== "main" && <RecordingPill />}
-
       <aside className="sidebar">
         <div className="sidebar-titlebar" style={DRAG} />
         <div className="sidebar-brand" style={DRAG}>
           <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
-          VoxFlow
+          <span className="brand-name">VoxFlow</span>
         </div>
         <nav aria-label="VoxFlow" className="flex flex-col gap-0.5">
           {navItem("main", "Dictate", <MicIcon />)}
@@ -225,9 +224,11 @@ function AppContent() {
             type="button"
             onClick={() => ShowMiniMode()}
             className="sidebar-item no-drag text-secondary"
+            aria-label="Run in background"
+            title="Run in background"
           >
             <MinimizeIcon />
-            Mini mode
+            <span>Run in background</span>
           </button>
         </div>
       </aside>
